@@ -1,0 +1,605 @@
+let graphInstance = null;
+let returnFocus = null;
+ui.positions = state.graphPositions || {};
+
+function icon(name) {
+  return `<i data-lucide="${name}"></i>`;
+}
+
+function accessibleItems() {
+  return state.items.filter((item) => canViewItem(currentUser(), item));
+}
+
+function rootOf(item) {
+  const byId = new Map(accessibleItems().map((entry) => [entry.id, entry]));
+  return FluxosGraph.projectRoot(item, byId);
+}
+
+function scopedItems() {
+  return visibleItems().filter((item) => ui.scopeId === "all" || rootOf(item).id === ui.scopeId);
+}
+
+function relationsFor(items) {
+  const ids = new Set(items.map((item) => item.id));
+  return state.relations.filter((rel) => ids.has(rel.sourceId) && ids.has(rel.targetId));
+}
+
+function childrenOf(id) {
+  return accessibleItems().filter((item) => item.parentId === id);
+}
+
+function shortId(item) {
+  return `#${String(state.items.indexOf(item) + 1).padStart(3, "0")}`;
+}
+
+function elapsedLabel(item) {
+  const end = item.completedAt || nowIso();
+  const minutes = Math.max(0, Math.floor((new Date(end) - new Date(item.createdAt)) / 60000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor(minutes % 1440 / 60);
+  return `${days ? `${days}d ` : ""}${hours ? `${hours}h ` : ""}${minutes % 60}min`;
+}
+
+function plannedLabel(item) {
+  if (!item.plannedStartAt || !item.dueAt) return "Sem duração";
+  const days = Math.round((new Date(`${item.dueAt}T12:00:00`) - new Date(`${item.plannedStartAt}T12:00:00`)) / 86400000);
+  return `${Math.max(0, days)}d previstos`;
+}
+
+function signalLabel(item) {
+  if (item.status === "blocked") return "Bloqueado";
+  if (isOverdue(item)) return "Atrasado";
+  return labelOf(statusCatalog, item.status);
+}
+
+function statusBadge(item) {
+  return `<span class="status-badge ${signalOf(item)}"><span class="signal"></span>${escapeHtml(labelOf(statusCatalog, item.status))}${isOverdue(item) ? '<span class="overdue-mark" title="Prazo vencido">· atraso</span>' : ""}</span>`;
+}
+
+function dateCell(value, withTime = false) {
+  if (!value) return "—";
+  return withTime ? formatDateTime(value) : formatDate(value.slice(0, 10));
+}
+
+function filterCount() {
+  return [state.filters.status, state.filters.type, state.filters.owner].filter((value) => value !== "all").length;
+}
+
+function projectOptions() {
+  const roots = new Map();
+  accessibleItems().forEach((item) => { const root = rootOf(item); roots.set(root.id, root); });
+  return [...roots.values()];
+}
+
+function noticeMarkup() {
+  if (!ui.notice) return "";
+  return `<div class="notice ${ui.noticeKind === "error" ? "error" : ""}" role="${ui.noticeKind === "error" ? "alert" : "status"}">${escapeHtml(ui.notice)}<button class="icon-button" data-action="dismiss-notice" aria-label="Fechar aviso">${icon("x")}</button></div>`;
+}
+
+function notify(message, kind = "success") {
+  ui.notice = message;
+  ui.noticeKind = kind;
+  const target = document.querySelector("#noticeRoot");
+  if (target) { target.innerHTML = noticeMarkup(); mountIcons(); }
+}
+
+function mountIcons() {
+  if (typeof FluxosVendor !== "undefined") FluxosVendor.mountIcons();
+}
+
+function render() {
+  if (graphInstance) { ui.graphTransform = graphInstance.getTransform(); graphInstance.destroy(); graphInstance = null; }
+  if (!currentUser() || currentUser().disabled) {
+    state.currentUserId = "";
+    renderLogin();
+    return;
+  }
+  const user = currentUser();
+  const items = scopedItems();
+  if (ui.selectedItemId && !canViewItem(user, getItem(ui.selectedItemId))) { ui.selectedItemId = ""; ui.panel = ""; }
+  app.innerHTML = `
+    <main class="ops-shell">
+      <header class="ops-header">
+        <div class="brand">${icon("workflow")}<span>Fluxos<span class="brand-caption">Gestão operacional</span></span></div>
+        <div class="header-actions">
+          <span class="user-identity"><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(orgName(user.organizationId))} · Nível ${user.permissionLevel}</span></span>
+          <button class="icon-button" data-action="export" title="Exportar dados visíveis" aria-label="Exportar dados visíveis">${icon("download")}</button>
+          ${canManageUsers(user) ? `<button class="button quiet" data-action="admin">${icon("settings-2")}<span>Cadastros</span></button>` : ""}
+          <button class="icon-button" data-action="logout" title="Sair" aria-label="Sair">${icon("log-out")}</button>
+        </div>
+      </header>
+      <section class="workspace-heading">
+        <div><h1>Processos e demandas</h1><p>${items.length} ${items.length === 1 ? "item visível" : "itens visíveis"}</p></div>
+        ${canCreateItem(user) ? `<button class="button primary" data-action="create">${icon("plus")}Novo item</button>` : ""}
+      </section>
+      <div id="noticeRoot">${noticeMarkup()}</div>
+      <section class="workspace-controls" aria-label="Visualização e filtros">
+        <div class="mode-tabs" role="tablist" aria-label="Visualização">
+          <button role="tab" id="tableTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "table"}" data-view="table" class="${ui.overviewMode === "table" ? "active" : ""}">${icon("table-2")}Sintética</button>
+          <button role="tab" id="graphTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "graph"}" data-view="graph" class="${ui.overviewMode === "graph" ? "active" : ""}">${icon("network")}Analítica</button>
+        </div>
+        <div class="view-filters">
+          <label class="search-box">${icon("search")}<input id="searchInput" type="search" placeholder="Buscar item ou responsável" value="${escapeHtml(state.filters.query)}" aria-label="Buscar item ou responsável"/></label>
+          <select id="scopeSelect" aria-label="Projeto ou processo"><option value="all">Todos os processos</option>${projectOptions().map((item) => option(item.id, item.title, ui.scopeId === item.id)).join("")}</select>
+          <button class="button quiet ${ui.filtersOpen ? "active" : ""}" data-action="filters" aria-expanded="${ui.filtersOpen}">${icon("sliders-horizontal")}Filtros${filterCount() ? `<span class="count-badge">${filterCount()}</span>` : ""}</button>
+        </div>
+      </section>
+      ${ui.filtersOpen ? renderFilters() : ""}
+      <section id="workspaceView" role="tabpanel" aria-labelledby="${ui.overviewMode === "table" ? "tableTab" : "graphTab"}">
+        ${ui.overviewMode === "table" ? renderTable(items) : renderGraph(items)}
+      </section>
+      <footer class="workspace-footer"><span>${escapeHtml(permissionLevels[user.permissionLevel])}</span><span>Dados de demonstração salvos neste navegador</span></footer>
+    </main>
+    <div id="panelRoot"></div>`;
+  bindWorkspace();
+  renderPanel(false);
+  if (ui.overviewMode === "graph" && items.length) mountGraph(items);
+  mountIcons();
+}
+
+function renderLogin() {
+  app.innerHTML = `<main class="login-screen"><section class="login-card">
+    <div class="brand">${icon("workflow")}<span>Fluxos</span></div>
+    <h1>Acesse sua operação</h1>
+    <p>Escolha um usuário para testar sua visão e alçada.</p>
+    <form id="loginForm"><label>Usuário<select name="userId" required>${state.users.filter((user) => !user.disabled).map((user) => option(user.id, `${user.name} · Nível ${user.permissionLevel}`)).join("")}</select></label><button class="button primary" type="submit">Entrar</button></form>
+    <div class="demo-note"><strong>Modo de demonstração</strong><span>Login por perfil. Os dados ficam salvos neste navegador.</span></div>
+    </section></main>`;
+  document.querySelector("#loginForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.currentUserId = new FormData(event.currentTarget).get("userId");
+    state.filters = { query: "", status: "all", type: "all", owner: "all" };
+    ui.scopeId = "all"; ui.selectedItemId = ""; ui.panel = ""; ui.notice = ""; ui.graphTransform = null;
+    saveState(); render();
+  });
+  mountIcons();
+}
+
+function renderFilters() {
+  const owners = new Set(accessibleItems().map((item) => item.ownerId));
+  return `<div class="filters-bar">
+    <label>Status<select data-filter="status">${option("all", "Todos", state.filters.status === "all")}${statusCatalog.map((status) => option(status.id, status.label, state.filters.status === status.id)).join("")}</select></label>
+    <label>Tipo<select data-filter="type">${option("all", "Todos", state.filters.type === "all")}${itemTypes.map((type) => option(type.id, type.label, state.filters.type === type.id)).join("")}</select></label>
+    <label>Responsável<select data-filter="owner">${option("all", "Todos", state.filters.owner === "all")}${[...owners].map((id) => option(id, userName(id), state.filters.owner === id)).join("")}</select></label>
+    <button class="button quiet" data-action="clear-filters">Limpar filtros</button>
+  </div>`;
+}
+
+function tableRows(items) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const children = new Map();
+  items.forEach((item) => { if (!children.has(item.parentId)) children.set(item.parentId, []); children.get(item.parentId).push(item); });
+  const rows = []; const seen = new Set();
+  function visit(item, depth) {
+    if (seen.has(item.id)) return;
+    seen.add(item.id); rows.push({ item, depth, children: children.get(item.id) || [] });
+    if (ui.showSubitems && !ui.collapsed?.has(item.id)) (children.get(item.id) || []).forEach((child) => visit(child, depth + 1));
+  }
+  items.filter((item) => !byId.has(item.parentId)).forEach((item) => visit(item, 0));
+  return rows;
+}
+
+function renderTable(items) {
+  const rows = tableRows(items);
+  return `<div class="table-card">
+    <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/>Mostrar subitens</label><span class="secondary">${rows.length} ${rows.length === 1 ? "linha" : "linhas"}</span></div>
+    ${!rows.length ? emptyMarkup() : `<div class="table-scroll"><table class="synth-table"><thead><tr><th>ID</th><th>Nome</th><th>Responsável</th><th>Criação</th><th>Término ideal</th><th>Término real</th><th>Tempo total</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
+      ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}">
+        <td class="id-cell">${shortId(item)}</td><td class="title-cell"><div class="tree-cell" style="--depth:${Math.min(depth, 8)}">${children.length ? `<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${!ui.showSubitems || ui.collapsed?.has(item.id) ? "Expandir" : "Recolher"} subitens" aria-expanded="${ui.showSubitems && !ui.collapsed?.has(item.id)}">${icon(ui.showSubitems && !ui.collapsed?.has(item.id) ? "chevron-down" : "chevron-right")}</button>` : '<span class="tree-spacer"></span>'}<button class="item-title" data-select="${escapeHtml(item.id)}">${escapeHtml(item.title)}<span>${escapeHtml(labelOf(itemTypes, item.type))}${children.length ? ` · ${children.length} subitens` : ""}</span></button></div></td>
+        <td>${escapeHtml(userName(item.ownerId))}</td><td class="date-cell">${dateCell(item.createdAt, true)}</td><td class="date-cell ${isOverdue(item) ? "overdue" : ""}">${dateCell(item.dueAt)}</td><td class="date-cell">${dateCell(item.completedAt, true)}</td><td class="duration-cell">${elapsedLabel(item)}</td><td>${statusBadge(item)}</td><td><div class="row-actions"><button class="icon-button" data-select="${escapeHtml(item.id)}" title="Abrir item" aria-label="Abrir ${escapeHtml(item.title)}">${icon("more-horizontal")}</button>${canRemoveItem(currentUser()) ? deleteButton("item",item.id,item.title) : ""}</div></td>
+      </tr>`).join("")}
+    </tbody></table></div>`}
+  </div>`;
+}
+
+function emptyMarkup() {
+  return `<div class="empty-state">${icon("search")}<strong>Nenhum item nesta visão</strong><span>Ajuste os filtros ou crie um novo item.</span>${state.filters.query || filterCount() ? '<button class="button quiet" data-action="clear-filters">Limpar filtros</button>' : ""}</div>`;
+}
+
+function renderGraph(items) {
+  return `<div class="graph-shell"><div class="graph-toolbar">
+    <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map((entry) => option(entry.id,entry.label,ui.grouping === entry.id)).join("")}</select></label>
+    <span class="graph-instruction">Arraste os nós para organizar</span>
+    <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
+    </div><div id="graphCanvas" class="graph-canvas">${items.length ? "" : emptyMarkup()}</div>
+    <div class="graph-legend" aria-label="Legenda do farol"><span class="red"><b></b>Bloqueado / atraso</span><span class="yellow"><b></b>Aguardando / análise</span><span class="blue"><b></b>Em execução</span><span class="green"><b></b>Concluído / aprovado</span><span class="gray"><b></b>Planejado / cancelado</span></div></div>`;
+}
+
+function layoutKey() { return `${currentUser().id}:${ui.grouping}`; }
+
+function mountGraph(items) {
+  const graphKey = `${layoutKey()}:${items.map((item) => item.id).join("|")}`;
+  graphInstance = FluxosGraph.mount(document.querySelector("#graphCanvas"), {
+    items, relations: relationsFor(items), grouping: ui.grouping,
+    savedPositions: ui.positions[layoutKey()] || {}, selectedId: ui.selectedItemId,
+    initialTransform: ui.graphKey === graphKey ? ui.graphTransform : null,
+    escape: escapeHtml,
+    labels: {
+      owner: userName, organization: orgName, relation: (id) => labelOf(relationTypes, id),
+      type: (item) => labelOf(itemTypes, item.type), status: (item) => signalLabel(item),
+      signal: signalOf, duration: elapsedLabel, planned: plannedLabel, project: rootOf,
+    },
+    onSelect: (id) => openItem(id),
+    onRelation: (relation) => { ui.panelTab = "relations"; openItem(relation.targetId, true); },
+    onPositions: (positions) => { ui.positions[layoutKey()] = positions; state.graphPositions = ui.positions; saveState(); },
+    onZoom: (value) => { const label = document.querySelector("#zoomLabel"); if (label) label.textContent = `${value}%`; },
+  });
+  ui.graphKey = graphKey;
+}
+
+function openItem(id, keepTab = false) {
+  if (!canViewItem(currentUser(), getItem(id))) return;
+  returnFocus = document.activeElement;
+  ui.selectedItemId = id; ui.panel = "item"; if (!keepTab) ui.panelTab = "details";
+  graphInstance?.select(id);
+  document.querySelectorAll("[data-row]").forEach((row) => row.classList.toggle("selected", row.dataset.row === id));
+  renderPanel();
+}
+
+function closePanel() {
+  ui.panel = "";
+  document.querySelector("#panelRoot").innerHTML = "";
+  document.body.classList.remove("panel-open");
+  if (returnFocus?.isConnected) returnFocus.focus();
+}
+
+function renderPanel(focus = true) {
+  const root = document.querySelector("#panelRoot");
+  if (!root) return;
+  if (!ui.panel) { root.innerHTML = ""; document.body.classList.remove("panel-open"); return; }
+  let content = "";
+  if (ui.panel === "create") content = renderCreatePanel();
+  else if (ui.panel === "admin" && canManageUsers(currentUser())) content = renderAdmin();
+  else if (ui.panel === "delete" && canRemoveItem(currentUser())) content = renderDeletionPanel();
+  else if (ui.panel === "item" && canViewItem(currentUser(), getItem(ui.selectedItemId))) content = renderItemPanel(getItem(ui.selectedItemId));
+  if (!content) { closePanel(); return; }
+  root.innerHTML = `<div class="panel-shade" data-action="close-panel"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1">${content}</aside>`;
+  document.body.classList.add("panel-open");
+  bindPanel(); mountIcons();
+  if (focus) root.querySelector(".drawer").focus();
+}
+
+function panelHeader(eyebrow, title, actions = "") {
+  return `<header class="drawer-header"><div><span class="eyebrow">${escapeHtml(eyebrow)}</span><h2 id="panelTitle">${escapeHtml(title)}</h2></div><div class="drawer-header-actions">${actions}<button class="icon-button" data-action="close-panel" aria-label="Fechar painel">${icon("x")}</button></div></header><div id="panelError" class="panel-error" role="alert" hidden></div>`;
+}
+
+function editableOrganizations() {
+  const user = currentUser();
+  return state.organizations.filter((org) => [9,10].includes(user.permissionLevel) || (user.permissionLevel === 3 ? org.state === user.state : org.id === user.organizationId));
+}
+
+function ownerOptions(selected) {
+  return option("", "Sem responsável", !selected) + state.users.filter((user) => !user.disabled || user.id === selected).map((user) => option(user.id,user.name,user.id === selected)).join("");
+}
+
+function itemFormFields(item, create = false) {
+  const user = currentUser();
+  const organizationId = item.organizationId || user.organizationId;
+  const sectorId = item.sectorId || user.sectorId;
+  const organizations = editableOrganizations();
+  if (!organizations.some((org) => org.id === organizationId) && !create) organizations.push(state.organizations.find((org) => org.id === organizationId));
+  const sectors = state.sectors.filter((sector) => sector.organizationId === organizationId && (user.permissionLevel !== 5 || sector.id === user.sectorId));
+  return `<label>Nome<input name="title" value="${escapeHtml(item.title)}" required maxlength="240" placeholder="Ex.: Contratação de novo ADM"/></label>
+    <div class="form-row"><label>Tipo<select name="type">${itemTypes.map((type) => option(type.id,type.label,(item.type || "task") === type.id)).join("")}</select></label><label>Status<select name="status">${statusCatalog.map((status) => option(status.id,status.label,(item.status || "backlog") === status.id)).join("")}</select></label></div>
+    <label>Responsável<select name="ownerId">${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select></label>
+    <div class="form-row"><label>Início previsto<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt || today())}"/></label><label>Término ideal<input type="date" name="dueAt" value="${escapeHtml(item.dueAt)}"/></label></div>
+    <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description)}</textarea></label>
+      <div class="form-row"><label>Empresa<select name="organizationId" id="itemOrganization">${organizations.filter(Boolean).map((org) => option(org.id,org.name,org.id === organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="itemSector">${sectors.map((sector) => option(sector.id,sector.name,sector.id === sectorId)).join("")}</select></label></div>
+      <label>Estado (UF)<input name="state" maxlength="2" value="${escapeHtml(item.state || user.state)}" required ${[3,5,7].includes(user.permissionLevel) ? "readonly" : ""}/></label>
+    </details>`;
+}
+
+function renderCreatePanel() {
+  const parent = getItem(ui.createParentId);
+  const editable = accessibleItems().filter((item) => canEditItem(currentUser(), item));
+  const defaults = parent ? { type:"substage", ownerId:parent.ownerId, organizationId:parent.organizationId, sectorId:parent.sectorId, state:parent.state } : { type:"project" };
+  return `${panelHeader(parent ? "Novo subitem" : "Cadastro", parent ? `Adicionar a ${parent.title}` : "Novo item")}
+    <form id="createItemForm" class="drawer-body form-stack">
+      ${itemFormFields(defaults, true)}
+      <details class="form-details" ${parent ? "open" : ""}><summary>Vincular a um item</summary><label>Item pai<select name="parentId">${option("","Sem item pai",!parent)}${editable.map((item) => option(item.id,item.title,item.id === parent?.id)).join("")}</select></label></details>
+      ${!parent ? `<details class="form-details"><summary>Adicionar etapas de uma vez</summary><label>Uma etapa por linha<textarea name="quickSteps" rows="4" placeholder="Elaborar escopo da vaga&#10;Publicar nos locais&#10;Receber todos os currículos"></textarea></label><label class="toggle-label"><input type="checkbox" name="sequence" checked/>Conectar etapas por TI</label></details>` : ""}
+      <div class="drawer-actions"><button class="button primary" type="submit">${icon("check")}Criar item</button><button class="button quiet" type="button" data-action="close-panel">Cancelar</button></div>
+    </form>`;
+}
+
+function renderItemPanel(item) {
+  const editable = canEditItem(currentUser(), item);
+  const relations = relationsFor(accessibleItems()).filter((rel) => rel.sourceId === item.id || rel.targetId === item.id);
+  const events = state.events.filter((event) => event.itemId === item.id);
+  return `${panelHeader(`${shortId(item)} · ${labelOf(itemTypes,item.type)}`, item.title, canRemoveItem(currentUser()) ? deleteButton("item",item.id,item.title) : "")}
+    <div class="item-summary">${statusBadge(item)}<span>${plannedLabel(item)} · ${elapsedLabel(item)} total</span></div>
+    <div class="panel-tabs" role="tablist" aria-label="Detalhes do item">${[{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"relations",label:`Relações (${relations.length})`},{id:"history",label:`Histórico (${events.length})`}].map((tab) => `<button role="tab" aria-selected="${ui.panelTab === tab.id}" class="${ui.panelTab === tab.id ? "active" : ""}" data-panel-tab="${tab.id}">${tab.label}</button>`).join("")}</div>
+    <div class="drawer-body">
+      ${ui.panelTab === "details" ? editable ? `<form id="updateItemForm" class="form-stack">${itemFormFields(item)}<div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="${toLocalInput()}" required/></label><label>Registro da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div><div class="drawer-actions"><button class="button primary" type="submit">${icon("check")}Salvar atualização</button><button class="button quiet" type="button" data-action="new-subitem">${icon("plus")}Subitem</button></div></form>${renderChildren(item)}` : renderReadOnly(item) + renderChildren(item) : ""}
+      ${ui.panelTab === "relations" ? renderRelations(item,relations,editable) : ""}
+      ${ui.panelTab === "history" ? renderHistory(events) : ""}
+    </div>`;
+}
+
+function renderReadOnly(item) {
+  return `<dl class="item-facts"><dt>Responsável</dt><dd>${escapeHtml(userName(item.ownerId))}</dd><dt>Início previsto</dt><dd>${dateCell(item.plannedStartAt)}</dd><dt>Término ideal</dt><dd>${dateCell(item.dueAt)}</dd><dt>Término real</dt><dd>${dateCell(item.completedAt,true)}</dd><dt>Empresa / setor</dt><dd>${escapeHtml(orgName(item.organizationId))} / ${escapeHtml(sectorName(item.sectorId))}</dd><dt>Última mudança</dt><dd>${dateCell(item.lastChangeAt,true)}</dd></dl>${item.description ? `<p class="item-description">${escapeHtml(item.description)}</p>` : ""}<p class="read-only-note">Sua alçada permite consultar este item.</p>`;
+}
+
+function renderChildren(item) {
+  const children = childrenOf(item.id);
+  return children.length ? `<section class="panel-section"><h3>Subitens <span>${children.length}</span></h3><div class="child-list">${children.map((child) => `<button data-select="${escapeHtml(child.id)}"><span class="signal ${signalOf(child)}"></span><span><strong>${escapeHtml(child.title)}</strong><small>${escapeHtml(userName(child.ownerId))} · ${dateCell(child.dueAt)}</small></span>${icon("chevron-right")}</button>`).join("")}</div></section>` : "";
+}
+
+function renderRelations(item, relations, editable) {
+  const candidates = accessibleItems().filter((candidate) => candidate.id !== item.id && canEditItem(currentUser(),candidate));
+  return `<div class="relation-list">${relations.length ? relations.map((rel) => {
+    const outgoing = rel.sourceId === item.id;
+    const other = getItem(outgoing ? rel.targetId : rel.sourceId);
+    const remove = canRemoveItem(currentUser()) && canEditItem(currentUser(),other);
+    return `<div class="relation-entry"><span class="relation-tag">${escapeHtml(labelOf(relationTypes,rel.relationType))}${rel.lagDays ? ` · ${rel.lagDays > 0 ? "+" : ""}${rel.lagDays}d` : ""}</span><span class="relation-direction">${outgoing ? "Este item →" : "→ Este item"}</span><button class="relation-item" data-select="${escapeHtml(other.id)}">${escapeHtml(other.title)}</button>${remove ? `<button class="icon-button" data-remove-relation="${escapeHtml(rel.id)}" title="Remover relação" aria-label="Remover relação">${icon("trash-2")}</button>` : ""}</div>`;
+  }).join("") : '<p class="secondary">Nenhuma relação visível.</p>'}</div>
+    ${editable && candidates.length ? `<section class="panel-section"><h3>Nova relação</h3><form id="relationForm" class="form-stack"><label>Direção<select name="direction">${option("out","Este item se relaciona com…")}${option("in","Outro item se relaciona com este…")}</select></label><label>Outro item<select name="otherId" required>${candidates.map((candidate) => option(candidate.id,candidate.title)).join("")}</select></label><div class="form-row"><label>Relação<select name="relationType">${relationTypes.map((type) => option(type.id,type.label,type.id === "TI")).join("")}</select></label><label>Defasagem (dias)<input name="lagDays" type="number" step="0.5" value="0"/></label></div><button class="button primary" type="submit">${icon("link-2")}Conectar itens</button></form><details class="form-details relation-help"><summary>O que significa cada dependência?</summary><p><strong>TI:</strong> o término do primeiro libera o início do segundo.</p><p><strong>II:</strong> o início do primeiro libera o início do segundo.</p><p><strong>TT:</strong> o término do primeiro libera o término do segundo.</p><p><strong>IF:</strong> o início do primeiro libera o término do segundo.</p><p>A defasagem acrescenta ou antecipa dias entre os eventos.</p></details></section>` : ""}`;
+}
+
+const eventLabels = { created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início previsto", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", parent_changed:"Item pai" };
+
+function eventValue(event, value) {
+  if (!value) return "—";
+  if (event.eventType === "status_changed" || event.eventType === "created") return labelOf(statusCatalog,value);
+  if (event.eventType === "owner_changed") return userName(value);
+  if (event.eventType === "type_changed") return labelOf(itemTypes,value);
+  if (["due_changed","start_changed"].includes(event.eventType)) return dateCell(value);
+  return value;
+}
+
+function renderHistory(events) {
+  const sorted = [...events].sort((a,b) => new Date(b.effectiveAt) - new Date(a.effectiveAt) || new Date(b.createdAt) - new Date(a.createdAt));
+  return `<ol class="event-timeline">${sorted.map((event) => `<li><span class="event-dot"></span><div class="event-heading"><strong>${escapeHtml(eventLabels[event.eventType] || event.eventType)}</strong><time>${formatDateTime(event.effectiveAt)}</time></div>${event.fromValue || event.toValue ? `<p class="event-values">${escapeHtml(eventValue(event,event.fromValue))}<span>→</span>${escapeHtml(eventValue(event,event.toValue))}</p>` : ""}${event.comment ? `<p>${escapeHtml(event.comment)}</p>` : ""}<small>${escapeHtml(userName(event.userId))} · Registrado ${formatDateTime(event.createdAt)}</small></li>`).join("")}</ol>`;
+}
+
+function renderAdmin() {
+  const tabs = [{id:"users",label:"Usuários"},{id:"organizations",label:"Empresas"},{id:"permissions",label:"Alçadas"}];
+  return `${panelHeader("Administração","Cadastros e permissões")}<div class="panel-tabs" role="tablist">${tabs.map((tab) => `<button role="tab" aria-selected="${ui.adminTab === tab.id}" data-admin-tab="${tab.id}" class="${ui.adminTab === tab.id ? "active" : ""}">${tab.label}</button>`).join("")}</div><div class="drawer-body">
+    ${ui.adminTab === "users" ? `<div class="admin-list">${state.users.map((user) => `<div class="admin-entry"><span><strong>${escapeHtml(user.name)}${user.disabled ? " (inativo)" : ""}</strong><small>${escapeHtml(orgName(user.organizationId))} · ${escapeHtml(sectorName(user.sectorId))}</small></span><span class="level-tag">Nível ${user.permissionLevel}</span>${user.disabled ? `<button class="icon-button" data-toggle-user="${escapeHtml(user.id)}" aria-label="Reativar ${escapeHtml(user.name)}" title="Reativar usuário">${icon("rotate-ccw")}</button>` : ""}${deleteButton("user",user.id,user.name,user.id === currentUser().id,"Entre com outro administrador para excluir seu usuário.")}</div>`).join("")}</div><section class="panel-section"><h3>Novo usuário</h3><form id="userForm" class="form-stack"><div class="form-row"><label>Nome<input name="name" required/></label><label>E-mail<input name="email" type="email" required/></label></div><div class="form-row"><label>Empresa<select name="organizationId" id="userOrganization">${state.organizations.map((org) => option(org.id,org.name,org.id === currentUser().organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="userSector">${state.sectors.filter((sector) => sector.organizationId === currentUser().organizationId).map((sector) => option(sector.id,sector.name)).join("")}</select></label></div><div class="form-row"><label>Estado (UF)<input name="state" value="${escapeHtml(currentUser().state)}" maxlength="2" required/></label><label>Alçada<select name="permissionLevel">${Object.entries(permissionLevels).map(([level,label]) => option(level,`${level} · ${label}`,level === "1")).join("")}</select></label></div><button class="button primary" type="submit">${icon("plus")}Cadastrar usuário</button></form></section>` : ""}
+    ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section><section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
+    ${ui.adminTab === "permissions" ? `<form id="permissionForm" class="form-stack"><label>Usuário<select name="userId" id="permissionUser">${state.users.filter((user) => !user.disabled).map((user) => option(user.id,user.name)).join("")}</select></label><label>Alçada<select name="permissionLevel" id="permissionLevel">${Object.entries(permissionLevels).map(([level,label]) => option(level,`${level} · ${label}`,Number(level) === state.users.find((user) => !user.disabled)?.permissionLevel)).join("")}</select></label><button class="button primary" type="submit">Salvar alçada</button></form><ol class="permission-list">${Object.entries(permissionLevels).map(([level,label]) => `<li value="${level}">${escapeHtml(label)}</li>`).join("")}</ol>` : ""}
+  </div>`;
+}
+
+function deleteButton(kind,id,name,disabled = false,reason = "") {
+  return `<button type="button" class="icon-button delete-icon" data-delete-kind="${kind}" data-delete-id="${escapeHtml(id)}" ${disabled ? "disabled" : ""} title="${escapeHtml(disabled ? reason : `Excluir ${name}`)}" aria-label="Excluir ${escapeHtml(name)}">${icon("trash-2")}</button>`;
+}
+
+function renderOrganizationRegistry() {
+  return `<div class="organization-registry">${state.organizations.map((org) => {
+    const sectors = state.sectors.filter((sector) => sector.organizationId === org.id);
+    return `<section class="registry-company"><div class="admin-entry"><span><strong>${escapeHtml(org.name)}</strong><small>${escapeHtml(org.state)}</small></span>${deleteButton("organization",org.id,org.name,org.id === currentUser().organizationId,"Entre com um administrador de outra empresa para excluir esta empresa.")}</div><details class="registry-sectors"><summary>Setores (${sectors.length})</summary>${sectors.length ? sectors.map((sector) => `<div class="admin-entry"><span><strong>${escapeHtml(sector.name)}</strong><small>${state.items.filter((item) => item.sectorId === sector.id).length} itens · ${state.users.filter((user) => user.sectorId === sector.id).length} usuários</small></span>${deleteButton("sector",sector.id,sector.name)}</div>`).join("") : '<p class="secondary">Nenhum setor cadastrado.</p>'}</details></section>`;
+  }).join("")}</div>`;
+}
+
+function openDeletion(kind,id) {
+  try {
+    requireDeletionPermission();
+    returnFocus = document.activeElement;
+    ui.deletionReturn = {panel:ui.panel,selectedItemId:ui.selectedItemId,panelTab:ui.panelTab};
+    ui.deletion = {kind,id,cascade:true}; ui.panel = "delete"; renderPanel();
+  } catch (error) { if (ui.panel) panelFailure(error); else notify(error.message,"error"); }
+}
+
+function cancelDeletion() {
+  const previous = ui.deletionReturn || {};
+  ui.panel = previous.panel || ""; ui.selectedItemId = previous.selectedItemId || ""; ui.panelTab = previous.panelTab || "details";
+  ui.deletion = null; renderPanel();
+}
+
+function renderDeletionPanel() {
+  const {kind,id,cascade} = ui.deletion;
+  let name = ""; let impact = ""; let fields = ""; let blocked = ""; let preview = [];
+  const noun = {item:"item",user:"usuário",organization:"empresa",sector:"setor",relation:"relação"}[kind];
+  try {
+    if (kind === "item") {
+      const plan = itemRemovalPlan(id,cascade); name = plan.item.title; preview = plan.items.map((item) => item.title);
+      if (plan.descendantCount) fields = `<label class="toggle-label"><input id="deleteCascade" name="cascade" type="checkbox" ${cascade ? "checked" : ""}/>Excluir também ${plan.descendantCount} ${plan.descendantCount === 1 ? "subitem" : "subitens"}</label>`;
+      impact = `<li>${plan.items.length} ${plan.items.length === 1 ? "item será excluído" : "itens serão excluídos"}.</li><li>${plan.relations.length} ${plan.relations.length === 1 ? "relação será removida" : "relações serão removidas"}.</li>${!cascade && plan.descendantCount ? `<li>Os ${plan.descendantCount} subitens serão mantidos. Os filhos diretos passam a ser itens independentes.</li>` : ""}`;
+    } else if (kind === "user") {
+      const user = state.users.find((entry) => entry.id === id); if (!user) throw new Error("Usuário não encontrado.");
+      name = user.name;
+      if (id === currentUser().id) blocked = "Entre com outro administrador para excluir o usuário conectado.";
+      const items = state.items.filter((item) => item.ownerId === id); preview = items.map((item) => item.title);
+      impact = `<li>O usuário será retirado do cadastro e da seleção de login.</li><li>${items.length} ${items.length === 1 ? "item permanece" : "itens permanecem"} na operação; o histórico de autoria será preservado.</li>`;
+      if (items.length) fields = `<label>Quem assume os itens?<select name="replacementId">${option("","Manter sem responsável")}${state.users.filter((entry) => entry.id !== id && !entry.disabled).map((entry) => option(entry.id,entry.name)).join("")}</select></label>`;
+    } else if (kind === "sector") {
+      const sector = state.sectors.find((entry) => entry.id === id); if (!sector) throw new Error("Setor não encontrado.");
+      name = sector.name;
+      const items = state.items.filter((item) => item.sectorId === id); const users = state.users.filter((user) => user.sectorId === id);
+      const replacements = state.sectors.filter((entry) => entry.id !== id && entry.organizationId === sector.organizationId);
+      impact = `<li>O setor será retirado do cadastro.</li><li>${items.length} itens e ${users.length} usuários serão mantidos e transferidos para o setor escolhido.</li>`;
+      if (items.length || users.length) {
+        if (!replacements.length) blocked = "Cadastre outro setor nesta empresa para receber os itens e usuários vinculados antes de excluir este setor.";
+        else fields = `<label>Setor que recebe os vínculos<select name="replacementId" required>${replacements.map((entry) => option(entry.id,entry.name)).join("")}</select></label>`;
+      }
+    } else if (kind === "organization") {
+      const plan = organizationRemovalPlan(id); name = plan.organization.name; preview = plan.items.map((item) => item.title);
+      impact = `<li>A empresa, ${plan.sectors.length} setores e ${plan.users.length} usuários serão excluídos.</li><li>${plan.items.length} itens e ${plan.relations.length} relações serão retirados da operação.</li>${plan.externalDescendants.length ? `<li>Inclui ${plan.externalDescendants.length} subitens de outras empresas vinculados a esta estrutura.</li>` : ""}${plan.unassigned.length ? `<li>${plan.unassigned.length} demandas de outras empresas serão mantidas sem responsável, pois seus responsáveis pertencem à empresa excluída.</li>` : ""}`;
+    } else if (kind === "relation") {
+      const rel = state.relations.find((entry) => entry.id === id); if (!rel) throw new Error("Relação não encontrada.");
+      name = labelOf(relationTypes,rel.relationType);
+      impact = `<li>${escapeHtml(getItem(rel.sourceId)?.title)} → ${escapeHtml(getItem(rel.targetId)?.title)}</li><li>A conexão será removida e os dois itens serão mantidos.</li>${rel.relationType === "contains" ? "<li>O subitem passa a ser um item independente.</li>" : ""}`;
+    } else throw new Error("Selecione o cadastro a excluir.");
+  } catch (error) { blocked = error.message; }
+  return `${panelHeader("Confirmar exclusão",`Excluir ${noun || "registro"}`)}<form id="deleteForm" class="drawer-body form-stack"><strong class="deletion-name">${escapeHtml(name)}</strong>${fields}<div class="deletion-impact"><h3>O que será alterado</h3><ul>${impact}</ul></div>${preview.length > 1 ? `<details class="form-details"><summary>Ver ${preview.length} itens afetados</summary><ul class="deletion-items">${preview.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul></details>` : ""}<p class="secondary">O histórico das alterações será preservado.</p>${blocked ? `<p class="deletion-blocked" role="alert">${escapeHtml(blocked)}</p>` : ""}<div class="drawer-actions"><button class="button danger solid" type="submit" ${blocked ? "disabled" : ""}>${icon("trash-2")}Confirmar exclusão</button><button class="button quiet" type="button" data-action="cancel-deletion">Cancelar</button></div></form>`;
+}
+
+function bindWorkspace() {
+  app.onclick = (event) => {
+    const button = event.target.closest("button,[data-action]");
+    if (!button || button.closest("#panelRoot")) return;
+    if (button.dataset.deleteKind) { openDeletion(button.dataset.deleteKind,button.dataset.deleteId); return; }
+    if (button.dataset.view) { ui.overviewMode = button.dataset.view; closePanel(); saveState(); render(); return; }
+    if (button.dataset.select) { openItem(button.dataset.select); return; }
+    if (button.dataset.expand) {
+      const id = button.dataset.expand; ui.collapsed ||= new Set();
+      if (!ui.showSubitems) { ui.showSubitems = true; ui.collapsed.delete(id); }
+      else if (ui.collapsed.has(id)) ui.collapsed.delete(id); else ui.collapsed.add(id);
+      render(); return;
+    }
+    const action = button.dataset.action;
+    if (action === "create") { returnFocus = button; ui.panel = "create"; ui.createParentId = ""; renderPanel(); }
+    else if (action === "admin") { returnFocus = button; ui.panel = "admin"; renderPanel(); }
+    else if (action === "filters") { ui.filtersOpen = !ui.filtersOpen; render(); }
+    else if (action === "clear-filters") { state.filters = {query:"",status:"all",type:"all",owner:"all"}; saveState(); render(); }
+    else if (action === "logout") { closePanel(); state.currentUserId = ""; saveState(); render(); }
+    else if (action === "export") exportVisible();
+    else if (action === "dismiss-notice") { ui.notice = ""; document.querySelector("#noticeRoot").innerHTML = ""; }
+    else if (action === "zoom-in") graphInstance?.zoom(1.2);
+    else if (action === "zoom-out") graphInstance?.zoom(1/1.2);
+    else if (action === "fit-graph") graphInstance?.fit();
+    else if (action === "reset-layout") { delete ui.positions[layoutKey()]; state.graphPositions = ui.positions; ui.graphTransform = null; saveState(); render(); }
+  };
+  const search = document.querySelector("#searchInput");
+  search.addEventListener("input", () => {
+    state.filters.query = search.value; saveState();
+    const position = search.selectionStart; render();
+    const next = document.querySelector("#searchInput"); next.focus(); try { next.setSelectionRange(position,position); } catch {}
+  });
+  document.querySelector("#scopeSelect").addEventListener("change", (event) => { ui.scopeId = event.target.value; ui.graphTransform = null; render(); });
+  document.querySelectorAll("[data-filter]").forEach((select) => select.addEventListener("change", (event) => { state.filters[event.target.dataset.filter] = event.target.value; saveState(); render(); }));
+  document.querySelector("#showSubitems")?.addEventListener("change", (event) => { ui.showSubitems = event.target.checked; ui.collapsed = new Set(); render(); });
+  document.querySelector("#groupingSelect")?.addEventListener("change", (event) => { ui.grouping = event.target.value; ui.graphTransform = null; render(); });
+}
+
+function panelFailure(error) {
+  const target = document.querySelector("#panelError");
+  if (target) { target.textContent = error.message; target.hidden = false; }
+}
+
+function submitHandler(id, handler) {
+  document.querySelector(`#${id}`)?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    try { handler(new FormData(event.currentTarget)); } catch (error) { panelFailure(error); }
+  });
+}
+
+function bindPanel() {
+  const root = document.querySelector("#panelRoot");
+  root.onclick = (event) => {
+    const button = event.target.closest("button,[data-action]"); if (!button) return;
+    event.stopPropagation();
+    const action = button.dataset.action;
+    if (action === "close-panel") { closePanel(); return; }
+    if (action === "cancel-deletion") { cancelDeletion(); return; }
+    if (button.dataset.deleteKind) { openDeletion(button.dataset.deleteKind,button.dataset.deleteId); return; }
+    if (button.dataset.panelTab) { ui.panelTab = button.dataset.panelTab; renderPanel(false); return; }
+    if (button.dataset.adminTab) { ui.adminTab = button.dataset.adminTab; renderPanel(false); return; }
+    if (button.dataset.select) { openItem(button.dataset.select); return; }
+    if (action === "new-subitem") { ui.createParentId = ui.selectedItemId; ui.panel = "create"; renderPanel(); }
+    if (button.dataset.removeRelation) {
+      openDeletion("relation",button.dataset.removeRelation);
+    }
+    if (button.dataset.toggleUser) {
+      try {
+        if (!canManageUsers(currentUser())) throw new Error("Sem permissão para gerenciar usuários.");
+        const user = state.users.find((entry) => entry.id === button.dataset.toggleUser);
+        if (user.id === currentUser().id) throw new Error("Você não pode inativar seu próprio acesso.");
+        user.disabled = !user.disabled; saveState(); renderPanel(false);
+      } catch (error) { panelFailure(error); }
+    }
+  };
+  document.querySelector("#deleteCascade")?.addEventListener("change", (event) => { ui.deletion.cascade = event.target.checked; renderPanel(false); });
+  submitHandler("deleteForm", (form) => {
+    const {kind,id,cascade} = ui.deletion;
+    const previous = ui.deletionReturn || {};
+    let message = "";
+    if (kind === "item") {
+      const result = removeItem(id,{cascade,keepChildren:!cascade});
+      message = `${result.items} ${result.items === 1 ? "item excluído" : "itens excluídos"}.`;
+    } else if (kind === "user") { removeUser(id,{replacementId:String(form.get("replacementId") || "")}); message = "Usuário excluído."; }
+    else if (kind === "sector") { removeSector(id,{replacementId:String(form.get("replacementId") || "")}); message = "Setor excluído. Os vínculos foram atualizados."; }
+    else if (kind === "organization") { removeOrganization(id); message = "Empresa e cadastros vinculados excluídos."; }
+    else if (kind === "relation") { removeRelation(id); message = "Relação excluída."; }
+    else throw new Error("Selecione o registro a excluir.");
+    if (ui.scopeId !== "all" && !getItem(ui.scopeId)) ui.scopeId = "all";
+    ui.selectedItemId = getItem(previous.selectedItemId) ? previous.selectedItemId : "";
+    ui.panel = previous.panel === "admin" ? "admin" : previous.panel === "item" && ui.selectedItemId ? "item" : "";
+    ui.panelTab = previous.panelTab || "details"; ui.deletion = null; ui.deletionReturn = null;
+    saveState(); notify(message); render();
+  });
+  submitHandler("createItemForm", (form) => {
+    const input = itemInput(form);
+    const quickSteps = String(form.get("quickSteps") || "").split("\n").map((value) => value.trim()).filter(Boolean);
+    if (quickSteps.length > 100) throw new Error("Adicione até 100 etapas por cadastro.");
+    const item = createItem(input); let previous = null;
+    quickSteps.forEach((title) => {
+      const child = createItem({...input,title,type:"substage",status:"backlog",parentId:item.id,description:""});
+      if (previous && form.get("sequence")) createRelation(previous.id,child.id,"TI"); previous = child;
+    });
+    ui.selectedItemId = item.id; ui.panel = "item"; ui.panelTab = "details"; saveState(); notify("Item criado."); render();
+  });
+  submitHandler("updateItemForm", (form) => {
+    const effective = new Date(form.get("effectiveAt"));
+    if (!Number.isFinite(effective.getTime())) throw new Error("Informe a data e hora da mudança.");
+    const changed = updateItem(ui.selectedItemId,itemInput(form),effective.toISOString(),String(form.get("comment") || ""));
+    saveState(); notify(changed ? "Atualização registrada." : "Nenhuma alteração para salvar."); render();
+  });
+  submitHandler("relationForm", (form) => {
+    const otherId = String(form.get("otherId")); const incoming = form.get("direction") === "in";
+    createRelation(incoming ? otherId : ui.selectedItemId,incoming ? ui.selectedItemId : otherId,String(form.get("relationType")),Number(form.get("lagDays")));
+    saveState(); notify("Relação criada."); render();
+  });
+  submitHandler("userForm", (form) => {
+    if (!canManageUsers(currentUser())) throw new Error("Sem permissão para cadastrar usuários.");
+    const email = String(form.get("email")).trim().toLowerCase(); const name = String(form.get("name")).trim();
+    if (!name) throw new Error("Informe o nome.");
+    if (state.users.some((user) => user.email.toLowerCase() === email)) throw new Error("Este e-mail já está cadastrado.");
+    const organizationId = String(form.get("organizationId")); const sectorId = String(form.get("sectorId"));
+    if (!state.sectors.some((sector) => sector.id === sectorId && sector.organizationId === organizationId)) throw new Error("Cadastre um setor para esta empresa.");
+    state.users.push({id:uid("user"),name,email,organizationId,sectorId,state:String(form.get("state")).toUpperCase(),permissionLevel:Number(form.get("permissionLevel"))});
+    saveState(); notify("Usuário cadastrado."); renderPanel(false);
+  });
+  submitHandler("organizationForm", (form) => {
+    if (!canManageUsers(currentUser())) throw new Error("Sem permissão para cadastrar empresas.");
+    const name = String(form.get("name")).trim(); if (!name) throw new Error("Informe o nome da empresa.");
+    state.organizations.push({id:uid("org"),name,state:String(form.get("state")).toUpperCase()}); saveState(); notify("Empresa cadastrada."); renderPanel(false);
+  });
+  submitHandler("sectorForm", (form) => {
+    if (!canManageUsers(currentUser())) throw new Error("Sem permissão para cadastrar setores.");
+    const name = String(form.get("name")).trim(); if (!name) throw new Error("Informe o nome do setor.");
+    state.sectors.push({id:uid("sector"),name,organizationId:String(form.get("organizationId"))}); saveState(); notify("Setor cadastrado."); renderPanel(false);
+  });
+  submitHandler("permissionForm", (form) => {
+    if (!canManageUsers(currentUser())) throw new Error("Sem permissão para alterar alçadas.");
+    const user = state.users.find((entry) => entry.id === form.get("userId")); const level = Number(form.get("permissionLevel"));
+    if (user.permissionLevel === 10 && level !== 10 && state.users.filter((entry) => !entry.disabled && entry.permissionLevel === 10).length <= 1) throw new Error("Mantenha pelo menos um administrador ativo.");
+    user.permissionLevel = level; saveState(); notify("Alçada atualizada."); if (!canManageUsers(currentUser())) { closePanel(); render(); } else renderPanel(false);
+  });
+  bindOrganizationSelect("itemOrganization","itemSector");
+  bindOrganizationSelect("userOrganization","userSector");
+  document.querySelector("#permissionUser")?.addEventListener("change", (event) => { document.querySelector("#permissionLevel").value = state.users.find((user) => user.id === event.target.value).permissionLevel; });
+  root.querySelector(".drawer").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); closePanel(); }
+    if (event.key === "Tab") {
+      const focusable = [...root.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary')].filter((element) => element.getClientRects().length);
+      const first = focusable[0]; const last = focusable.at(-1);
+      if (event.shiftKey && (document.activeElement === first || document.activeElement.classList.contains("drawer"))) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+  });
+}
+
+function bindOrganizationSelect(orgId,sectorId) {
+  const org = document.getElementById(orgId); const sector = document.getElementById(sectorId);
+  org?.addEventListener("change", () => {
+    sector.innerHTML = state.sectors.filter((entry) => entry.organizationId === org.value && (orgId !== "itemOrganization" || currentUser().permissionLevel !== 5 || entry.id === currentUser().sectorId)).map((entry) => option(entry.id,entry.name)).join("");
+    if (orgId === "itemOrganization") { const stateInput = org.closest("form").querySelector('[name="state"]'); if (!stateInput.readOnly) stateInput.value = state.organizations.find((entry) => entry.id === org.value)?.state || ""; }
+  });
+}
+
+function itemInput(form) {
+  return {title:String(form.get("title") || "").trim(),type:String(form.get("type")),status:String(form.get("status")),ownerId:String(form.get("ownerId") || ""),plannedStartAt:String(form.get("plannedStartAt") || ""),dueAt:String(form.get("dueAt") || ""),description:String(form.get("description") || ""),organizationId:String(form.get("organizationId") || ""),sectorId:String(form.get("sectorId") || ""),state:String(form.get("state") || "").toUpperCase(),parentId:String(form.get("parentId") || "")};
+}
+
+function exportVisible() {
+  const items = accessibleItems(); const ids = new Set(items.map((item) => item.id));
+  const content = {version:state.version,exportedAt:nowIso(),items,relations:relationsFor(items),events:state.events.filter((event) => ids.has(event.itemId))};
+  if (canManageUsers(currentUser())) Object.assign(content,{organizations:state.organizations,sectors:state.sectors,users:state.users,events:state.events,archivedItems:state.archivedItems || [],archivedRelations:state.archivedRelations || [],archivedUsers:state.archivedUsers || [],archivedOrganizations:state.archivedOrganizations || [],archivedSectors:state.archivedSectors || [],registryEvents:state.registryEvents || []});
+  const url = URL.createObjectURL(new Blob([JSON.stringify(content,null,2)],{type:"application/json"}));
+  const anchor = document.createElement("a"); anchor.href = url; anchor.download = `fluxos-${today()}.json`; anchor.click(); URL.revokeObjectURL(url);
+  notify("Dados visíveis exportados.");
+}
+
+render();
