@@ -431,6 +431,10 @@ function createSeedItem(base, input) {
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
+    plannedDurationDays: Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0),
+    baselineStartAt: input.plannedStartAt || today(),
+    baselineDueAt: input.dueAt || "",
+    replannedDueAt: "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (completeStatus(input.status) ? 100 : 0)),
     completedAt: completeStatus(input.status) ? nowIso() : "",
@@ -1101,6 +1105,7 @@ function validateItemInput(input, existing = null) {
   if (input.weight !== undefined && (!Number.isFinite(Number(input.weight)) || Number(input.weight) <= 0)) throw new Error("O peso deve ser maior que zero.");
   if (input.progressPercent !== undefined && (!Number.isFinite(Number(input.progressPercent)) || Number(input.progressPercent) < 0 || Number(input.progressPercent) > 100)) throw new Error("O percentual deve ficar entre 0 e 100.");
   if (input.plannedDurationDays !== undefined && (!Number.isFinite(Number(input.plannedDurationDays)) || Number(input.plannedDurationDays) < 0)) throw new Error("A duração deve ser um número de dias corridos igual ou maior que zero.");
+  if (input.replannedDueAt && (!/^\d{4}-\d{2}-\d{2}$/.test(input.replannedDueAt) || !Number.isFinite(new Date(input.replannedDueAt + "T12:00:00").getTime()))) throw new Error("Informe uma data válida para a repactuação.");
   for (const field of ["plannedStartAt", "dueAt"]) {
     if (input[field] && (!/^\d{4}-\d{2}-\d{2}$/.test(input[field]) || !Number.isFinite(new Date(`${input[field]}T12:00:00`).getTime()))) throw new Error("Informe uma data válida.");
   }
@@ -1124,13 +1129,13 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (wasComplete && !complete && (input.progressPercent === undefined || Number(input.progressPercent) === Number(item.progressPercent))) throw new Error("Informe um novo percentual ao reabrir uma atividade concluída.");
   if (complete) input = { ...input, progressPercent: 100 };
   if (wasComplete && complete && ((input.plannedStartAt ?? item.plannedStartAt) !== item.plannedStartAt || (input.dueAt ?? item.dueAt) !== item.dueAt)) throw new Error("As datas previstas ficam bloqueadas após a conclusão.");
-  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
+  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",replannedDueAt:"replanned_due_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
   let changed = false;
   for (const [field,eventType] of Object.entries(fields)) {
     const rawNext = input[field] ?? item[field];
     const next = ["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
     if (next === item[field]) continue;
-    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt","plannedDurationDays"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
+    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt","plannedDurationDays","replannedDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
     if (operation && gpoDecision(user, operation, item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
     createEvent(id,eventType,item[field],next,"",effectiveAt);
     item[field] = next; changed = true;
@@ -1453,5 +1458,18 @@ function recalculatePlannedDates() {
     item.plannedStartAt = starts.get(item.id) || item.baselineStartAt || item.plannedStartAt || today();
     item.dueAt = datePlusDays(item.plannedStartAt,durations.get(item.id));
   }
+  const depthOf = (item) => { let depth=0, cursor=item, seen=new Set(); while (cursor?.parentId && !seen.has(cursor.parentId)) { seen.add(cursor.parentId); cursor=byId.get(cursor.parentId); if (cursor) depth++; } return depth; };
+  const groups = items.filter((item) => items.some((child) => child.parentId === item.id && child.status !== "cancelled")).sort((a,b)=>depthOf(a)-depthOf(b));
+  for (const group of groups) {
+    if (!group.replannedDueAt) continue;
+    const descendants = items.filter((item) => { let cursor=item, seen=new Set(); while (cursor?.parentId && !seen.has(cursor.parentId)) { if (cursor.parentId === group.id) return true; seen.add(cursor.parentId); cursor=byId.get(cursor.parentId); } return false; }).filter((item)=>!items.some((child)=>child.parentId===item.id && child.status!=="cancelled") && item.status!=="cancelled");
+    const latest = descendants.map((item)=>item.dueAt).filter(Boolean).sort().at(-1);
+    if (!latest || !descendants.length) continue;
+    const delta = (new Date(group.replannedDueAt+"T12:00:00")-new Date(latest+"T12:00:00"))/86400000;
+    if (!Number.isFinite(delta)) continue;
+    for (const leaf of descendants) { leaf.plannedStartAt=datePlusDays(leaf.plannedStartAt,delta); leaf.dueAt=datePlusDays(leaf.dueAt,delta); }
+  }
+  const summaryGroups = [...groups].sort((a,b)=>depthOf(b)-depthOf(a));
+  for (const group of summaryGroups) syncParentSummary(group.id);
   return {valid:true};
 }
