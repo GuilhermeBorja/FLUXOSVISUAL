@@ -360,3 +360,24 @@ beforeEvents=state.events.length;
   assert.equal(run("state.events.length"), run("beforeEvents"));
   assert.equal(run('state.items.some((item)=>item.title==="Não deve persistir")'), false);
 });
+
+
+test("falha ao criar relação CONTÉM preserva o pai anterior do item", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`parent=createItem({...${defaults},title:"Pai"});
+child=createItem({...${defaults},title:"Filho",parentId:parent.id});
+state.relations=state.relations.filter((r)=>!(r.relationType==="contains" && r.sourceId===parent.id && r.targetId===child.id));
+a=createItem({...${defaults},title:"Temporal A"});
+b=createItem({...${defaults},title:"Temporal B"});
+state.relations.push(
+  {id:uid("rel"),sourceId:a.id,targetId:b.id,relationType:"TI",lagDays:0},
+  {id:uid("rel"),sourceId:b.id,targetId:a.id,relationType:"TI",lagDays:0}
+);
+beforeRelations=state.relations.length;
+`);
+  assert.throws(() => run('createRelation(parent.id,child.id,"contains")'), /ciclo nas dependências temporais/);
+  assert.equal(run("getItem(child.id).parentId"), run("parent.id"));
+  assert.equal(run("state.relations.length"), run("beforeRelations"));
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===parent.id && r.targetId===child.id)'), false);
+});
