@@ -560,7 +560,7 @@ function renderCreatePanel() {
     <form id="createItemForm" class="drawer-body form-stack">
       ${itemFormFields(defaults, true)}
       <details class="form-details" ${parent ? "open" : ""}><summary>Vincular a um item</summary><label>Item pai<select name="parentId">${option("","Sem item pai",!parent)}${editable.map((item) => option(item.id,item.title,item.id === parent?.id)).join("")}</select></label></details>
-      ${!parent ? `<details class="form-details"><summary>Adicionar etapas de uma vez</summary><label>Uma etapa por linha<textarea name="quickSteps" rows="4" placeholder="Elaborar escopo da vaga&#10;Publicar nos locais&#10;Receber todos os currículos"></textarea></label><div id="quickStepRows" class="quick-step-list" aria-live="polite"></div><label class="toggle-label"><input type="checkbox" name="sequence" checked/>Conectar etapas por TI</label></details>` : ""}
+      <details class="form-details"><summary>Adicionar etapas de uma vez</summary><label>Uma etapa por linha<textarea name="quickSteps" rows="4" placeholder="Elaborar escopo da vaga&#10;Publicar nos locais&#10;Receber todos os currículos"></textarea></label><div id="quickStepRows" class="quick-step-list" aria-live="polite"></div><label class="toggle-label"><input type="checkbox" name="sequence" checked/>Conectar etapas por TI</label></details>
       <div class="drawer-actions"><button class="button primary" type="submit">${icon("check")}Criar item</button><button class="button quiet" type="button" data-action="close-panel">Cancelar</button></div>
     </form>`;
 }
@@ -1116,7 +1116,7 @@ function bindPanel() {
         const duration = durationRaw ? Number(durationRaw) : null;
         if (duration !== null && (!Number.isFinite(duration) || duration < 0)) throw new Error(`Informe uma duração válida para a etapa ${index + 1}.`);
         const start = input.plannedStartAt || today();
-        const child = createItem({...input,title,type:"substage",status:String(form.get(`stepStatus_${index}`) || "backlog"),ownerId:String(form.get(`stepOwner_${index}`) || ""),weight:Number(form.get(`stepWeight_${index}`) || 1),progressPercent:0,parentId:item.id,description:"",plannedStartAt:start,dueAt:duration === null ? input.dueAt : shiftedDate(start,duration)});
+        const child = createItem({...input,title,type:"substage",status:String(form.get(`stepStatus_${index}`) || "backlog"),ownerId:String(form.get(`stepOwner_${index}`) || ""),weight:Number(form.get(`stepWeight_${index}`) || 1),progressPercent:0,parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration === null ? Number(input.plannedDurationDays || 0) : duration,dueAt:duration === null ? input.dueAt : shiftedDate(start,duration)});
         if (previous && form.get("sequence")) createRelation(previous.id,child.id,"TI"); previous = child;
       });
       await addAttachments(item.id,form.getAll("attachments"));
