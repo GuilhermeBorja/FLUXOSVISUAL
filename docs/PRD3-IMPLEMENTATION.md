@@ -101,3 +101,11 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 ## Correção do CI — 18/10/2026
 
 A execução 39168227194 falhou exclusivamente no smoke test de navegador: o seletor `.drawer` contava um painel mantido no DOM, mesmo após fechar, e o teste exigia contagem zero. O teste foi ajustado para verificar `.drawer:visible`, validando a ausência de painel efetivamente visível nas larguras testadas. Nova execução automática: [run 39168432112](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168432112). Status final ainda pendente no momento desta anotação.
+
+
+## Correção confirmada do CI — 18/10/2026
+
+- Causa-raiz confirmada no log da execução 39168227194: `browser-tests/prd3-smoke.mjs` abria o painel Configurações, testava o formulário de subitem mais adiante e executava a matriz responsiva exigindo nenhum painel visível, sem fechar esse segundo painel.
+- Corrigido o smoke test para fechar o formulário de criação do subitem e aguardar a remoção do drawer antes de medir os viewports.
+- Execução integral confirmada como sucesso: [GitHub Actions run 39168536101](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168536101). O log contém `PRD3 browser smoke passed` e cobriu navegação, Gantt, grafo, configuração de cor, redimensionamento de mouse/teclado e resoluções 1920/1366/1024/768/390px.
+- Esta correção fecha apenas a falha de smoke test identificada; não representa aceite de todos os requisitos do PRD3 nem deploy para `main`.
