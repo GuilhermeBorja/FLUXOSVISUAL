@@ -147,8 +147,11 @@ function render() {
       </header>
       <section class="workspace-heading">
         <div><h1>${escapeHtml(orgName(user.organizationId) === "-" ? "Organização" : orgName(user.organizationId))}</h1><p>${items.length} ${items.length === 1 ? "item visível" : "itens visíveis"}</p></div>
-        <button class="button quiet" data-action="templates">${icon("workflow")}Modelos</button>
-        ${canCreateItem(user) ? `<button class="button quiet" data-action="templates">${icon("workflow")}Criar conforme template</button><button class="button primary" data-action="create">${icon("plus")}Novo item</button>` : ""}
+        <div class="workspace-heading-actions">
+          <button class="button quiet" data-action="templates">${icon("workflow")}Modelos</button>
+          ${canCreateItem(user) ? `<button class="button quiet" data-action="templates">${icon("workflow")}Criar conforme template</button>` : ""}
+          <button class="button primary" data-action="create" ${canCreateItem(user) ? "" : 'disabled title="Seu perfil GPO não permite criar itens neste contexto."'}>${icon("plus")}Novo item</button>
+        </div>
       </section>
       ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
