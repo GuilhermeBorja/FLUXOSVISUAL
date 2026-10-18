@@ -288,7 +288,7 @@ function syncTableWidth(table) {
   if (!table) return;
   const headers = [...table.querySelectorAll("thead th")];
   const widths = state.tableColumnWidths || {};
-  const requested = headers.reduce((sum,header,index) => { const key = tableColumnOptions[index]?.[0]; return sum + Math.max(60,Number(widths[key]) || header.getBoundingClientRect().width || 0); },0);
+  const requested = headers.reduce((sum,header,index) => { const key = tableColumnOptions[index]?.[0]; return sum + Math.max(60,Number(widths[key]) || Number.parseFloat(header.style.width) || header.getBoundingClientRect().width || 0); },0);
   table.style.width = Math.max(table.parentElement?.clientWidth || 0,requested) + "px";
 }
 
