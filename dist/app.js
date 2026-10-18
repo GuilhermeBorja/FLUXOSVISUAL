@@ -852,6 +852,15 @@ function createItem(input) {
   if (input.type === "approval" && ["correction", "under_review"].includes(input.status) && !input.templateInstance) throw new Error("A etapa deve entrar no fluxo antes de receber uma decisão.");
   if (input.parentId && !canEditItem(user, getItem(input.parentId))) throw new Error("Sem permissao para alterar o item pai.");
   if (!canCreateItem(user, { ...input, createdBy: user.id })) throw new Error("O escopo do novo item não está autorizado.");
+  // Item creation updates containment, summaries, events and calculated dates.
+  // Keep these mutations atomic if schedule validation fails.
+  const rollback = {
+    items: state.items.map((entry) => ({...entry})),
+    relations: state.relations.map((entry) => ({...entry})),
+    events: state.events.map((entry) => ({...entry})),
+    archivedRelations: (state.archivedRelations || []).map((entry) => ({...entry})),
+  };
+  try {
   const item = {
     id: uid("item"),
     title: input.title,
@@ -888,8 +897,14 @@ function createItem(input) {
   if (!schedule.valid) throw new Error(schedule.message);
   if (item.parentId) syncParentSummary(item.parentId);
   return item;
+  } catch (error) {
+    state.items = rollback.items;
+    state.relations = rollback.relations;
+    state.events = rollback.events;
+    state.archivedRelations = rollback.archivedRelations;
+    throw error;
+  }
 }
-
 function createRelation(sourceId, targetId, relationType, lagDays = 0, description = "") {
   const source = getItem(sourceId);
   const target = getItem(targetId);
