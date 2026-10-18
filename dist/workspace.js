@@ -610,7 +610,7 @@ function renderQuickStepRows(titles) {
   const root = document.querySelector("#quickStepRows");
   if (!root) return;
   const rows = titles.map((title) => title.trim()).filter(Boolean).slice(0,100);
-  root.innerHTML = rows.map((title,index) => `<div class="quick-step-row"><strong>${index + 1}. ${escapeHtml(title)}</strong><label>Status<select name="stepStatus_${index}">${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => option(status.id,status.label,status.id === "backlog")).join("")}</select></label><label>Responsável<select name="stepOwner_${index}">${ownerOptions(currentUser().id)}</select></label><label>Peso<input type="number" name="stepWeight_${index}" min="0.1" step="0.1" value="1" required/></label><label>Duração (dias)<input type="number" name="stepDuration_${index}" min="0" step="1" placeholder="Usar término do fluxo"/></label></div>`).join("");
+  root.innerHTML = rows.map((title,index) => `<div class="quick-step-row"><strong>${index + 1}. ${escapeHtml(title)}</strong><label>Status<select name="stepStatus_${index}">${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => option(status.id,status.label,status.id === "backlog")).join("")}</select></label><label>Responsável<select name="stepOwner_${index}">${ownerOptions(currentUser().id)}</select></label><label>Peso<input type="number" name="stepWeight_${index}" min="0.1" step="0.1" value="1" required/></label><label>Duração (dias)<input type="number" name="stepDuration_${index}" min="0" step="1" placeholder="Obrigatória"/></label></div>`).join("");
 }
 
 function renderAttachments(item,editable) {
@@ -626,7 +626,7 @@ function updateSchedulePreview() {
   const baseDuration=durationInput === "" ? null : Math.max(0,Number(durationInput));
   const titles=String(form.querySelector('[name="quickSteps"]')?.value || "").split("\n").map((value)=>value.trim()).filter(Boolean);
   let duration=baseDuration;
-  if(titles.length){ const durations=titles.map((_,index)=>{const value=String(form.querySelector(`[name="stepDuration_${index}"]`)?.value || "").trim(); return value==="" ? baseDuration : Math.max(0,Number(value)||0);}); if(durations.some((value)=>value===null)){ output.textContent="Informe a duração planejada ou a duração de cada etapa para calcular a previsão."; return; } duration=form.querySelector('[name="sequence"]')?.checked ? durations.reduce((sum,value)=>sum+value,0) : Math.max(0,...durations); }
+  if(titles.length){ const durations=titles.map((_,index)=>{const value=String(form.querySelector(`[name="stepDuration_${index}"]`)?.value || "").trim(); return value==="" ? null : Math.max(0,Number(value)||0);}); if(durations.some((value)=>value===null)){ output.textContent="Informe a duração de cada etapa para calcular a previsão."; return; } duration=form.querySelector('[name="sequence"]')?.checked ? durations.reduce((sum,value)=>sum+value,0) : Math.max(0,...durations); }
   if(duration===null || !Number.isFinite(duration)){ output.textContent="Informe a duração planejada para calcular a previsão."; return; }
   output.textContent=`Previsão final: ${formatDate(datePlusDays(start,duration))} · ${duration} dias corridos`;
 }
@@ -1228,10 +1228,11 @@ function bindPanel() {
       item = createItem(input); let previous = null;
       quickSteps.forEach((title,index) => {
         const durationRaw = String(form.get(`stepDuration_${index}`) || "").trim();
-        const duration = durationRaw ? Number(durationRaw) : null;
-        if (duration !== null && (!Number.isFinite(duration) || duration < 0)) throw new Error(`Informe uma duração válida para a etapa ${index + 1}.`);
+        if (!durationRaw) throw new Error(`Informe a duração da etapa ${index + 1}.`);
+        const duration = Number(durationRaw);
+        if (!Number.isFinite(duration) || duration < 0) throw new Error(`Informe uma duração válida para a etapa ${index + 1}.`);
         const start = input.plannedStartAt || today();
-        const child = createItem({...input,title,type:"substage",status:String(form.get(`stepStatus_${index}`) || "backlog"),ownerId:String(form.get(`stepOwner_${index}`) || ""),weight:Number(form.get(`stepWeight_${index}`) || 1),progressPercent:0,parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration === null ? Number(input.plannedDurationDays || 0) : duration,dueAt:duration === null ? input.dueAt : shiftedDate(start,duration)});
+        const child = createItem({...input,title,type:"substage",status:String(form.get(`stepStatus_${index}`) || "backlog"),ownerId:String(form.get(`stepOwner_${index}`) || ""),weight:Number(form.get(`stepWeight_${index}`) || 1),progressPercent:0,parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration,dueAt:shiftedDate(start,duration)});
         if (previous && form.get("sequence")) createRelation(previous.id,child.id,"TI"); previous = child;
       });
       await addAttachments(item.id,form.getAll("attachments"));
