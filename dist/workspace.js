@@ -302,9 +302,9 @@ function rowFillColor(item, depth) {
   const projectId = rootOf(item)?.id || "";
   const projectColor = settings.projects?.[projectId];
   const levelDefaults = ["#ffffff","#f5f8fa","#edf3f6","#e4edf2"];
-  const levelColor = settings.levels?.[String(Math.min(depth, 3))] || levelDefaults[Math.min(depth, 3)];
-  const color = projectColor || levelColor || "";
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "transparent";
+  const levelCandidate = settings.levels?.[String(Math.min(depth, 3))];
+  const levelColor = /^#[0-9a-fA-F]{6}$/.test(levelCandidate || "") ? levelCandidate : levelDefaults[Math.min(depth, 3)];
+  return /^#[0-9a-fA-F]{6}$/.test(projectColor || "") ? projectColor : levelColor;
 }
 
 function renderTable(items) {
