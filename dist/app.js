@@ -464,7 +464,12 @@ function canCreateItem(user, item = null) {
     entry.operation === "create_item" && entry.effect === "allow" &&
     (entry.subjectType === "user" ? entry.subjectId === user.id : Number(entry.subjectId) === user.permissionLevel)
   )) return true;
-  return [1, 3, 5, 7, 9, 10].includes(user.permissionLevel);
+  const level = Number(user.permissionLevel);
+  if (level === 1) return !item || !item.createdBy || item.createdBy === user.id;
+  if (level === 3) return !item || item.state === user.state;
+  if (level === 5) return !item || item.sectorId === user.sectorId;
+  if (level === 7) return !item || item.organizationId === user.organizationId;
+  return [9, 10].includes(level);
 }
 
 function canRemoveItem(user, item = null) {
@@ -986,7 +991,7 @@ function removeItem(id,{cascade = false,keepChildren = false} = {}) {
 }
 
 function removeUser(id,{replacementId = ""} = {}) {
-  if (!canManageUsers(currentUser())) throw new Error("Sua alçada não permite gerenciar usuários.");
+  requireDeletionPermission();
   const user = state.users.find((entry) => entry.id === id);
   if (!user) throw new Error("Usuário não encontrado.");
   if (user.id === currentUser().id) throw new Error("Entre com outro administrador para excluir o usuário conectado.");
