@@ -1191,7 +1191,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   }
   children.forEach((item) => collectLeaves(item.id));
   const weighted = descendants.reduce((total, item) => {
-    const weight = Number(item.weight || 1);
+    const weight = Number(item.weight ?? 1);
     if (!Number.isFinite(weight) || weight <= 0) return total;
     const percent = completeStatus(item.status) ? 100 : Math.max(0, Math.min(100, Number(item.progressPercent || 0)));
     total.weighted += weight * percent; total.weight += weight; return total;
