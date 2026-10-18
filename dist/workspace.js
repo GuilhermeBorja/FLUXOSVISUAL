@@ -29,7 +29,9 @@ function childrenOf(id) {
 }
 
 function shortId(item) {
-  return `#${String(state.items.indexOf(item) + 1).padStart(3, "0")}`;
+  const rows = tableRows(scopedItems());
+  const index = rows.findIndex((entry) => entry.item.id === item.id);
+  return `#${String((index >= 0 ? index : state.items.indexOf(item)) + 1).padStart(3, "0")}`;
 }
 
 function elapsedLabel(item) {
