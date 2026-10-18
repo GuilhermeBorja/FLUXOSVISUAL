@@ -137,6 +137,21 @@ try {
   assert.equal(await page.locator('#createItemForm [name="plannedDurationDays"]').inputValue(), "");
   await page.getByRole("button", { name: /Fechar painel/ }).click();
   await page.locator(".drawer").waitFor({ state: "detached" });
+
+  // P0 regression: subitem preview must use the parent's baseline start, not today.
+  await page.locator(`button[data-select="${crossViewItem.id}"]`).first().click();
+  await page.locator('[data-action="new-subitem"]').click();
+  await page.locator("#createItemForm").waitFor();
+  const expectedSubitemFinish = await page.evaluate((id) => {
+    const parent = getItem(id);
+    return formatDate(datePlusDays(parent.baselineStartAt || parent.plannedStartAt, 3));
+  }, crossViewItem.id);
+  await page.locator('#createItemForm [name="plannedDurationDays"]').fill("3");
+  const previewText = await page.locator("#schedulePreview").textContent();
+  assert.ok(previewText.includes(expectedSubitemFinish), `subitem preview ignored parent baseline start: expected ${expectedSubitemFinish}, got ${previewText}`);
+  await page.getByRole("button", { name: /Fechar painel/ }).click();
+  await page.locator(".drawer").waitFor({ state: "detached" });
+
   assert.equal(errors.length, 0, errors.join("\n"));
 
   for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1024, height: 768 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
