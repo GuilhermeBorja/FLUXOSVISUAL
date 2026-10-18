@@ -251,3 +251,15 @@ test("mover uma subárvore atualiza a contenção de todos os descendentes", () 
   assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===rootA.id && r.targetId===grandchild.id)'),false);
   assert.equal(run('state.relations.filter((r)=>r.relationType==="contains" && r.targetId===grandchild.id).length'),2);
 });
+
+
+test("previsão temporal respeita TI, II, TT, IF e não antecipa o início baseline", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`pairs=["TI","II","TT","IF"].map((type,index)=>{const source=createItem({...${defaults},title:"Origem "+type,plannedStartAt:"2026-01-01",dueAt:"2026-01-05",plannedDurationDays:4});const target=createItem({...${defaults},title:"Destino "+type,plannedStartAt:"2026-01-01",dueAt:"2026-01-03",plannedDurationDays:2});return {type,source,target};});state.relations=state.relations.filter((r)=>r.relationType==="contains");pairs.forEach((p)=>state.relations.push({id:uid("rel"),sourceId:p.source.id,targetId:p.target.id,relationType:p.type,lagDays:1,description:"teste"}));result=recalculatePlannedDates();`);
+  assert.equal(run("result.valid"),true);
+  assert.equal(run('getItem(pairs.find((p)=>p.type==="TI").target.id).plannedStartAt'),"2026-01-06");
+  assert.equal(run('getItem(pairs.find((p)=>p.type==="II").target.id).plannedStartAt'),"2026-01-02");
+  assert.equal(run('getItem(pairs.find((p)=>p.type==="TT").target.id).plannedStartAt'),"2026-01-04");
+  assert.equal(run('getItem(pairs.find((p)=>p.type==="IF").target.id).plannedStartAt'),"2026-01-01");
+});
