@@ -104,3 +104,15 @@ test("exclusões persistem ao reabrir os dados e não restauram o exemplo inicia
   assert.equal(reopened('state.users.some((user)=>user.id==="u_mateus")'),false);
   assert.equal(reopened('state.archivedItems.length'),7);
 });
+
+test("P0: remover um pai mantendo os filhos sincroniza todos os vínculos CONTÉM ancestrais",()=>{
+  const run=context();
+  run(`root=createItem({...${defaults},title:"Raiz"});middle=createItem({...${defaults},title:"Pai intermediário",parentId:root.id});child=createItem({...${defaults},title:"Filho",parentId:middle.id});grandchild=createItem({...${defaults},title:"Neto",parentId:child.id});`);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===grandchild.id)'),true);
+  run('removeItem(middle.id,{keepChildren:true});');
+  assert.equal(run('getItem(child.id).parentId'),"");
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===child.id)'),false);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===grandchild.id)'),false);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===child.id && r.targetId===grandchild.id)'),true);
+  assert.equal(run('state.archivedRelations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===grandchild.id)'),true);
+});
