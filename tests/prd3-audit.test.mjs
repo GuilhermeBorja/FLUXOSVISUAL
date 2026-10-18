@@ -38,7 +38,7 @@ test("P0 M-13: matriz de regressão tem 44 requisitos parciais rastreáveis e ID
 test("PRD3: matriz principal e checklist de regressão permanecem sincronizadas", () => {
   const audit = readFileSync(new URL("../docs/PRD3-AUDIT.md", import.meta.url), "utf8");
   const auditRows = audit.split("\n")
-    .filter((line) => /^\\| (R2-\\d+|M-\\d+) \\|/.test(line))
+    .filter((line) => /^\| (R2-\d+|M-\d+) \|/.test(line))
     .map((line) => {
       const columns = line.split("|").map((value) => value.trim()).filter(Boolean);
       return { id: columns[0], status: columns[5] };
