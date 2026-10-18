@@ -158,3 +158,19 @@ test("contexto do responsável é herdado e a cor de status chega ao Gantt", () 
   assert.match(workspace, /statusConfig\(row\.item\.status\)\.color/);
   assert.match(workspace, /icon\(statusConfig\(row\.item\.status\)\.icon\)/);
 });
+
+
+test("preenchimento de linha prioriza projeto, depois nível, e valida a cor", () => {
+  const start = workspace.indexOf("function rowFillColor(item, depth) {");
+  const end = workspace.indexOf("function renderTable(items) {", start);
+  const source = workspace.slice(start, end);
+  const sandbox = {
+    state: {rowFillSettings:{levels:{"1":"#123456"},projects:{projectA:"#abcdef",projectB:"red;position:fixed"}}},
+    rootOf: (item) => ({id:item.project}),
+  };
+  const colorFor = vm.runInNewContext(source + "\nrowFillColor", sandbox);
+  assert.equal(colorFor({project:"projectA"},1),"#abcdef");
+  assert.equal(colorFor({project:"projectB"},1),"#123456");
+  assert.equal(colorFor({project:"projectC"},1),"#123456");
+  assert.equal(colorFor({project:"projectC"},0),"#ffffff");
+});
