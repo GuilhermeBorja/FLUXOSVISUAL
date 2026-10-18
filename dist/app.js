@@ -543,7 +543,7 @@ function canManageUsers(user, organizationId = user?.organizationId) {
 }
 
 function canManageAnyUsers(user) {
-  return !!user && !user.disabled && state.organizations.some((organization) => canManageUsers(user,organization.id));
+  return !!user && !user.disabled && (gpoDecision(user,"manage_users",null) === true || state.organizations.some((organization) => canManageUsers(user,organization.id)));
 }
 
 function canManageGpo(user) {
@@ -556,7 +556,7 @@ function canManageOrganization(user, organizationId = user?.organizationId) {
 }
 
 function canManageAnyOrganization(user) {
-  return !!user && !user.disabled && state.organizations.some((organization) => canManageOrganization(user,organization.id));
+  return !!user && !user.disabled && (gpoDecision(user,"manage_organization",null) === true || state.organizations.some((organization) => canManageOrganization(user,organization.id)));
 }
 
 function createPermissionRule(input) {
