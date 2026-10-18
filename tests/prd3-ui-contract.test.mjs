@@ -105,7 +105,7 @@ test("análise do Gantt calcula dependências, paralelismo e caminho crítico", 
 
 test("análise do Gantt sinaliza duração ausente e ciclos temporais", () => {
   const items = [
-    {id:"a",parentId:"",plannedStartAt:"2026-01-01",plannedDurationDays:2},
+    {id:"a",parentId:"",plannedStartAt:"2026-01-01"},
     {id:"b",parentId:"",plannedStartAt:"2026-01-01",dueAt:"2026-01-03",plannedDurationDays:2},
   ];
   const incomplete = analyzeSchedule(items,[]);
