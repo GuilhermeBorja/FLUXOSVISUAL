@@ -224,3 +224,9 @@ test("histórico do pai agrega eventos descendentes sem expor itens não autoriz
   const events = vm.runInNewContext(source + "\nhistoryEventsFor",sandbox)({id:"p"});
   assert.equal(Array.from(events,(event)=>event.id).sort().join(","),"ec,eg,ep");
 });
+
+test("seletores operacionais usam a cor configurada para cada estado", () => {
+  assert.match(workspace, /function statusOption\(status, selected = false\)/);
+  assert.match(workspace, /style:\$\{escapeHtml\(statusConfig\(status\.id\)\.color\)\}/);
+  assert.match(workspace, /map\(\(status\) => statusOption\(status/);
+});
