@@ -87,3 +87,10 @@ A execução 39168432112 reproduziu o erro após trocar a asserção de contagem
 ### Causa-raiz complementar identificada
 
 A execução 39168432112 confirmou que o teste ainda falhava porque, após validar o formulário de criação do subitem, o próprio teste mantinha esse painel aberto e em seguida exigia zero painéis visíveis ao avaliar a matriz de viewports. O smoke test agora fecha o formulário e aguarda o painel ser removido antes de medir as resoluções. A execução correspondente é a [39168536101](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168536101); confirmar o resultado antes de marcar CI como verde.
+
+
+### Resultado confirmado do CI
+
+- A correção do smoke test fechou o drawer de criação de subitem antes da matriz de resoluções. A execução [39168536101](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168536101) terminou com `success`.
+- O smoke test passou em 1920, 1366, 1024, 768 e 390 px; as etapas anteriores de `npm ci`, `npm run check`, `npm test`, build e instalação do Chromium também passaram.
+- Resultado limita-se ao workflow de validação da branch `PRD3`. A auditoria funcional permanece aberta e a branch não foi publicada em produção.
