@@ -1006,6 +1006,7 @@ function updateRelation(id, input) {
   if (input.relationType === "contains") { if (!target.parentId || target.parentId === source.id) target.parentId = source.id; affectedParents.add(source.id); }
   createEvent(previous.targetId, "relation_updated", previous.relationType, input.relationType, `Relação atualizada: ${getItem(previous.sourceId)?.title} → ${source.title}.`);
   if (target.id !== previous.targetId) createEvent(target.id, "relation_updated", previous.targetId, relation.id, relation.description || "Relação transferida para este item.");
+  if (previous.relationType === "contains") syncContainsRelations(previous.targetId);
   if (relation.relationType === "contains") syncContainsRelations(target.id);
   if (previous.relationType === "contains") affectedParents.add(previous.sourceId);
   for (const parentId of affectedParents) syncParentSummary(parentId);
