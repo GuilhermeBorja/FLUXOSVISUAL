@@ -45,6 +45,13 @@ try {
   await childRow.waitFor();
   assert.equal(await childRow.evaluate((row) => getComputedStyle(row).getPropertyValue("--row-fill").trim()), "#123456");
 
+  await page.getByRole("button", { name: /Colunas/ }).click();
+  const weightToggle = page.locator('[data-column-toggle="weight"]');
+  await weightToggle.uncheck();
+  const weightHeader = page.locator('th[data-column-key="weight"]');
+  assert.equal(await weightHeader.evaluate((header) => header.classList.contains("column-hidden")), true);
+  assert.equal(await weightHeader.locator(".column-resize-handle").count(), 1);
+
   await page.locator('button[data-select="item_adm"]').first().click();
   await page.locator('[data-action="new-subitem"]').click();
   await page.locator("#createItemForm").waitFor();
