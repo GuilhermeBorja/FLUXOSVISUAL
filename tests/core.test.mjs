@@ -242,3 +242,12 @@ test("arquivar e restaurar um pai preserva e alterna a visibilidade dos descende
   assert.equal(run("getItem(root.id).archivedAt || \"\""),"");
   assert.equal(run("getItem(child.id).archivedAt || \"\""),"");
 });
+
+test("mover uma subárvore atualiza a contenção de todos os descendentes", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`rootA=createItem({...${defaults},title:"Raiz A"});rootB=createItem({...${defaults},title:"Raiz B"});child=createItem({...${defaults},title:"Filho",parentId:rootA.id});grandchild=createItem({...${defaults},title:"Neto",parentId:child.id});moveItemHierarchy(child.id,rootB.id);`);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===rootB.id && r.targetId===grandchild.id)'),true);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===rootA.id && r.targetId===grandchild.id)'),false);
+  assert.equal(run('state.relations.filter((r)=>r.relationType==="contains" && r.targetId===grandchild.id).length'),2);
+});
