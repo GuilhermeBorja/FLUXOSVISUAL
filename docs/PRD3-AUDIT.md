@@ -9,7 +9,7 @@
 | ID | Fonte | Requisito / critério de aceite | Prioridade | Arquivos afetados | Estado | Testes, evidência e pendência | Decisão |
 |---|---|---|---|---|---|---|---|
 | R2-01 | PRD2 | Ao criar ou mover um item para subitem, vinculá-lo a todos os pais pela relação CONTÉM | P0 | dist/app.js; tests/core.test.mjs | Parcial | Contenção sincronizada na subárvore ao mover; teste cobre neto e ancestrais. Falta validar criação, reordenação, remoção e restauração. | Não liberar; fechar pendências |
-| R2-02 | PRD2 | Redimensionar, ocultar e mostrar colunas na Sintética | P0 | dist/workspace.js; dist/styles.css; tests/prd3-ui-contract.test.mjs | Parcial | Colunas configuráveis, autoajuste e responsividade existem. Faltam testes visuais nas cinco resoluções e operação por teclado. | Não liberar; fechar pendências |
+| R2-02 | PRD2 | Redimensionar, ocultar e mostrar colunas na Sintética | P0 | dist/workspace.js; dist/styles.css; tests/prd3-ui-contract.test.mjs | Parcial | Colunas ocultáveis e redimensionamento por arraste foram verificados em Chromium; viewport móvel de 390px foi testada. Faltam as cinco resoluções completas e teste de redimensionamento por teclado. | Não liberar; fechar pendências |
 | R2-03 | PRD2 | Histórico dos filhos consultável no histórico do pai | P1 | dist/workspace.js; tests/prd3-ui-contract.test.mjs | Parcial | Histórico consulta descendentes e identifica a origem; teste de agregação e filtro de visibilidade incluído. Faltam permissões, arquivamento e duplicação. | Não liberar; fechar pendências |
 | R2-04 | PRD2 | Trabalhar com durações e relações, não exigir datas individuais na criação de cada atividade | P0 | dist/app.js; dist/workspace.js; tests/core.test.mjs; tests/prd3-ui-contract.test.mjs | Parcial | Duração explícita, previsão sem duração presumida, início herdado e duração por etapa em lote. Falta validar a pré-visualização integrada antes da confirmação. | Não liberar; fechar pendências |
 | R2-05 | PRD2 | Início e término idealizados imutáveis após criação, salvo repactuação explícita | P0 | dist/app.js; tests/core.test.mjs | Parcial | Baseline e repactuação separadas; testes existentes confirmam baseline preservada. Falta auditar todas as operações e eventos. | Não liberar; fechar pendências |
@@ -62,6 +62,6 @@
 
 ## Validação automatizada
 
-- Execução integral bem-sucedida consultada: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166897202
-- O workflow executa `npm ci`, `npm run check`, `npm test`, `npm run build` e smoke test de navegador Playwright em Chromium (navegação, Gantt, grafo, cor de linha, subitem e viewport móvel).
+- Execução integral bem-sucedida consultada: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39167615310
+- O workflow executa `npm ci`, `npm run check`, `npm test`, `npm run build` e smoke test de navegador Playwright em Chromium (navegação, Gantt, grafo, cor de linha, subitem, ocultação/redimensionamento de coluna e viewport móvel).
 - CI verde não equivale a aprovação funcional final. Não foi realizado deploy de produção nesta branch.
