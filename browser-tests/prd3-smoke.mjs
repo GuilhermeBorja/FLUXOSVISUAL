@@ -51,6 +51,17 @@ try {
   const weightHeader = page.locator('th[data-column-key="weight"]');
   assert.equal(await weightHeader.evaluate((header) => header.classList.contains("column-hidden")), true);
   assert.equal(await weightHeader.locator(".column-resize-handle").count(), 1);
+  await weightToggle.check();
+  const visibleWeightHeader = page.locator('th[data-column-key="weight"]');
+  const widthBefore = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
+  const handleBox = await visibleWeightHeader.locator(".column-resize-handle").boundingBox();
+  assert.ok(handleBox);
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 24, handleBox.y + handleBox.height / 2);
+  await page.mouse.up();
+  const widthAfter = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
+  assert.ok(widthAfter >= widthBefore + 10, `column width did not increase: ${widthBefore} -> ${widthAfter}`);
 
   await page.locator('button[data-select="item_adm"]').first().click();
   await page.locator('[data-action="new-subitem"]').click();
