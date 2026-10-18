@@ -303,10 +303,10 @@ function applyTableColumnLayout() {
   if(!handle){
     handle=document.createElement("span"); handle.className="column-resize-handle"; handle.setAttribute("role","separator"); handle.setAttribute("aria-orientation","vertical"); handle.setAttribute("aria-label","Redimensionar coluna "+key); handle.tabIndex=0; header.append(handle);
     handle.addEventListener("pointerdown",(event)=>{
-      if(event.button!==0)return; event.preventDefault(); const startX=event.clientX,startWidth=header.getBoundingClientRect().width; handle.setPointerCapture?.(event.pointerId);
+      if(event.button!==0)return; event.preventDefault(); const startX=event.clientX,startWidth=header.getBoundingClientRect().width; 
       const move=(nextEvent)=>{ const width=Math.max(60,Math.round(startWidth+nextEvent.clientX-startX)); header.style.width=width+"px"; syncTableWidth(table); };
-      const finish=()=>{ const width=Math.round(header.getBoundingClientRect().width); state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; syncTableWidth(table); saveState(); handle.removeEventListener("pointermove",move); handle.removeEventListener("pointerup",finish); handle.removeEventListener("pointercancel",finish); };
-      handle.addEventListener("pointermove",move); handle.addEventListener("pointerup",finish); handle.addEventListener("pointercancel",finish);
+      const finish=()=>{ const width=Math.round(header.getBoundingClientRect().width); state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; syncTableWidth(table); saveState(); document.removeEventListener("pointermove",move); document.removeEventListener("pointerup",finish); document.removeEventListener("pointercancel",finish); };
+      document.addEventListener("pointermove",move); document.addEventListener("pointerup",finish); document.addEventListener("pointercancel",finish);
     });
     handle.addEventListener("keydown",(event)=>{ if(!["ArrowLeft","ArrowRight"].includes(event.key))return; event.preventDefault(); const width=Math.max(60,Math.round(header.getBoundingClientRect().width)+(event.key==="ArrowRight"?12:-12)); header.style.width=width+"px"; state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; syncTableWidth(table); saveState(); });
   }
