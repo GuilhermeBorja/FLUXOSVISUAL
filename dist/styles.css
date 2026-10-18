@@ -477,3 +477,98 @@ body.panel-open { overflow: hidden; }
     text-align: left;
   }
 }
+
+
+/* PRD graph navigation tree and interactive status legend */
+.graph-layout {
+  display: grid;
+  grid-template-columns: minmax(205px, 260px) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+.graph-shell { min-width: 0; }
+.graph-tree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: min(760px, 82vh);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+.graph-tree h3 {
+  margin: 0;
+  padding: 14px 13px 11px;
+  border-bottom: 1px solid var(--line);
+  font-size: .8125rem;
+  font-weight: 600;
+}
+.graph-tree-list { overflow: auto; padding: 7px 8px 12px; }
+.graph-tree-entry { min-width: 0; }
+.graph-tree-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 3px;
+  min-width: 0;
+}
+.graph-tree .tree-toggle {
+  width: 23px;
+  min-width: 23px;
+  height: 29px;
+  padding: 5px;
+}
+.graph-tree-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.graph-tree-item:hover,
+.graph-tree-item:focus-visible,
+.graph-tree-item.active {
+  outline: none;
+  background: #eef4f6;
+  color: var(--accent-dark);
+}
+.graph-tree-item small { color: var(--muted); font-size: .6875rem; }
+.graph-tree-children {
+  margin-left: 10px;
+  padding-left: 6px;
+  border-left: 1px solid #e7edf0;
+}
+.graph-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.graph-legend button:hover,
+.graph-legend button:focus-visible,
+.graph-legend button.active {
+  outline: none;
+  border-color: #d9e3e8;
+  background: #f3f7f8;
+}
+@media (max-width: 760px) {
+  .graph-layout { grid-template-columns: minmax(0, 1fr); }
+  .graph-tree { max-height: 260px; }
+  .graph-legend { gap: 7px; }
+  .graph-legend button { padding: 4px 5px; }
+}
