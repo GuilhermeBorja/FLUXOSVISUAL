@@ -275,7 +275,21 @@ function applyTableColumnLayout() {
   const hidden = new Set(state.hiddenTableColumns || []), widths = state.tableColumnWidths || {};
   const table = document.querySelector(".synth-table"); if (!table) return;
   const headers = [...table.querySelectorAll("thead th")];
-  headers.forEach((header,index)=>{ const [key] = tableColumnOptions[index] || []; if (!key) return; header.classList.toggle("column-hidden",hidden.has(key)); if (widths[key]) header.style.width=widths[key]+"px"; header.onpointerup=()=>{ const width=Math.round(header.getBoundingClientRect().width); if (width>40) { state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; saveState(); } }; });
+  headers.forEach((header,index)=>{
+  const [key] = tableColumnOptions[index] || []; if (!key) return;
+  header.dataset.columnKey=key; header.classList.toggle("column-hidden",hidden.has(key)); if (widths[key]) header.style.width=widths[key]+"px";
+  let handle=header.querySelector(".column-resize-handle");
+  if(!handle){
+    handle=document.createElement("span"); handle.className="column-resize-handle"; handle.setAttribute("role","separator"); handle.setAttribute("aria-orientation","vertical"); handle.setAttribute("aria-label","Redimensionar coluna "+key); handle.tabIndex=0; header.append(handle);
+    handle.addEventListener("pointerdown",(event)=>{
+      if(event.button!==0)return; event.preventDefault(); const startX=event.clientX,startWidth=header.getBoundingClientRect().width; handle.setPointerCapture?.(event.pointerId);
+      const move=(nextEvent)=>{ const width=Math.max(60,Math.round(startWidth+nextEvent.clientX-startX)); header.style.width=width+"px"; };
+      const finish=()=>{ const width=Math.round(header.getBoundingClientRect().width); state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; saveState(); handle.removeEventListener("pointermove",move); handle.removeEventListener("pointerup",finish); handle.removeEventListener("pointercancel",finish); };
+      handle.addEventListener("pointermove",move); handle.addEventListener("pointerup",finish); handle.addEventListener("pointercancel",finish);
+    });
+    handle.addEventListener("keydown",(event)=>{ if(!["ArrowLeft","ArrowRight"].includes(event.key))return; event.preventDefault(); const width=Math.max(60,Math.round(header.getBoundingClientRect().width)+(event.key==="ArrowRight"?12:-12)); header.style.width=width+"px"; state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; saveState(); });
+  }
+});
   table.querySelectorAll("tbody tr").forEach((row)=>[...row.children].forEach((cell,index)=>{const [key]=tableColumnOptions[index]||[]; if(key) cell.classList.toggle("column-hidden",hidden.has(key));}));
 }
 
