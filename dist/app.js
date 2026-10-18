@@ -249,9 +249,20 @@ function loadState() {
       console.warn("Estado local invalido. Restaurando exemplo.", error);
     }
   }
-  const seeded = seedState();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-  return seeded;
+  const initial = emptyState();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+  return initial;
+}
+
+function emptyState() {
+  return {
+    version:2, gpoVersion:1, setupComplete:false, currentUserId:"", activePage:"overview",
+    workspaceName:"", organizations:[], sectors:[], users:[], items:[], relations:[], events:[],
+    attachments:[], archivedAttachments:[], archivedItems:[], archivedRelations:[], archivedUsers:[],
+    archivedOrganizations:[], archivedSectors:[], permissionRules:[], approvalDecisions:[], templates:[],
+    registryEvents:[], typeSettings:{}, graphPositions:{}, riskThresholdDays:3,
+    filters:{query:"",status:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}
+  };
 }
 
 function seedState() {
