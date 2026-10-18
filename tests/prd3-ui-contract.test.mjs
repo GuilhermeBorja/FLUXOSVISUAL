@@ -253,3 +253,61 @@ test("P0: a Sintética não apresenta peso inválido zero como peso padrão 1", 
   assert.ok(workspace.includes('<td class="weight-cell">${Number(item.weight ?? 1)}</td>'));
   assert.equal(workspace.includes("Number(item.weight || 1)"), false);
 });
+
+
+test("P0 R2-19: propagação percorre subárvore, sobe aos pais e visita ramos restantes sem repetir nós", () => {
+  const start = graph.indexOf("function propagate(id) {");
+  const end = graph.indexOf("function fit(initial = false) {", start);
+  assert.ok(start >= 0 && end > start);
+  const source = graph.slice(start, end);
+  const items = [
+    {id:"root",parentId:"",sortOrder:0,status:"ready"},
+    {id:"a",parentId:"root",sortOrder:100,status:"in_progress"},
+    {id:"grandchild",parentId:"a",sortOrder:100,status:"ready"},
+    {id:"b",parentId:"root",sortOrder:200,status:"blocked"},
+    {id:"other",parentId:"",sortOrder:0,status:"ready"},
+  ];
+  const relations = [
+    {id:"root-a",sourceId:"root",targetId:"a",relationType:"contains"},
+    {id:"a-grandchild",sourceId:"a",targetId:"grandchild",relationType:"contains"},
+    {id:"root-b",sourceId:"root",targetId:"b",relationType:"contains"},
+  ];
+  const classes = new Map(items.map((item)=>[item.id,new Set()]));
+  const makeElement = (id) => ({
+    classList:{
+      add:(...names)=>names.forEach((name)=>classes.get(id).add(name)),
+      remove:(...names)=>names.forEach((name)=>classes.get(id).delete(name)),
+    },
+  });
+  const nodeElements = new Map(items.map((item)=>[item.id,makeElement(item.id)]));
+  const edgeElements = new Map(relations.map((relation)=>[relation.id,{
+    classList:{add:()=>{},remove:()=>{}},
+  }]));
+  const timers = [];
+  const model = {
+    nodes:items.map((item)=>({id:item.id,item})),
+    nodeById:new Map(items.map((item)=>[item.id,{id:item.id,item}])),
+    links:relations.map((relation)=>({
+      source:{id:relation.sourceId},
+      target:{id:relation.targetId},
+      relation,
+    })),
+  };
+  const sandbox = {
+    model, options:{items}, nodeElements, edgeElements,
+    propagationTimers:[],
+    setTimeout:(callback,delay)=>{timers.push({callback,delay});return timers.length;},
+    clearTimeout:()=>{},
+  };
+  const propagate = vm.runInNewContext(source+"\\npropagate",sandbox);
+  assert.equal(propagate("a"),true);
+  const finishDelay = items.length * 430 + 1800;
+  const order = [];
+  for (const timer of timers.filter((entry)=>entry.delay<finishDelay).sort((a,b)=>a.delay-b.delay)) {
+    timer.callback();
+    order.push([...classes].find(([,value])=>value.has("propagation-current"))?.[0]);
+  }
+  assert.deepEqual(order,["a","grandchild","root","b","other"]);
+  assert.equal(new Set(order).size,items.length);
+  assert.equal(classes.get("b").has("propagation-stop"),true);
+});
