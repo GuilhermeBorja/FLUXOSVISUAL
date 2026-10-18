@@ -17,7 +17,7 @@
 
 Foi encontrada uma regressão P0 no cálculo do progresso ponderado: peso zero legado era interpretado como peso 1, gerando um percentual fictício. A correção foi implementada e validada pelos testes. Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
 
-## 1. Checklist P0
+## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
 | ID | Requisito | Estado | Evidência e próxima verificação |
 |---|---|---|---|
@@ -63,7 +63,6 @@ Foi encontrada uma regressão P0 no cálculo do progresso ponderado: peso zero l
 | R2-26 | P1 | Empresa, setor e estado herdados do responsável; remover de “Descrição e contexto” | não verificado | Empresa, setor e UF são derivados do responsável na entrada. Falta testar troca de responsável em itens existentes e fallback. |
 | R2-27 | P1 | Item cancelado com percentual de controle 100% | preservado | Cancelamento define controle em 100% sem marcar conclusão operacional; teste dedicado incluído. |
 | R2-29 | P1 | Redimensionar painéis de cadastro e itens | não verificado | Redimensionamento de painéis existe. Faltam testes de mouse/teclado, limites, persistência e telas pequenas. |
-| R2-30 | P2 | Simplificar “Mostrar subitens como na visão sintética” para “Mostrar subitens” | Conforme | Rótulo Mostrar subitens está presente na Sintética. |
 | R2-31 | P1 | Nome do programa “Fluxo Visual”, remover “Gestão Operacional” e substituir texto genérico pelo nome da organização | não verificado | Título e README padronizados para Fluxo Visual. Falta auditar metadados, login e todos os textos. |
 | R2-32 | P1 | Grafo exibe término idealizado inicial abaixo do nome e timer do responsável | preservado | Nós exibem início/término idealizados, baseline e responsável; timer mede tempo com o responsável atual. Falta validação visual em nós densos. |
 | R2-33 | P1 | Clicar no responsável na árvore lateral destaca os itens desse responsável | não verificado | Árvore lateral oferece destaque por responsável. Falta teste de interação e reversão sem perda de contexto. |
