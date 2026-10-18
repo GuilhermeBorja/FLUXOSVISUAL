@@ -441,3 +441,11 @@ test("P0: arquivar e restaurar subárvore preserva relações CONTÉM e temporai
   assert.equal(run('state.relations.map((r)=>r.id).sort().join(",")===relationIds'),true);
   assert.equal(run('state.relations.every((r)=>!!getItem(r.sourceId) && !!getItem(r.targetId))'),true);
 });
+
+test("P0: negação GPO em repactuação reverte edição parcial e eventos", () => {
+  const run = context(); run('state.currentUserId="u_luis";item=createItem({...' + defaults + ',title:"Original",plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3});createPermissionRule({subjectType:"user",subjectId:"u_luis",operation:"change_duration",scopeType:"item",scopeId:item.id,effect:"deny"});before=JSON.stringify({item:getItem(item.id),events:state.events});');
+  assert.throws(() => run('updateItem(item.id,{...item,title:"Alterado",replannedDueAt:"2026-11-01"},nowIso())'),/GPO/);
+  assert.equal(run('getItem(item.id).title'),"Original");
+  assert.equal(run('getItem(item.id).replannedDueAt'),"");
+  assert.equal(run('JSON.stringify({item:getItem(item.id),events:state.events})===before'),true);
+});
