@@ -186,7 +186,7 @@ function renderTable(items) {
     ${!rows.length ? emptyMarkup() : `<div class="table-scroll"><table class="synth-table"><thead><tr><th>ID</th><th>Nome</th><th>Responsável</th><th>Criação</th><th>Término ideal</th><th>Término real</th><th>Tempo total</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
       ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}">
         <td class="id-cell">${shortId(item)}</td><td class="title-cell"><div class="tree-cell" style="--depth:${Math.min(depth, 8)}">${children.length ? `<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${!ui.showSubitems || ui.collapsed?.has(item.id) ? "Expandir" : "Recolher"} subitens" aria-expanded="${ui.showSubitems && !ui.collapsed?.has(item.id)}">${icon(ui.showSubitems && !ui.collapsed?.has(item.id) ? "chevron-down" : "chevron-right")}</button>` : '<span class="tree-spacer"></span>'}<button class="item-title" data-select="${escapeHtml(item.id)}">${escapeHtml(item.title)}<span>${escapeHtml(labelOf(itemTypes, item.type))}${children.length ? ` · ${children.length} subitens` : ""}</span></button></div></td>
-        <td>${escapeHtml(userName(item.ownerId))}</td><td class="date-cell">${dateCell(item.createdAt, true)}</td><td class="date-cell ${isOverdue(item) ? "overdue" : ""}">${dateCell(item.dueAt)}</td><td class="date-cell">${dateCell(item.completedAt, true)}</td><td class="duration-cell">${elapsedLabel(item)}</td><td>${statusBadge(item)}</td><td><div class="row-actions"><button class="icon-button" data-select="${escapeHtml(item.id)}" title="Abrir item" aria-label="Abrir ${escapeHtml(item.title)}">${icon("more-horizontal")}</button>${canRemoveItem(currentUser()) ? deleteButton("item",item.id,item.title) : ""}</div></td>
+        <td>${escapeHtml(userName(item.ownerId))}</td><td class="date-cell">${dateCell(item.createdAt, true)}</td><td class="date-cell ${isOverdue(item) ? "overdue" : ""}">${dateCell(item.dueAt)}</td><td class="date-cell">${dateCell(item.completedAt, true)}</td><td class="duration-cell">${elapsedLabel(item)}</td><td>${statusBadge(item)}</td><td><div class="row-actions"><button class="icon-button" data-select="${escapeHtml(item.id)}" title="Abrir item" aria-label="Abrir ${escapeHtml(item.title)}">${icon("more-horizontal")}</button>${canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""}</div></td>
       </tr>`).join("")}
     </tbody></table></div>`}
   </div>`;
@@ -250,7 +250,7 @@ function renderPanel(focus = true) {
   let content = "";
   if (ui.panel === "create") content = renderCreatePanel();
   else if (ui.panel === "admin" && canManageUsers(currentUser())) content = renderAdmin();
-  else if (ui.panel === "delete" && canRemoveItem(currentUser())) content = renderDeletionPanel();
+  else if (ui.panel === "delete" && (ui.deletion?.kind === "item" ? canRemoveItem(currentUser(),getItem(ui.deletion.id)) : canRemoveItem(currentUser()))) content = renderDeletionPanel();
   else if (ui.panel === "item" && canViewItem(currentUser(), getItem(ui.selectedItemId))) content = renderItemPanel(getItem(ui.selectedItemId));
   if (!content) { closePanel(); return; }
   root.innerHTML = `<div class="panel-shade" data-action="close-panel"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1">${content}</aside>`;
@@ -334,7 +334,8 @@ function renderRelations(item, relations, editable) {
   return `<div class="relation-list">${relations.length ? relations.map((rel) => {
     const outgoing = rel.sourceId === item.id;
     const other = getItem(outgoing ? rel.targetId : rel.sourceId);
-    const remove = canRemoveItem(currentUser()) && canEditItem(currentUser(),other);
+    const deleteRule = gpoDecision(currentUser(),"delete_relation",other);
+    const remove = (deleteRule === true || (deleteRule === null && canRemoveItem(currentUser()))) && canEditItem(currentUser(),other);
     return `<div class="relation-entry"><span class="relation-tag">${escapeHtml(labelOf(relationTypes,rel.relationType))}${rel.lagDays ? ` · ${rel.lagDays > 0 ? "+" : ""}${rel.lagDays}d` : ""}</span><span class="relation-direction">${outgoing ? "Este item →" : "→ Este item"}</span><button class="relation-item" data-select="${escapeHtml(other.id)}">${escapeHtml(other.title)}</button>${remove ? `<button class="icon-button" data-remove-relation="${escapeHtml(rel.id)}" title="Remover relação" aria-label="Remover relação">${icon("trash-2")}</button>` : ""}</div>`;
   }).join("") : '<p class="secondary">Nenhuma relação visível.</p>'}</div>
     ${editable && candidates.length ? `<section class="panel-section"><h3>Nova relação</h3><form id="relationForm" class="form-stack"><label>Direção<select name="direction">${option("out","Este item se relaciona com…")}${option("in","Outro item se relaciona com este…")}</select></label><label>Outro item<select name="otherId" required>${candidates.map((candidate) => option(candidate.id,candidate.title)).join("")}</select></label><div class="form-row"><label>Relação<select name="relationType">${relationTypes.map((type) => option(type.id,type.label,type.id === "TI")).join("")}</select></label><label>Defasagem (dias)<input name="lagDays" type="number" step="0.5" value="0"/></label></div><button class="button primary" type="submit">${icon("link-2")}Conectar itens</button></form><details class="form-details relation-help"><summary>O que significa cada dependência?</summary><p><strong>TI:</strong> o término do primeiro libera o início do segundo.</p><p><strong>II:</strong> o início do primeiro libera o início do segundo.</p><p><strong>TT:</strong> o término do primeiro libera o término do segundo.</p><p><strong>IF:</strong> o início do primeiro libera o término do segundo.</p><p>A defasagem acrescenta ou antecipa dias entre os eventos.</p></details></section>` : ""}`;
@@ -362,12 +363,9 @@ function renderApprovalPanel(item) {
   const canDecide = canDecideApproval(user,item);
   const canSubmit = canSubmitApproval(user,item);
   const decisions = (state.approvalDecisions || []).filter((entry) => entry.itemId === item.id).sort((left,right) => new Date(left.createdAt) - new Date(right.createdAt));
-  const statusText = labelOf(statusCatalog,item.status);
   let html = '<section class="panel-section"><h3>Fluxo de aprovação</h3>';
   html += '<p>Rodada ' + (item.approvalRound || 1) + ' · Responsável pela decisão: <strong>' + escapeHtml(userName(item.ownerId)) + '</strong></p>';
-  if (!gate.released && !["approved","rejected","correction"].includes(item.status)) {
-    html += '<div class="change-box"><strong>Aguardando predecessoras</strong><ul>' + gate.blockers.map((blocker) => '<li>' + escapeHtml(blocker.title) + ' · ' + escapeHtml(labelOf(statusCatalog,blocker.status)) + '</li>').join("") + '</ul></div>';
-  }
+  if (!gate.released && !["approved","rejected","correction"].includes(item.status)) html += '<div class="change-box"><strong>Aguardando predecessoras</strong><ul>' + gate.blockers.map((blocker) => '<li>' + escapeHtml(blocker.title) + ' · ' + escapeHtml(labelOf(statusCatalog,blocker.status)) + '</li>').join("") + '</ul></div>';
   if (item.status === "under_review") {
     if (!gate.released) html += '<p class="muted">A decisão será liberada quando todas as predecessoras forem concluídas.</p>';
     else if (canDecide) html += '<form id="approvalDecisionForm" class="form-stack"><label>Decisão<select name="outcome" required><option value="approved">Aprovar</option><option value="rejected">Reprovar</option></select></label><label>Motivo ou observação<textarea name="reason" rows="3" placeholder="Obrigatório para reprovar"></textarea></label><button class="button primary" type="submit">' + icon("check") + 'Registrar decisão</button></form>';
@@ -384,7 +382,7 @@ function renderApprovalPanel(item) {
     if (!gate.released) html += '<p class="muted">A etapa ainda não está liberada para aprovação.</p>';
     else if (canSubmit) html += '<form id="approvalSubmitForm" class="form-stack"><label>Contexto para o aprovador<textarea name="note" rows="2" placeholder="Informação que acompanha a solicitação"></textarea></label><button class="button primary" type="submit">' + icon("check") + 'Enviar para aprovação</button></form>';
     else html += '<p class="muted">Sua alçada não permite enviar esta etapa.</p>';
-  } else html += '<p>Status atual: <strong>' + escapeHtml(statusText) + '</strong></p>';
+  }
   html += '</section><section class="panel-section"><h3>Decisões e rodadas</h3>';
   if (!decisions.length) html += '<p class="muted">Nenhuma decisão registrada ainda.</p>';
   else html += '<ol class="event-timeline">' + decisions.map((entry) => {
@@ -447,7 +445,13 @@ function renderOrganizationRegistry() {
 
 function openDeletion(kind,id) {
   try {
-    requireDeletionPermission();
+    if (kind === "item") requireDeletionPermission(getItem(id));
+    else if (kind === "relation") {
+      const relation = state.relations.find((entry) => entry.id === id);
+      const target = relation && getItem(relation.targetId);
+      const rule = target ? gpoDecision(currentUser(),"delete_relation",target) : null;
+      if (rule === false || (rule === null && !canRemoveItem(currentUser()))) throw new Error("Sua alçada não permite remover esta relação.");
+    } else requireDeletionPermission();
     returnFocus = document.activeElement;
     ui.deletionReturn = {panel:ui.panel,selectedItemId:ui.selectedItemId,panelTab:ui.panelTab};
     ui.deletion = {kind,id,cascade:true}; ui.panel = "delete"; renderPanel();
