@@ -64,10 +64,12 @@ function plannedLabel(item) {
   return `${Math.max(0, days)}d previstos`;
 }
 
+function statusDisplayLabel(item) { if (item?.type === "approval" && item.status === "under_review") return "Aguardando decisão"; if (item?.type === "approval" && item.status === "correction") return "Correção solicitada"; return labelOf(statusCatalog,item?.status); }
+
 function signalLabel(item) {
   if (item.status === "blocked") return "Bloqueado";
   if (isOverdue(item)) return "Atrasado";
-  return labelOf(statusCatalog, item.status);
+  return statusDisplayLabel(item);
 }
 
 const statusDefaults = {
@@ -82,7 +84,7 @@ function statusConfig(id) { return {...(statusDefaults[id] || {icon:"circle-help
 function statusBadge(item) {
   const delta = dueDeltaDays(item), config=statusConfig(item.status);
   const indicator = isOverdue(item) ? `<span class="overdue-mark" title="Prazo vencido há ${Math.abs(delta)} dias">· ${Math.abs(delta)}d atraso</span>` : isAtRisk(item) ? `<span class="overdue-mark" title="Prazo a ${delta} dias; limite de risco ${Number(state.riskThresholdDays) || 3} dias">· risco ${delta}d</span>` : "";
-  return `<span class="status-badge ${signalOf(item)}" style="--status-color:${escapeHtml(config.color)}"><span class="status-symbol">${icon(config.icon)}</span>${escapeHtml(labelOf(statusCatalog, item.status))}${indicator}</span>`;
+  return `<span class="status-badge ${signalOf(item)}" style="--status-color:${escapeHtml(config.color)}"><span class="status-symbol">${icon(config.icon)}</span>${escapeHtml(statusDisplayLabel(item))}${indicator}</span>`;
 }
 
 function dateCell(value, withTime = false) {
@@ -392,7 +394,7 @@ function renderGantt(items) {
     const slackWidth = row.slack === null ? 0 : Math.max(0,Math.min(100 - slackLeft,row.slack / maxDay * 100));
     const childToggle = row.children?.length ? '<button class="tree-toggle" data-expand="' + escapeHtml(row.item.id) + '" aria-label="' + (ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'Recolher' : 'Expandir') + ' subitens">' + icon(ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'chevron-down' : 'chevron-right') + '</button>' : '<span class="tree-spacer"></span>';
     const dependencies = incoming.length ? incoming.map(({relation,item}) => '<span class="dependency-chip" title="' + escapeHtml(labelOf(relationTypes,relation.relationType) + ' · ' + item.title) + '">← ' + escapeHtml(relation.relationType + ' · ' + item.title) + '</span>').join('') : '<span class="dependency-none">Sem predecessoras</span>';
-    return '<div class="gantt-row ' + (row.structural ? 'structural' : '') + '" style="--depth:' + Math.min(row.depth || 0,8) + '"><div class="gantt-item-wrap">' + childToggle + '<button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small>' + escapeHtml(userName(row.item.ownerId)) + ' · ' + escapeHtml(labelOf(statusCatalog,row.item.status)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button></div><div class="gantt-track"><div class="gantt-bar ' + barTone + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga calculada " + row.slack.toFixed(1) + "d")) + '"></div>' + (slackWidth > 0 ? '<div class="gantt-slack" style="left:' + slackLeft + '%;width:' + slackWidth + '%" title="Folga calculada: ' + row.slack.toFixed(1) + ' dias"></div>' : '') + '<span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + dependencies + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
+    return '<div class="gantt-row ' + (row.structural ? 'structural' : '') + '" style="--depth:' + Math.min(row.depth || 0,8) + '"><div class="gantt-item-wrap">' + childToggle + '<button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small>' + escapeHtml(userName(row.item.ownerId)) + ' · ' + escapeHtml(statusDisplayLabel(row.item)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button></div><div class="gantt-track"><div class="gantt-bar ' + barTone + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga calculada " + row.slack.toFixed(1) + "d")) + '"></div>' + (slackWidth > 0 ? '<div class="gantt-slack" style="left:' + slackLeft + '%;width:' + slackWidth + '%" title="Folga calculada: ' + row.slack.toFixed(1) + ' dias"></div>' : '') + '<span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + dependencies + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
   }).join("");
   return html + '</div></div>';
 }
@@ -654,7 +656,7 @@ function renderApprovalPanel(item) {
   const revision = item.supersededBy ? getItem(item.supersededBy) : state.items.find((entry) => entry.revisionOf === item.id);
   let html = '<section class="panel-section"><h3>Fluxo de aprovação</h3>';
   html += '<p>Rodada ' + (item.approvalRound || 1) + ' · Responsável pela decisão: <strong>' + escapeHtml(userName(item.approvalReviewerId || item.ownerId)) + '</strong></p>';
-  if (!gate.released && !["done","correction","cancelled"].includes(item.status)) html += '<div class="change-box"><strong>Aguardando predecessoras</strong><ul>' + gate.blockers.map((blocker) => '<li>' + escapeHtml(blocker.title) + ' · ' + escapeHtml(labelOf(statusCatalog,blocker.status)) + '</li>').join("") + '</ul></div>';
+  if (!gate.released && !["done","correction","cancelled"].includes(item.status)) html += '<div class="change-box"><strong>Aguardando predecessoras</strong><ul>' + gate.blockers.map((blocker) => '<li>' + escapeHtml(blocker.title) + ' · ' + escapeHtml(statusDisplayLabel(blocker)) + '</li>').join("") + '</ul></div>';
   if (item.status === "under_review") {
     if (!gate.released) html += '<p class="muted">A decisão será liberada quando todas as predecessoras forem concluídas.</p>';
     else if (canDecide) {
