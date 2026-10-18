@@ -710,8 +710,10 @@ function renderGpo() {
   state.items.filter((entry) => entry.type === "project").forEach((entry) => scopes.push({type:"project",id:entry.id,label:"Projeto · " + itemContextLabel(entry)}));
   state.items.forEach((entry) => scopes.push({type:"item",id:entry.id,label:"Item · " + itemContextLabel(entry)}));
   let html = '<section class="panel-section"><h3>Gestão de Permissões Organizacionais</h3><p class="muted">O GPO é a única origem de autorização neste protótipo. Escopo mais específico prevalece; em empate, negar prevalece. Sem regra aplicável, o acesso é negado.</p>';
-  html += '<form id="gpoRuleForm" class="form-stack"><label>Usuário<select name="subject" required>';
+  html += '<section class="panel-section"><h3>Perfis reutilizáveis</h3><form id="permissionProfileForm" class="form-row"><label>Nome do perfil<input name="name" required maxlength="80" placeholder="Ex.: Coordenador"/></label><button class="button primary" type="submit">Criar perfil</button></form><div class="admin-list">' + (state.permissionProfiles || []).map((profile)=>'<div class="admin-entry"><span><strong>' + escapeHtml(profile.name) + '</strong><small>' + (state.permissionRules || []).filter((rule)=>rule.subjectType==="profile" && rule.subjectId===profile.id).length + ' regras vinculadas</small></span></div>').join("") + '</div></section>';
+  html += '<form id="gpoRuleForm" class="form-stack"><label>Usuário ou perfil<select name="subject" required>';
   html += state.users.filter((entry) => !entry.disabled).map((entry) => '<option value="user:' + escapeHtml(entry.id) + '">' + escapeHtml(entry.name) + ' · ' + escapeHtml(orgName(entry.organizationId)) + '</option>').join("");
+  html += (state.permissionProfiles || []).map((profile) => '<option value="profile:' + escapeHtml(profile.id) + '">Perfil · ' + escapeHtml(profile.name) + '</option>').join("");
   html += '</select></label><label>Operação<select name="operation" required>';
   html += Object.entries(permissionOperationLabels).map(([id,label]) => option(id,label)).join("");
   html += '</select></label><label>Escopo<select name="scope" required>';
@@ -722,7 +724,7 @@ function renderGpo() {
   if (!rules.length) html += '<p class="muted">Nenhuma regra GPO configurada. Os acessos ficam bloqueados.</p>';
   else html += '<div class="admin-list">' + rules.map((rule) => {
     const scope = scopes.find((entry) => entry.type === rule.scopeType && entry.id === (rule.scopeId || ""))?.label || (rule.scopeType === "creator" ? "Itens criados pelo usuário" : "Escopo removido");
-    return '<div class="admin-entry"><span><strong>' + escapeHtml(userName(rule.subjectId)) + ' · ' + escapeHtml(permissionOperationLabels[rule.operation] || rule.operation) + '</strong><small>' + escapeHtml(scope) + (rule.createdBy === "migration" ? ' · migrada' : ' · ' + formatDateTime(rule.createdAt)) + '</small></span><span class="effect-tag">' + (rule.effect === "allow" ? "Permitido" : "Negado") + '</span><button type="button" class="icon-button delete-icon" data-remove-gpo-rule="' + escapeHtml(rule.id) + '" aria-label="Remover regra GPO">' + icon("trash-2") + '</button></div>';
+    return '<div class="admin-entry"><span><strong>' + escapeHtml(rule.subjectType === "profile" ? ((state.permissionProfiles || []).find((profile)=>profile.id===rule.subjectId)?.name || "Perfil removido") : userName(rule.subjectId)) + ' · ' + escapeHtml(permissionOperationLabels[rule.operation] || rule.operation) + '</strong><small>' + escapeHtml(scope) + (rule.createdBy === "migration" ? ' · migrada' : ' · ' + formatDateTime(rule.createdAt)) + '</small></span><span class="effect-tag">' + (rule.effect === "allow" ? "Permitido" : "Negado") + '</span><button type="button" class="icon-button delete-icon" data-remove-gpo-rule="' + escapeHtml(rule.id) + '" aria-label="Remover regra GPO">' + icon("trash-2") + '</button></div>';
   }).join("") + '</div>';
   return html + '</section>';
 }
@@ -1189,6 +1191,7 @@ function bindPanel() {
     const result = applyFlowTemplate(ui.templateId,{title:String(form.get("title") || ""),organizationId:String(form.get("organizationId") || ""),sectorId:String(form.get("sectorId") || ""),state:String(form.get("state") || "").toUpperCase(),startDate:String(form.get("startDate") || today()),ownerSelections,statusSelections});
     saveState(); ui.selectedItemId = result.items[0].id; ui.panel = "item"; ui.panelTab = "details"; ui.templateId = ""; notify("Fluxo criado com " + result.items.length + " itens."); render();
   });
+  submitHandler("permissionProfileForm",(form)=>{ const name=String(form.get("name")||"").trim(); if(!name) throw new Error("Informe o nome do perfil."); if((state.permissionProfiles||[]).some((profile)=>profile.name.toLowerCase()===name.toLowerCase())) throw new Error("Já existe um perfil com este nome."); state.permissionProfiles ||= []; state.permissionProfiles.push({id:uid("profile"),name,createdBy:currentUser().id,createdAt:nowIso()}); saveState(); notify("Perfil GPO criado. Configure suas regras."); renderPanel(false); });
   submitHandler("gpoRuleForm", (form) => {
     if (!canManageGpo(currentUser())) throw new Error("Sem permissão para configurar o GPO.");
     const [subjectType,subjectId] = String(form.get("subject") || "").split(":");
