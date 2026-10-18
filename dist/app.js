@@ -770,6 +770,20 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   return changed;
 }
 
+function reopenApproval(id, note = "") {
+  const item = getItem(id);
+  const user = currentUser();
+  if (!item || item.type !== "approval" || item.status !== "approved") throw new Error("Somente uma aprovação concluída pode ser reaberta.");
+  if (!canDecideApproval(user, item)) throw new Error("Sua alçada não permite reabrir esta aprovação.");
+  if (!note.trim()) throw new Error("Descreva o motivo da reabertura.");
+  item.approvalRound = (item.approvalRound || 1) + 1;
+  state.approvalDecisions ||= [];
+  const reopened = { id: uid("decision"), itemId: item.id, requestId: item.approvalRequestId || item.id, round: item.approvalRound, kind: "reopened", outcome: "backlog", reviewerId: item.ownerId || "", correctionOwnerId: item.ownerId || "", reason: note.trim(), previousDecisionId: item.lastDecisionId || "", createdBy: user.id, createdAt: nowIso() };
+  state.approvalDecisions.push(reopened);
+  setApprovalStatus(item, "backlog", "approval_reopened", note.trim());
+  return reopened;
+}
+
 function removeRelation(id) {
   const relation = state.relations.find((entry) => entry.id === id);
   const target = relation && getItem(relation.targetId);
