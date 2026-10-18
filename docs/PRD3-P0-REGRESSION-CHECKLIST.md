@@ -3,7 +3,7 @@
 **Branch:** `PRD3`  
 **Data:** 18/10/2026  
 **Escopo:** 44 itens que estavam marcados como parciais na matriz de auditoria, priorizando os P0.  
-**CI de referência:** [run #131 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170527238): sintaxe, 72 testes automatizados e smoke browser aprovados.  
+**CI de referência:** [run #136 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170776873): sintaxe, 74 testes automatizados e smoke browser aprovados.  
 **Limite:** os estados descrevem a evidência atual, não certificam o produto para produção. “Preservado” significa que o comportamento coberto pelos testes não regrediu; as pendências listadas continuam abertas.
 
 ## Resumo dos 44 itens
@@ -11,21 +11,21 @@
 | Estado | Quantidade |
 |---|---:|
 | preservado | 12 |
-| corrigido | 4 |
+| corrigido | 5 |
 | regressão encontrada | 0 |
-| não verificado | 28 |
+| não verificado | 27 |
 
-Foram reproduzidos três defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; e predecessora cancelada deslocando a previsão de atividade ativa. Os três foram corrigidos e validados no CI #131 (72/72 testes e smoke browser). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
+Foram reproduzidos quatro defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; e relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos. Os quatro foram corrigidos e validados nos CI #131, #135 e #136 (74/74 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
 
 ## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
 | ID | Requisito | Estado | Evidência e próxima verificação |
 |---|---|---|---|
-| R2-01 | Ao criar ou mover um item para subitem, vinculá-lo a todos os pais pela relação CONTÉM | não verificado | Os testes atuais cobrem contenção ancestral em criação/movimentação e rollback temporal. Executar matriz integrada de criar, mover, reordenar, remover, arquivar e restaurar; confirmar que relações CONTÉM são sincronizadas, relações temporais não mudam e nenhum vínculo fica órfão. |
+| R2-01 | Ao criar ou mover um item para subitem, vinculá-lo a todos os pais pela relação CONTÉM | corrigido | Teste P0 reproduziu relações CONTÉM ancestrais obsoletas após excluir um pai mantendo os filhos. Corrigido em 2c05b43a; CI #135 passou. CI #136 também validou relações CONTÉM e temporais após arquivar/restaurar. A matriz completa de mutações ainda está pendente. |
 | R2-02 | Redimensionar, ocultar e mostrar colunas na Sintética | preservado | CI #125 validou ocultar/mostrar colunas, redimensionamento por mouse e teclado e larguras 1920/1366/1024/768/390 px sem overflow horizontal. Ainda falta ampliar a inspeção visual de estados e combinações de colunas. |
 | R2-04 | Trabalhar com durações e relações, não exigir datas individuais na criação de cada atividade | não verificado | A duração explícita e o início herdado são cobertos por testes de contrato. Falta executar o fluxo real de pré-visualização de criação em lote/subitem, conferir término calculado antes da confirmação e garantir cancelamento sem mutação parcial. |
-| R2-05 | Início e término idealizados imutáveis após criação, salvo repactuação explícita | corrigido | Teste P0 reproduziu `baselineDueAt` vazio quando o término era derivado da duração. Corrigido no commit 13568c6a; CI #131 passou. Falta percorrer todas as operações que alteram datas e conferir eventos. |
-| R2-06 | Previsão derivada das durações e relações | corrigido | Teste P0 reproduziu predecessora cancelada deslocando atividade ativa para 2027-01-09. Corrigido no commit 13568c6a para não usar sua duração no cálculo da previsão. CI #131 passou; falta validação integrada com dados reais. |
+| R2-05 | Início e término idealizados imutáveis após criação, salvo repactuação explícita | corrigido | Teste P0 reproduziu `baselineDueAt` vazio quando o término era derivado da duração. Corrigido no commit 13568c6a; CI #136 passou com 74/74 testes e smoke browser. Falta percorrer todas as operações que alteram datas e conferir eventos. |
+| R2-06 | Previsão derivada das durações e relações | corrigido | Teste P0 reproduziu predecessora cancelada deslocando atividade ativa para 2027-01-09. Corrigido no commit 13568c6a para não usar sua duração no cálculo da previsão. CI #136 passou com 74/74 testes e smoke browser; falta validação integrada com dados reais. |
 | R2-09 | Perfis GPO padrão atribuíveis a usuários e exceções individuais | preservado | Testes cobrem padrão fechado, negação sem mutação, regras por escopo, perfil herdado e exceção individual. Falta matriz completa de precedência por operação/escopo e alteração de perfil após atribuição. |
 | R2-11 | Editar item pai: nome, responsável e término idealizado; previsto herdado | não verificado | Falta validar edição de item pai (nome, responsável, término repactuado), herança do previsto, preservação da baseline, recálculo de descendentes e trilha de auditoria em uma única jornada. |
 | R2-13 | “Pronto” substituído por “Liberado para execução”, atribuído automaticamente quando predecessor liberar | preservado | Teste automatizado verifica múltiplas predecessoras e bloqueios antes da liberação automática. Falta cobrir reabertura, aprovação e correção, inclusive regressão de estado após mudança de predecessor. |
@@ -34,15 +34,15 @@ Foram reproduzidos três defeitos P0: peso zero legado interpretado como peso 1;
 | R2-22 | Botão “Criar conforme template” ao lado de “Novo item” | preservado | Requisito já marcado Conforme na matriz. Teste de contrato verifica ações separadas Modelos/Criar conforme template e botão acessível no cabeçalho. |
 | R2-24 | Percentual de avanço e estado se retroalimentam | preservado | Testes cobrem conclusão/reabertura, percentual e status herdado de grupos. Falta percorrer a matriz completa de transições para todos os estados e validar os reflexos nas três visões. |
 | R2-25 | Exibir início idealizado, término idealizado e duração idealizada ao abrir item | não verificado | Código e teste de contrato indicam datas idealizadas no grafo; falta inspeção visual do painel de item para todos os tipos, incluindo datas vazias e repactuação. |
-| R2-28 | Arquivar itens pais e filhos | preservado | Testes cobrem arquivamento/restauração de pai e filhos. Falta validar relações externas, permissões em todos os descendentes e consistência após restaurar em combinação com filtros. |
+| R2-28 | Arquivar itens pais e filhos | preservado | Testes cobrem arquivamento/restauração de pai e filhos; teste P0 adicional confirma que relações CONTÉM e temporais permanecem consistentes após arquivar/restaurar (CI #136). Falta validar relações externas e permissões em todos os descendentes. |
 | M-01 | Preservar modelo amorfo e separar contenção de dependência temporal | não verificado | A separação entre CONTÉM e relações temporais tem testes básicos. Falta a matriz completa de operações e comprovação de que reordenação/hierarquia não altera dependências temporais. |
 | M-02 | Consistência entre Sintética, Analítica e Gantt após mutações | não verificado | Teste de navegador #123 confirmou que um item criado aparece na Sintética, Analítica e Gantt. Falta repetir após edição, reordenação, mudança de relação, conclusão, arquivamento e restauração. |
-| M-04 | Progresso ponderado sem dupla contagem e sem percentuais inventados | corrigido | Regressão reproduzida: peso legado explícito 0 era convertido em 1 e produzia avanço fictício (80%). Corrigido para usar `??` no cálculo e na exibição. CI #131 passou com 72 testes e smoke browser; falta ampliar cenários de hierarquia profunda/múltiplos pesos inválidos. |
+| M-04 | Progresso ponderado sem dupla contagem e sem percentuais inventados | corrigido | Regressão reproduzida: peso legado explícito 0 era convertido em 1 e produzia avanço fictício (80%). Corrigido para usar `??` no cálculo e na exibição. CI #136 passou com 74 testes e smoke browser; falta ampliar cenários de hierarquia profunda/múltiplos pesos inválidos. |
 | M-06 | Caminho crítico/folgas corretos para rede temporal, paralelismo e defasagens | não verificado | Testes cobrem caminho crítico em uma rede, paralelismo, fórmulas de dependência, defasagem e ciclo. Ainda falta validar numericamente as folgas e uma rede integrada maior. |
 | M-09 | Aprovações/correções preservam decisão, motivo, autor, data e rodada | não verificado | Há teste para reprovação e criação de revisão ligada. Falta validar todas as rodadas, reabertura, autor/revisor, motivo, data/hora e encadeamento da decisão anterior. |
 | M-10 | Templates preservam estrutura, relações, pesos, durações e rollback | preservado | CI #122 passou nos testes de template: subitens, pesos, durações, relação temporal interna e rollback integral após referência inválida. Falta ampliar para múltiplos tipos de relação e matriz GPO. |
 | M-12 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | preservado | Testes cobrem GPO local por usuário/escopo, negação, padrão fechado e precedência perfil/exceção individual. Essa lógica é client-side; não representa autorização server-side. Falta completar a matriz de operações. |
-| M-13 | Critérios de aceite, testes e evidência rastreáveis | não verificado | A matriz foi atualizada e o CI #125 passou com 70/70 testes e smoke browser. Ainda há requisitos sem evidência integrada; não liberar produção até fechar todos os P0. |
+| M-13 | Critérios de aceite, testes e evidência rastreáveis | não verificado | A matriz foi atualizada e o CI #136 passou com 74/74 testes e smoke browser. Ainda há 27 requisitos não verificados; não liberar produção até fechar todos os P0. |
 
 ## 2. Checklist dos demais itens parciais
 
@@ -79,8 +79,9 @@ Foram reproduzidos três defeitos P0: peso zero legado interpretado como peso 1;
 - **Teste de regressão de peso:** [commit 9049b942](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/9049b94287dbb27145b49c26cd926023c83556e5). O primeiro CI reproduziu a falha (68 aprovados, 1 falha), confirmando a causa antes da correção.
 - **Templates com rollback:** testes acrescentados em [commit 9049b942](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/9049b94287dbb27145b49c26cd926023c83556e5) e aprovados no CI #122.
 - **Consistência entre visões:** teste browser acrescentado em [commit f1245041](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/f12450413aceab80aa2a33f52ad02d3e988d5603); confirmou um item recém-criado na Sintética, Analítica e Gantt no [CI #123](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170217684).
+- **Integridade de relações:** o teste [130cd927](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/130cd927355520c0a6d1368135879a6fa324282a) reproduziu relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; corrigido no [commit 2c05b43a](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/2c05b43a0f57f0b67f4719ced4748379a21f663c). O CI #135 passou com 73 testes e o CI #136 validou também arquivar/restaurar relações.
 - **Baseline e rede temporal:** testes P0 adicionados nos commits [f6a673a4](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/f6a673a4c186c6b50fce0d0f1f479f3b86ce6184) e [194aa2a1](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/194aa2a1ff3b1aa8cced6e3233323fa12ae534d9) reproduziram baseline final vazia e previsão deslocada por predecessora cancelada; a correção está no [commit 13568c6a](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/13568c6a7ecf06dcb34b5594c56c8f53ec27ca01).
-- **Validação consolidada mais recente:** [CI #131](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170527238), 72/72 testes e smoke browser aprovados.
+- **Validação consolidada mais recente:** [CI #136](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170776873), 74/74 testes e smoke browser aprovados.
 
 ## 4. Ordem de execução pendente
 
