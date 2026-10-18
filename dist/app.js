@@ -1092,6 +1092,8 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   const parent = getItem(parentId);
   if (!parent) return;
   const children = state.items.filter((item) => item.parentId === parentId && item.status !== "cancelled");
+  if (!parent.baselineStartAt) parent.baselineStartAt = children.map((item)=>item.baselineStartAt || item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "";
+  if (!parent.baselineDueAt) parent.baselineDueAt = children.map((item)=>item.baselineDueAt || item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "";
   if (!children.length) return;
   const wasComplete = completeStatus(parent.status);
   const rank = { blocked: 0, backlog: 0, waiting: 1, correction: 1, ready: 1, in_progress: 2, under_review: 3, done: 4 };
@@ -1115,6 +1117,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   const next = {
     status: leastAdvanced.status,
     progressPercent: weighted.weight ? Math.round(weighted.weighted / weighted.weight) : null,
+    plannedDurationDays: Math.max(0, (new Date((children.map((item)=>item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || today()) + "T12:00:00") - new Date((children.map((item)=>item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || today()) + "T12:00:00")) / 86400000),
     plannedStartAt: children.map((item) => item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "",
     dueAt: children.map((item) => item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "",
   };
