@@ -69,3 +69,29 @@ test("P0 M-09: reprovação, correção e aprovação preservam rodada e encadea
   assert.equal(run('getItem(revision.id).status'), "done");
   assert.equal(run('state.approvalDecisions.filter((entry)=>entry.requestId===item.id).length'), 4);
 });
+
+
+test("P0 integrado: rede temporal e repactuação preservam baseline e identidade da relação", () => {
+  const run = createContext();
+  run(`root=createItem({... ${itemDefaults},title:"Grupo integrado",plannedStartAt:"2026-10-20",dueAt:"2026-10-20",plannedDurationDays:0});
+    a=createItem({... ${itemDefaults},title:"Atividade A",parentId:root.id,plannedStartAt:"2026-10-20",dueAt:"2026-10-23",plannedDurationDays:3});
+    b=createItem({... ${itemDefaults},title:"Atividade B",parentId:root.id,plannedStartAt:"2026-10-20",dueAt:"2026-10-22",plannedDurationDays:2});
+    relation=createRelation(a.id,b.id,"TI",0,"Rede integrada");`);
+  const relationId = run("relation.id");
+  const baselineA = run("JSON.stringify({start:a.baselineStartAt,due:a.baselineDueAt})");
+  const baselineB = run("JSON.stringify({start:b.baselineStartAt,due:b.baselineDueAt})");
+  assert.equal(run("b.plannedStartAt"), "2026-10-23");
+  assert.equal(run('state.relations.some((entry)=>entry.id===relation.id && entry.relationType==="TI")'), true);
+
+  run('updateRelation(relation.id,{sourceId:a.id,targetId:b.id,relationType:"TI",lagDays:1,description:"Defasagem revisada"});');
+  assert.equal(run("relation.id"), relationId, "editar a relação não pode recriar sua identidade");
+  assert.equal(run("relation.lagDays"), 1);
+  assert.equal(run("b.plannedStartAt"), "2026-10-24");
+
+  run('updateItem(root.id,{...root,replannedDueAt:"2026-10-31"});');
+  assert.equal(run("JSON.stringify({start:a.baselineStartAt,due:a.baselineDueAt})"), baselineA);
+  assert.equal(run("JSON.stringify({start:b.baselineStartAt,due:b.baselineDueAt})"), baselineB);
+  assert.notEqual(run("a.plannedStartAt"), "2026-10-20", "repactuação deve alterar a previsão, não a baseline");
+  assert.equal(run('state.relations.filter((entry)=>entry.sourceId===a.id && entry.targetId===b.id && entry.relationType==="TI").length'), 1);
+  assert.equal(run("state.events.some((entry)=>entry.itemId===b.id && entry.eventType==="relation_updated")"), true);
+});
