@@ -15,7 +15,7 @@
 | regressão encontrada | 0 |
 | não verificado | 24 |
 
-Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
+Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados. Entre os P0 parciais, 7 seguem como não verificados: R2-15 (magnetismo do grafo), R2-19 (propagação com filtros/grafos complexos), R2-25 (painel do item), M-01 (matriz completa de integridade de relações), M-02 (consistência após todas as mutações), M-09 (ciclo completo de aprovações) e M-13 (fechamento da rastreabilidade).
 
 ## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
