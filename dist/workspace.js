@@ -673,7 +673,8 @@ function renderAttachments(item,editable) {
 
 function updateSchedulePreview() {
   const form=document.querySelector("#createItemForm"), output=document.querySelector("#schedulePreview"); if(!form || !output) return;
-  const start=String(form.querySelector('[name="plannedStartAt"]')?.value || today());
+  const parent=getItem(ui.createParentId);
+  const start=String(form.querySelector('[name="plannedStartAt"]')?.value || parent?.baselineStartAt || parent?.plannedStartAt || today());
   const durationInput=String(form.querySelector('[name="plannedDurationDays"]')?.value || "").trim();
   const baseDuration=durationInput === "" ? null : Math.max(0,Number(durationInput));
   const titles=String(form.querySelector('[name="quickSteps"]')?.value || "").split("\n").map((value)=>value.trim()).filter(Boolean);
