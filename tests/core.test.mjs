@@ -315,3 +315,27 @@ test("cancelamento define controle em 100% sem marcar conclusão operacional", (
   assert.equal(run('completeStatus(getItem(item.id).status)'),false);
   assert.equal(run('getItem(item.id).completedAt'),"");
 });
+
+
+test("mover hierarquia reverte integralmente quando a validação temporal falha", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`parentA=createItem({...${defaults},title:"Pai original"});
+parentB=createItem({...${defaults},title:"Novo pai"});
+child=createItem({...${defaults},title:"Filho",parentId:parentA.id});
+a=createItem({...${defaults},title:"Temporal A"});
+b=createItem({...${defaults},title:"Temporal B"});
+state.relations.push(
+  {id:uid("rel"),sourceId:a.id,targetId:b.id,relationType:"TI",lagDays:0},
+  {id:uid("rel"),sourceId:b.id,targetId:a.id,relationType:"TI",lagDays:0}
+);
+beforeEvents=state.events.length;
+beforeRelations=JSON.stringify(state.relations);
+`);
+  assert.throws(() => run("moveItemHierarchy(child.id,parentB.id)"), /ciclo nas dependências temporais/);
+  assert.equal(run("getItem(child.id).parentId"), run("parentA.id"));
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===parentA.id && r.targetId===child.id)'), true);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===parentB.id && r.targetId===child.id)'), false);
+  assert.equal(run("state.events.length"), run("beforeEvents"));
+  assert.equal(run("JSON.stringify(state.relations)"), run("beforeRelations"));
+});
