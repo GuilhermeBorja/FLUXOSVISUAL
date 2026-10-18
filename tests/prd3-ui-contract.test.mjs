@@ -150,3 +150,10 @@ test("Gantt aplica as quatro fórmulas de dependência temporal", () => {
   assert.equal(analysis.rows.find((row)=>row.item.id==="tTT").startOffset,3);
   assert.equal(analysis.rows.find((row)=>row.item.id==="tIF").startOffset,0);
 });
+
+test("contexto do responsável é herdado e a cor de status chega ao Gantt", () => {
+  assert.match(workspace, /organizationId:owner\?\.organizationId \|\| parent\?\.organizationId/);
+  assert.match(workspace, /sectorId:owner\?\.sectorId \|\| parent\?\.sectorId/);
+  assert.match(workspace, /state:owner\?\.state \|\| parent\?\.state/);
+  assert.match(workspace, /statusConfig\(row\.item\.status\)\.color/);
+});
