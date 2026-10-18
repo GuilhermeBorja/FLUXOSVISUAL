@@ -62,6 +62,6 @@
 
 ## Validação automatizada
 
-- Execução integral bem-sucedida consultada: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166466903
-- O workflow executa `npm ci`, `npm run check`, `npm test` e `npm run build`.
+- Execução integral bem-sucedida consultada: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166897202
+- O workflow executa `npm ci`, `npm run check`, `npm test`, `npm run build` e smoke test de navegador Playwright em Chromium (navegação, Gantt, grafo, cor de linha, subitem e viewport móvel).
 - CI verde não equivale a aprovação funcional final. Não foi realizado deploy de produção nesta branch.
