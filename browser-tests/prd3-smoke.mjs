@@ -49,6 +49,24 @@ try {
 
   await page.getByRole("tab", { name: /Sintética/ }).click();
 
+  // P0 regression: an edit must be reflected consistently by every view too.
+  await page.evaluate((id) => {
+    const item = getItem(id);
+    updateItem(id, { ...item, title: "P0 cross-view consistency edited", progressPercent: 45 }, nowIso(), "Smoke test mutation");
+    render();
+  }, crossViewItem.id);
+  await page.locator(`tr[data-row="${crossViewItem.id}"] .item-title`).getByText("P0 cross-view consistency edited").waitFor();
+
+  await page.getByRole("tab", { name: /Analítica/ }).click();
+  const editedNode = page.locator(`.graph-node[data-node="${crossViewItem.id}"]`);
+  await editedNode.waitFor();
+  assert.match(await editedNode.getAttribute("aria-label"), /P0 cross-view consistency edited/);
+
+  await page.getByRole("tab", { name: /Gantt/ }).click();
+  await page.locator(`.gantt-item[data-select="${crossViewItem.id}"]`).getByText("P0 cross-view consistency edited").waitFor();
+
+  await page.getByRole("tab", { name: /Sintética/ }).click();
+
   await page.getByRole("tab", { name: /Gantt/ }).click();
   await page.locator(".gantt-card").waitFor();
   assert.equal(await page.locator(".gantt-axis").count(), 1);
