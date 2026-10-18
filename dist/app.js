@@ -1476,7 +1476,9 @@ function recalculatePlannedDates() {
   if (order.length !== items.length) return {valid:false,message:"Há um ciclo nas dependências temporais. As datas não foram recalculadas."};
   for (const item of items) {
     const deps = incoming.get(item.id) || [];
-    if (!deps.length || !["backlog","ready"].includes(item.status)) continue;
+    if (!["backlog","ready"].includes(item.status)) continue;
+    const blockers = state.relations.filter((r)=>r.targetId===item.id && r.relationType==="blocks");
+    const released = deps.every((r) => { const pred=byId.get(r.sourceId); if (!pred) return false; if (r.relationType === "II" || r.relationType === "IF") return ["in_progress","done"].includes(pred.status); return pred.status === "done"; }) && blockers.every((r)=>["done","cancelled"].includes(byId.get(r.sourceId)?.status));
     const released = deps.every((r) => { const pred=byId.get(r.sourceId); if (!pred) return false; if (r.relationType === "II" || r.relationType === "IF") return ["in_progress","done"].includes(pred.status); return pred.status === "done"; });
     const nextStatus = released ? "ready" : "backlog";
     if (item.status !== nextStatus) { createEvent(item.id,"status_changed",item.status,nextStatus,"Liberação calculada automaticamente pelas predecessoras."); item.status=nextStatus; }
