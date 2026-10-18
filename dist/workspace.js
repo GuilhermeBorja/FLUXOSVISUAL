@@ -297,6 +297,15 @@ function applyTableColumnLayout() {
   table.querySelectorAll("tbody tr").forEach((row)=>[...row.children].forEach((cell,index)=>{const [key]=tableColumnOptions[index]||[]; if(key) cell.classList.toggle("column-hidden",hidden.has(key));}));
 }
 
+function rowFillColor(item, depth) {
+  const settings = state.rowFillSettings || {};
+  const projectId = rootOf(item)?.id || "";
+  const projectColor = settings.projects?.[projectId];
+  const levelColor = settings.levels?.[String(Math.min(depth, 3))];
+  const color = projectColor || levelColor || "";
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "transparent";
+}
+
 function renderTable(items) {
   ui.bulkSelected ||= new Set();
   const rows = tableRows(items);
@@ -305,7 +314,7 @@ function renderTable(items) {
     <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/>Mostrar subitens</label><label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar visíveis</label><span class="secondary">${selectedVisible} selecionados · ${rows.length} linhas</span><button class="button quiet" type="button" data-action="columns" aria-expanded="${!!ui.columnsOpen}">Colunas</button><button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Editar em lote</button></div>${ui.columnsOpen ? renderColumnSettings() : ""}
     ${ui.bulkOpen && selectedVisible ? renderBulkEditor() : ""}
     ${!rows.length ? emptyMarkup() : `<div class="table-scroll"><table class="synth-table"><thead><tr><th><span class="sr-only">Selecionar</span></th><th>ID</th><th>Nome</th><th>Conclusão</th><th>Responsável</th><th>Criação</th><th>Início ideal</th><th>Início real</th><th>Liberada em</th><th>Término ideal</th><th>Término real</th><th>Duração total</th><th>Duração da atividade</th><th>Peso</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
-      ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" data-depth="${depth}" data-type="${escapeHtml(item.type)}" data-row-draggable="${canChangeHierarchy(currentUser(),item) ? "true" : "false"}" draggable="${canChangeHierarchy(currentUser(),item)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}">
+      ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" data-depth="${depth}" data-type="${escapeHtml(item.type)}" data-row-draggable="${canChangeHierarchy(currentUser(),item) ? "true" : "false"}" draggable="${canChangeHierarchy(currentUser(),item)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}" style="--row-fill:${rowFillColor(item,depth)}">
         <td><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" aria-label="Selecionar ${escapeHtml(item.title)}" ${ui.bulkSelected.has(item.id) ? "checked" : ""}/></td><td class="id-cell">${shortId(item)}</td><td class="title-cell"><div class="tree-cell" style="--depth:${Math.min(depth, 8)}">${children.length ? `<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${!ui.showSubitems || ui.collapsed?.has(item.id) ? "Expandir" : "Recolher"} subitens" aria-expanded="${ui.showSubitems && !ui.collapsed?.has(item.id)}">${icon(ui.showSubitems && !ui.collapsed?.has(item.id) ? "chevron-down" : "chevron-right")}</button>` : '<span class="tree-spacer"></span>'}<button class="item-title" data-select="${escapeHtml(item.id)}">${escapeHtml(item.title)}<span>${icon(itemTypeConfig(item.type,item.organizationId).icon)}${escapeHtml(itemTypeConfig(item.type,item.organizationId).label)}${children.length ? ` · ${children.length} subitens` : ""}</span></button></div></td>
         <td>${progressCell(item)}</td><td>${escapeHtml(userName(item.ownerId))}</td><td class="date-cell">${dateCell(item.createdAt, true)}</td><td class="date-cell">${dateCell(item.plannedStartAt)}</td><td class="date-cell">${dateCell(item.actualStartAt, true)}</td><td class="date-cell">${dateCell(activityStartAt(item), true)}</td><td class="date-cell ${isOverdue(item) ? "overdue" : ""}">${dateCell(item.dueAt)}</td><td class="date-cell">${dateCell(item.completedAt, true)}</td><td class="duration-cell">${elapsedLabel(item)}</td><td class="duration-cell">${activityDurationLabel(item)}</td><td class="weight-cell">${Number(item.weight || 1)}</td><td>${statusBadge(item)}</td><td><div class="row-actions">${canChangeHierarchy(currentUser(),item) ? `<button class="icon-button compact" data-order-up="${escapeHtml(item.id)}" title="Mover para cima" aria-label="Mover ${escapeHtml(item.title)} para cima">${icon("arrow-up")}</button><button class="icon-button compact" data-order-down="${escapeHtml(item.id)}" title="Mover para baixo" aria-label="Mover ${escapeHtml(item.title)} para baixo">${icon("arrow-down")}</button><button class="icon-button compact" data-indent="${escapeHtml(item.id)}" title="Indentar sob item anterior" aria-label="Indentar ${escapeHtml(item.title)}">${icon("corner-down-right")}</button>${item.parentId ? `<button class="icon-button compact" data-outdent="${escapeHtml(item.id)}" title="Remover do nível atual" aria-label="Recuar ${escapeHtml(item.title)}">${icon("corner-up-left")}</button>` : ""}` : ""}<button class="icon-button" data-select="${escapeHtml(item.id)}" title="Abrir item" aria-label="Abrir ${escapeHtml(item.title)}">${icon("more-horizontal")}</button>${canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""}</div></td>
       </tr>`).join("")}
@@ -525,6 +534,13 @@ function renderViewSettingsPanel() {
         <p class="muted">As preferências são salvas neste navegador. O ajuste automático remove larguras manuais e permite que o conteúdo determine a largura das colunas.</p>
         <div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-setting-column="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}</div>
         <div class="row-actions"><button type="button" class="button primary" data-action="settings-auto-fit">Ajustar colunas automaticamente</button><button type="button" class="button quiet" data-action="settings-reset-columns">Restaurar colunas padrão</button></div>
+      </section>
+      <section class="panel-section">
+        <h3>Cores das linhas</h3>
+        <p class="muted">Configure o preenchimento por nível hierárquico. A cor específica do projeto tem prioridade sobre a cor do nível.</p>
+        <div class="column-settings">${[0,1,2,3].map((level)=>`<label>Nível ${level}<input type="color" data-row-fill-level="${level}" value="${escapeHtml(state.rowFillSettings?.levels?.[String(level)] || ["#ffffff","#f5f8fa","#edf3f6","#e4edf2"][level])}"/></label>`).join("")}</div>
+        <div class="column-settings">${projectOptions().map((project)=>`<label>${escapeHtml(project.title)}<input type="color" data-row-fill-project="${escapeHtml(project.id)}" value="${escapeHtml(state.rowFillSettings?.projects?.[project.id] || state.rowFillSettings?.levels?.["0"] || "#ffffff")}"/></label>`).join("")}</div>
+        <button type="button" class="button quiet" data-action="settings-reset-row-colors">Restaurar cores padrão</button>
       </section>
       <section class="panel-section">
         <h3>Preferências do grafo</h3>
