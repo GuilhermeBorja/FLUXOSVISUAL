@@ -396,7 +396,7 @@ function renderGantt(items) {
   html += '<div class="gantt-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ' + (ui.showSubitems ? 'checked' : '') + '/>Mostrar subitens</label>' + (canManageGpo(currentUser()) ? '<label class="risk-setting">Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="' + Math.max(1,Math.min(60,Number(state.riskThresholdDays) || 3)) + '"/></label>' : '') + '</div>';
   if (analysis.message) html += '<div class="notice ' + (analysis.valid ? '' : 'error') + '" role="' + (analysis.valid ? 'status' : 'alert') + '">' + escapeHtml(analysis.message) + '</div>';
   if (!rows.length) return html + emptyMarkup() + '</div>';
-  html += '<div class="gantt-scroll"><div class="gantt-axis"><span>Item</span><div><span>Início do plano: ' + escapeHtml(formatDate(analysis.startDate)) + '</span><span>Término calculado: ' + escapeHtml(formatDate(analysis.finishDate)) + '</span></div></div>';
+  html += '<div class="gantt-scroll"><div class="gantt-axis"><span>Item</span><div class="gantt-axis-track">' + [0,25,50,75,100].map((percent)=>'<span style="left:' + percent + '%">' + escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100)))) + '</span>').join("") + '</div></div>';
   html += rows.map((row) => {
     const left = Math.max(0,Math.min(100,row.startOffset / maxDay * 100));
     const width = Math.max(1,Math.min(100 - left,Math.max(1,row.duration / maxDay * 100)));
