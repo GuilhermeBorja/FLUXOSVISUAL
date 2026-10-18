@@ -4,11 +4,12 @@ import vm from "node:vm";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../dist/app.js",import.meta.url),"utf8");
-function context(savedState = null) {
+function context(savedState = null, seed = true) {
   const storage = new Map();
   if (savedState) storage.set("fluxosVisualState.v2",JSON.stringify(savedState));
   const sandbox = vm.createContext({console,document:{querySelector:()=>({})},localStorage:{getItem:(key)=>storage.get(key),setItem:(key,value)=>storage.set(key,value)}});
   vm.runInContext(source,sandbox);
+  if (seed && !savedState) vm.runInContext("state=seedState();",sandbox);
   return (script) => vm.runInContext(script,sandbox);
 }
 const defaults = '{title:"Teste",type:"task",status:"backlog",ownerId:"u_luis",organizationId:"org_castro",sectorId:"sec_pmo",state:"PE",plannedStartAt:today(),dueAt:today(3)}';
@@ -191,4 +192,12 @@ test("repactuação desloca previsão dos descendentes sem alterar a baseline or
   assert.equal(run("a.dueAt"),"2026-10-31");
   assert.equal(run("a.baselineStartAt"),"2026-10-25");
   assert.equal(run("a.baselineDueAt"),"2026-10-28");
+});
+test("instalação nova inicia sem organização, usuários operacionais ou itens", () => {
+  const run = context(null,false);
+  assert.equal(run("state.setupComplete"),false);
+  assert.equal(run("state.organizations.length"),0);
+  assert.equal(run("state.sectors.length"),0);
+  assert.equal(run("state.items.length"),0);
+  assert.equal(run("state.users.length"),0);
 });
