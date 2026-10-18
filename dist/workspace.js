@@ -523,10 +523,18 @@ function renderCreatePanel() {
     </form>`;
 }
 
+function historyEventsFor(rootItem) {
+  const allowed = new Set(accessibleItems().map((item)=>item.id));
+  const descendants = new Set([rootItem.id]);
+  let changed = true;
+  while (changed) { changed=false; for (const item of state.items) { if (allowed.has(item.id) && item.parentId && descendants.has(item.parentId) && !descendants.has(item.id)) { descendants.add(item.id); changed=true; } } }
+  return state.events.filter((event)=>descendants.has(event.itemId) && allowed.has(event.itemId));
+}
+
 function renderItemPanel(item) {
   const editable = canEditItem(currentUser(), item);
   const relations = relationsFor(accessibleItems()).filter((rel) => rel.sourceId === item.id || rel.targetId === item.id);
-  const events = state.events.filter((event) => event.itemId === item.id);
+  const events = historyEventsFor(item);
   const tabs = [{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"relations",label:"Relações (" + relations.length + ")"},{id:"history",label:"Histórico (" + events.length + ")"}];
   if (item.type === "approval") tabs.push({id:"approval",label:"Aprovação"});
   let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title, canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : "");
@@ -537,7 +545,7 @@ function renderItemPanel(item) {
     : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item);
   if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
   if (ui.panelTab === "relations") html += renderRelations(item,relations,editable);
-  if (ui.panelTab === "history") html += renderHistory(events);
+  if (ui.panelTab === "history") html += renderHistory(events,item.id);
   if (ui.panelTab === "approval" && item.type === "approval") html += renderApprovalPanel(item);
   return html + '</div>';
 }
@@ -577,9 +585,9 @@ function eventValue(event, value) {
   return value;
 }
 
-function renderHistory(events) {
+function renderHistory(events, rootItemId = "") {
   const sorted = [...events].sort((a,b) => new Date(b.effectiveAt) - new Date(a.effectiveAt) || new Date(b.createdAt) - new Date(a.createdAt));
-  return `<ol class="event-timeline">${sorted.map((event) => `<li><span class="event-dot"></span><div class="event-heading"><strong>${escapeHtml(eventLabels[event.eventType] || event.eventType)}</strong><time>${formatDateTime(event.effectiveAt)}</time></div>${event.fromValue || event.toValue ? `<p class="event-values">${escapeHtml(eventValue(event,event.fromValue))}<span>→</span>${escapeHtml(eventValue(event,event.toValue))}</p>` : ""}${event.comment ? `<p>${escapeHtml(event.comment)}</p>` : ""}<small>${escapeHtml(userName(event.userId))} · Registrado ${formatDateTime(event.createdAt)}</small></li>`).join("")}</ol>`;
+  return `<ol class="event-timeline">${sorted.map((event) => `<li><span class="event-dot"></span><div class="event-heading"><strong>${escapeHtml(eventLabels[event.eventType] || event.eventType)}</strong>${event.itemId !== rootItemId ? `<span class="event-origin">${escapeHtml(getItem(event.itemId)?.title || "Item arquivado")}</span>` : ""}<time>${formatDateTime(event.effectiveAt)}</time></div>${event.fromValue || event.toValue ? `<p class="event-values">${escapeHtml(eventValue(event,event.fromValue))}<span>→</span>${escapeHtml(eventValue(event,event.toValue))}</p>` : ""}${event.comment ? `<p>${escapeHtml(event.comment)}</p>` : ""}<small>${escapeHtml(userName(event.userId))} · Registrado ${formatDateTime(event.createdAt)}</small></li>`).join("")}</ol>`;
 }
 
 function renderApprovalPanel(item) {
