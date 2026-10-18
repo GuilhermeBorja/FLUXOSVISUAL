@@ -792,3 +792,66 @@ body.panel-open { overflow: hidden; }
   .item-facts dd { margin-bottom: 10px; }
   .table-toolbar .button { margin-left: 0; }
 }
+
+
+/* Sintética: ações visíveis, colunas equilibradas e leitura centralizada */
+.workspace-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+.synth-table {
+  table-layout: auto;
+  width: max(100%, 1500px);
+}
+.synth-table th,
+.synth-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+.synth-table th:first-child,
+.synth-table td:first-child {
+  text-align: center;
+  padding-left: 10px;
+  width: 44px;
+}
+.synth-table th:nth-child(3),
+.synth-table td.title-cell {
+  text-align: left;
+}
+.synth-table .title-cell {
+  min-width: 230px;
+  max-width: 340px;
+  padding-left: 8px;
+}
+.synth-table .tree-cell {
+  justify-content: flex-start;
+}
+.synth-table .item-title {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.synth-table .date-cell,
+.synth-table .duration-cell,
+.synth-table .id-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.synth-table th {
+  min-width: 84px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 11px 9px;
+}
+.synth-table th:nth-child(3) { min-width: 230px; }
+.synth-table td { padding: 12px 9px; }
+.synth-table .column-hidden { display: none; }
+@media (max-width: 680px) {
+  .workspace-heading-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
