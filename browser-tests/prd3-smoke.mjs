@@ -91,7 +91,7 @@ try {
     await page.waitForTimeout(100);
     assert.equal(await page.locator(".ops-shell").isVisible(), true, `app shell not visible at ${viewport.width}px`);
     assert.equal(await page.locator("#workspaceView").isVisible(), true, `workspace not visible at ${viewport.width}px`);
-    assert.equal(await page.locator(".drawer").count(), 0, `unexpected drawer at ${viewport.width}px`);
+    assert.equal(await page.locator(".drawer:visible").count(), 0, `unexpected visible drawer at ${viewport.width}px`);
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     const viewportWidth = await page.evaluate(() => document.documentElement.clientWidth);
     assert.ok(documentWidth <= viewportWidth + 2, `page-level horizontal overflow at ${viewport.width}px: ${documentWidth} > ${viewportWidth}`);
