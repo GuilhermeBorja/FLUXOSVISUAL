@@ -766,6 +766,14 @@ function renderGpo() {
   return html + '</section>';
 }
 
+function renderUserEditForm() {
+  const user = state.users.find((entry) => entry.id === ui.editUserId);
+  if (!user || !canManageUsers(currentUser(),user.organizationId)) return "";
+  const organizations = state.organizations.filter((org) => canManageUsers(currentUser(),org.id));
+  const sectors = state.sectors.filter((sector) => sector.organizationId === user.organizationId);
+  return `<section class="panel-section"><h3>Editar usuário</h3><form id="userEditForm" class="form-stack"><input type="hidden" name="userId" value="${escapeHtml(user.id)}"/><div class="form-row"><label>Nome<input name="name" value="${escapeHtml(user.name)}" required maxlength="160"/></label><label>E-mail<input name="email" type="email" value="${escapeHtml(user.email)}" required/></label></div><label>Perfil GPO<select name="profileId"><option value="">Permissões individuais</option>${(state.permissionProfiles || []).map((profile) => option(profile.id,profile.name,profile.id === user.profileId)).join("")}</select></label><div class="form-row"><label>Empresa<select name="organizationId" id="editUserOrganization">${organizations.map((org) => option(org.id,org.name,org.id === user.organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="editUserSector">${sectors.map((sector) => option(sector.id,sector.name,sector.id === user.sectorId)).join("")}</select></label></div><label>Estado (UF)<input name="state" value="${escapeHtml(user.state || "")}" maxlength="2" required/></label><div class="row-actions"><button class="button primary" type="submit">Salvar alterações</button><button class="button quiet" type="button" data-action="cancel-user-edit">Cancelar</button></div></form></section>`;
+}
+
 function renderAdmin() {
   const tabs = [];
   if (canManageAnyUsers(currentUser())) tabs.push({id:"users",label:"Usuários"});
@@ -775,7 +783,7 @@ function renderAdmin() {
   if (canManageAnyOrganization(currentUser()) || canManageGpo(currentUser())) tabs.push({id:"types",label:"Tipos de item"});
   if (!tabs.some((tab) => tab.id === ui.adminTab)) ui.adminTab = tabs[0]?.id || "users";
   return `${panelHeader("Administração","Cadastros e permissões")}<div class="panel-tabs" role="tablist">${tabs.map((tab) => `<button role="tab" aria-selected="${ui.adminTab === tab.id}" data-admin-tab="${tab.id}" class="${ui.adminTab === tab.id ? "active" : ""}">${tab.label}</button>`).join("")}</div><div class="drawer-body">
-    ${ui.adminTab === "users" ? `<div class="admin-list">${state.users.filter((user) => canManageUsers(currentUser(),user.organizationId)).map((user) => `<div class="admin-entry"><span><strong>${escapeHtml(user.name)}${user.disabled ? " (inativo)" : ""}</strong><small>${escapeHtml(orgName(user.organizationId))} · ${escapeHtml(sectorName(user.sectorId))} · Perfil: ${(state.permissionProfiles || []).find((profile)=>profile.id===user.profileId)?.name || "Individual"} · ${(state.permissionRules || []).filter((rule) => rule.subjectType === "user" && rule.subjectId === user.id).length} regras individuais</small></span><label class="profile-assignment">Perfil<select data-user-profile="${escapeHtml(user.id)}"><option value="">Individual</option>${(state.permissionProfiles || []).map((profile)=>option(profile.id,profile.name,profile.id===user.profileId)).join("")}</select></label>${user.disabled ? `<button class="icon-button" data-toggle-user="${escapeHtml(user.id)}" aria-label="Reativar ${escapeHtml(user.name)}" title="Reativar usuário">${icon("rotate-ccw")}</button>` : ""}${deleteButton("user",user.id,user.name,user.id === currentUser().id,"Entre com outro administrador para excluir seu usuário.")}</div>`).join("")}</div><section class="panel-section"><h3>Novo usuário</h3><form id="userForm" class="form-stack"><div class="form-row"><label>Nome<input name="name" required/></label><label>E-mail<input name="email" type="email" required/></label></div><label>Perfil GPO<select name="profileId"><option value="">Permissões individuais</option>${(state.permissionProfiles || []).map((profile) => option(profile.id,profile.name,profile.id === "profile_editor")).join("")}</select></label><div class="form-row"><label>Empresa<select name="organizationId" id="userOrganization">${state.organizations.filter((org) => canManageUsers(currentUser(),org.id)).map((org) => option(org.id,org.name,org.id === currentUser().organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="userSector">${state.sectors.filter((sector) => sector.organizationId === currentUser().organizationId).map((sector) => option(sector.id,sector.name)).join("")}</select></label></div><label>Estado (UF)<input name="state" value="${escapeHtml(currentUser().state)}" maxlength="2" required/></label><p class="muted">Novos usuários começam com acesso de leitura e criação no workspace selecionado. Ajuste permissões na aba GPO.</p><button class="button primary" type="submit">${icon("plus")}Cadastrar usuário</button></form></section>` : ""}
+    ${ui.adminTab === "users" ? `<div class="admin-list">${state.users.filter((user) => canManageUsers(currentUser(),user.organizationId)).map((user) => `<div class="admin-entry"><span><strong>${escapeHtml(user.name)}${user.disabled ? " (inativo)" : ""}</strong><small>${escapeHtml(orgName(user.organizationId))} · ${escapeHtml(sectorName(user.sectorId))} · Perfil: ${(state.permissionProfiles || []).find((profile)=>profile.id===user.profileId)?.name || "Individual"} · ${(state.permissionRules || []).filter((rule) => rule.subjectType === "user" && rule.subjectId === user.id).length} regras individuais</small></span><button type="button" class="button quiet" data-edit-user="${escapeHtml(user.id)}">Editar</button><label class="profile-assignment">Perfil<select data-user-profile="${escapeHtml(user.id)}"><option value="">Individual</option>${(state.permissionProfiles || []).map((profile)=>option(profile.id,profile.name,profile.id===user.profileId)).join("")}</select></label>${user.disabled ? `<button class="icon-button" data-toggle-user="${escapeHtml(user.id)}" aria-label="Reativar ${escapeHtml(user.name)}" title="Reativar usuário">${icon("rotate-ccw")}</button>` : ""}${deleteButton("user",user.id,user.name,user.id === currentUser().id,"Entre com outro administrador para excluir seu usuário.")}</div>`).join("")}</div>${ui.editUserId ? renderUserEditForm() : ""}<section class="panel-section"><h3>Novo usuário</h3><form id="userForm" class="form-stack"><div class="form-row"><label>Nome<input name="name" required/></label><label>E-mail<input name="email" type="email" required/></label></div><label>Perfil GPO<select name="profileId"><option value="">Permissões individuais</option>${(state.permissionProfiles || []).map((profile) => option(profile.id,profile.name,profile.id === "profile_editor")).join("")}</select></label><div class="form-row"><label>Empresa<select name="organizationId" id="userOrganization">${state.organizations.filter((org) => canManageUsers(currentUser(),org.id)).map((org) => option(org.id,org.name,org.id === currentUser().organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="userSector">${state.sectors.filter((sector) => sector.organizationId === currentUser().organizationId).map((sector) => option(sector.id,sector.name)).join("")}</select></label></div><label>Estado (UF)<input name="state" value="${escapeHtml(currentUser().state)}" maxlength="2" required/></label><p class="muted">Novos usuários começam com acesso de leitura e criação no workspace selecionado. Ajuste permissões na aba GPO.</p><button class="button primary" type="submit">${icon("plus")}Cadastrar usuário</button></form></section>` : ""}
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}${gpoDecision(currentUser(),"manage_organization",null) === true ? `<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section>` : ""}<section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.filter((org) => canManageOrganization(currentUser(),org.id)).map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "gpo" && canManageGpo(currentUser()) ? renderGpo() : ""}
     ${ui.adminTab === "statuses" && canManageGpo(currentUser()) ? renderStatusSettings() : ""}
@@ -1111,6 +1119,8 @@ function bindPanel() {
       catch (error) { panelFailure(error); }
       return;
     }
+    if (button.dataset.editUser) { const user = state.users.find((entry) => entry.id === button.dataset.editUser); if (!user || !canManageUsers(currentUser(),user.organizationId)) { panelFailure(new Error("O GPO não permite editar este usuário.")); return; } ui.editUserId = user.id; renderPanel(false); return; }
+    if (action === "cancel-user-edit") { ui.editUserId = ""; renderPanel(false); return; }
     if (button.dataset.removeGpoRule) {
       try { removePermissionRule(button.dataset.removeGpoRule); saveState(); renderPanel(false); }
       catch (error) { panelFailure(error); }
@@ -1214,6 +1224,27 @@ function bindPanel() {
       state.permissionRules.push({id:uid("gpo"),subjectType:"user",subjectId:user.id,operation,scopeType,scopeId,effect:"allow",createdBy,createdAt:nowIso()});
     }
     saveState(); notify("Usuário cadastrado."); renderPanel(false);
+  });
+  submitHandler("userEditForm", (form) => {
+    const userId = String(form.get("userId") || "");
+    const user = state.users.find((entry) => entry.id === userId);
+    if (!user || !canManageUsers(currentUser(),user.organizationId)) throw new Error("O GPO não permite editar este usuário.");
+    const name = String(form.get("name") || "").trim();
+    const email = String(form.get("email") || "").trim().toLowerCase();
+    const organizationId = String(form.get("organizationId") || "");
+    const sectorId = String(form.get("sectorId") || "");
+    const stateCode = String(form.get("state") || "").trim().toUpperCase();
+    if (!name) throw new Error("Informe o nome.");
+    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) throw new Error("Informe um e-mail válido.");
+    if (state.users.some((entry) => entry.id !== userId && entry.email.toLowerCase() === email)) throw new Error("Este e-mail já está cadastrado.");
+    if (!canManageUsers(currentUser(),organizationId)) throw new Error("O GPO não permite transferir o usuário para esta empresa.");
+    if (!state.sectors.some((sector) => sector.id === sectorId && sector.organizationId === organizationId)) throw new Error("Selecione um setor da empresa escolhida.");
+    if (!/^[A-Z]{2}$/.test(stateCode)) throw new Error("Informe a UF com duas letras.");
+    const previous = {name:user.name,email:user.email,organizationId:user.organizationId,sectorId:user.sectorId,state:user.state,profileId:user.profileId || ""};
+    Object.assign(user,{name,email,organizationId,sectorId,state:stateCode,profileId:String(form.get("profileId") || "")});
+    registryEvent("user",user,"Cadastro do usuário revisado.", "updated");
+    createEvent(user.id,"user_updated",previous,{name,email,organizationId,sectorId,state:stateCode,profileId:user.profileId},"Cadastro do usuário atualizado.");
+    saveState(); ui.editUserId = ""; notify("Cadastro do usuário atualizado."); renderPanel(false);
   });
   submitHandler("organizationForm", (form) => {
     if (gpoDecision(currentUser(),"manage_organization",null) !== true) throw new Error("O GPO não permite cadastrar empresas.");
