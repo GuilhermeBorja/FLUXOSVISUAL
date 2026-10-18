@@ -3,7 +3,7 @@
 **Branch:** `PRD3`  
 **Data:** 18/10/2026  
 **Escopo:** 44 itens que estavam marcados como parciais na matriz de auditoria, priorizando os P0.  
-**CI de referência:** [run #145 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171144437): sintaxe, 76 testes automatizados e smoke browser aprovados.  
+**CI de referência:** [run #150 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171376961): sintaxe, 77 testes automatizados e smoke browser aprovados.  
 **Limite:** os estados descrevem a evidência atual, não certificam o produto para produção. “Preservado” significa que o comportamento coberto pelos testes não regrediu; as pendências listadas continuam abertas.
 
 ## Resumo dos 44 itens
@@ -11,11 +11,11 @@
 | Estado | Quantidade |
 |---|---:|
 | preservado | 13 |
-| corrigido | 6 |
+| corrigido | 7 |
 | regressão encontrada | 0 |
-| não verificado | 25 |
+| não verificado | 24 |
 
-Foram reproduzidos cinco defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; e edição parcial antes de uma negação GPO. Os cinco foram corrigidos e validados nos CI #131, #135, #136 e #140; o CI #145 também passou com 76/76 testes e smoke browser. Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
+Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
 
 ## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
@@ -23,7 +23,7 @@ Foram reproduzidos cinco defeitos P0: peso zero legado interpretado como peso 1;
 |---|---|---|---|
 | R2-01 | Ao criar ou mover um item para subitem, vinculá-lo a todos os pais pela relação CONTÉM | corrigido | Teste P0 reproduziu relações CONTÉM ancestrais obsoletas após excluir um pai mantendo os filhos. Corrigido em 2c05b43a; CI #135 passou. CI #136 também validou relações CONTÉM e temporais após arquivar/restaurar. A matriz completa de mutações ainda está pendente. |
 | R2-02 | Redimensionar, ocultar e mostrar colunas na Sintética | preservado | CI #125 validou ocultar/mostrar colunas, redimensionamento por mouse e teclado e larguras 1920/1366/1024/768/390 px sem overflow horizontal. Ainda falta ampliar a inspeção visual de estados e combinações de colunas. |
-| R2-04 | Trabalhar com durações e relações, não exigir datas individuais na criação de cada atividade | não verificado | A duração explícita e o início herdado são cobertos por testes de contrato. Falta executar o fluxo real de pré-visualização de criação em lote/subitem, conferir término calculado antes da confirmação e garantir cancelamento sem mutação parcial. |
+| R2-04 | Trabalhar com durações e relações, não exigir datas individuais na criação de cada atividade | corrigido | Teste browser reproduziu prévia de subitem usando hoje (21/10/2026) em vez da baseline do pai (23/10/2026 para início 20/10 + 3 dias). Corrigido em 379b6335; CI #150 passou com 77/77 testes e smoke browser. Falta ampliar a prévia para criação múltipla e relações variadas. |
 | R2-05 | Início e término idealizados imutáveis após criação, salvo repactuação explícita | corrigido | Teste P0 reproduziu `baselineDueAt` vazio quando o término era derivado da duração. Corrigido no commit 13568c6a; CI #136 passou com 74/74 testes e smoke browser. Falta percorrer todas as operações que alteram datas e conferir eventos. |
 | R2-06 | Previsão derivada das durações e relações | corrigido | Teste P0 reproduziu predecessora cancelada deslocando atividade ativa para 2027-01-09. Corrigido no commit 13568c6a para não usar sua duração no cálculo da previsão. CI #136 passou com 74/74 testes e smoke browser; falta validação integrada com dados reais. |
 | R2-09 | Perfis GPO padrão atribuíveis a usuários e exceções individuais | preservado | Testes cobrem padrão fechado, negação sem mutação, regras por escopo, perfil herdado e exceção individual. Falta matriz completa de precedência por operação/escopo e alteração de perfil após atribuição. |
@@ -42,7 +42,7 @@ Foram reproduzidos cinco defeitos P0: peso zero legado interpretado como peso 1;
 | M-09 | Aprovações/correções preservam decisão, motivo, autor, data e rodada | não verificado | Há teste para reprovação e criação de revisão ligada. Falta validar todas as rodadas, reabertura, autor/revisor, motivo, data/hora e encadeamento da decisão anterior. |
 | M-10 | Templates preservam estrutura, relações, pesos, durações e rollback | preservado | CI #122 passou nos testes de template: subitens, pesos, durações, relação temporal interna e rollback integral após referência inválida. Falta ampliar para múltiplos tipos de relação e matriz GPO. |
 | M-12 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | corrigido | Teste P0 reproduziu mutação parcial: o título mudava antes de uma repactuação ser negada pelo GPO. Corrigido no commit 46864d31 com pré-validação de permissões; CI #140 passou com 75/75 testes e smoke browser. GPO segue client-side e a matriz completa de operações continua pendente. |
-| M-13 | Critérios de aceite, testes e evidência rastreáveis | não verificado | A matriz foi atualizada e o CI #145 passou com 76/76 testes e smoke browser. Ainda há 25 requisitos não verificados; não liberar produção até fechar todos os P0. |
+| M-13 | Critérios de aceite, testes e evidência rastreáveis | não verificado | A matriz foi atualizada e o CI #150 passou com 77/77 testes e smoke browser. Ainda há 24 requisitos não verificados; não liberar produção até fechar todos os P0. |
 
 ## 2. Checklist dos demais itens parciais
 
@@ -83,7 +83,8 @@ Foram reproduzidos cinco defeitos P0: peso zero legado interpretado como peso 1;
 - **Baseline e rede temporal:** testes P0 adicionados nos commits [f6a673a4](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/f6a673a4c186c6b50fce0d0f1f479f3b86ce6184) e [194aa2a1](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/194aa2a1ff3b1aa8cced6e3233323fa12ae534d9) reproduziram baseline final vazia e previsão deslocada por predecessora cancelada; a correção está no [commit 13568c6a](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/13568c6a7ecf06dcb34b5594c56c8f53ec27ca01).
 - **GPO e integridade transacional:** o teste [26a78c34](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/26a78c34cc42d0f4917ea9e7087ad055a429f668) reproduziu mutação parcial antes da negação GPO; corrigido no [commit 46864d31](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/46864d319ef2001d0de5052f381f13fa49258eee). O CI #140 passou com 75 testes e smoke browser.
 - **Parent editing e folgas:** os testes P0 de edição/repactuação do pai e folgas numéricas do caminho crítico passaram no [CI #145](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171144437).
-- **Validação consolidada mais recente:** [CI #145](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171144437), 76/76 testes e smoke browser aprovados.
+- **Prévia de subitem:** o teste browser reproduziu a data final errada quando o início do pai era diferente de hoje; corrigido no [commit 379b6335](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/379b6335f530b611258a0b88bf32c7c020aec1e3), validado no CI #150.
+- **Validação consolidada mais recente:** [CI #150](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171376961), 77/77 testes e smoke browser aprovados.
 
 ## 4. Ordem de execução pendente
 
