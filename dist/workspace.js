@@ -552,15 +552,27 @@ function renderAttachments(item,editable) {
   return '<section class="attachment-list"><h3>Anexos e evidências (' + entries.length + ')</h3><div class="admin-list">' + entries.map((entry) => '<div class="admin-entry"><span><a class="attachment-link" href="' + escapeHtml(entry.dataUrl) + '" download="' + escapeHtml(entry.name) + '">' + icon("paperclip") + escapeHtml(entry.name) + '</a><small>' + escapeHtml(entry.type) + ' · ' + Math.ceil(Number(entry.size || 0) / 1024) + ' KB · ' + escapeHtml(userName(entry.createdBy)) + ' · ' + escapeHtml(formatDateTime(entry.createdAt)) + '</small></span>' + (editable && gpoDecision(currentUser(),"delete_attachment",item) === true ? '<button type="button" class="icon-button delete-icon" data-delete-kind="attachment" data-delete-id="' + escapeHtml(entry.id) + '" aria-label="Excluir anexo ' + escapeHtml(entry.name) + '">' + icon("trash-2") + '</button>' : '') + '</div>').join("") + '</div><p class="secondary">Os arquivos permanecem neste navegador e não são enviados a um serviço compartilhado.</p></section>';
 }
 
+function updateSchedulePreview() {
+  const form=document.querySelector("#createItemForm"), output=document.querySelector("#schedulePreview"); if(!form || !output) return;
+  const start=String(form.querySelector('[name="plannedStartAt"]')?.value || today());
+  const baseDuration=Math.max(0,Number(form.querySelector('[name="plannedDurationDays"]')?.value || 0));
+  const titles=String(form.querySelector('[name="quickSteps"]')?.value || "").split("\n").map((value)=>value.trim()).filter(Boolean);
+  let duration=baseDuration;
+  if(titles.length){ const durations=titles.map((_,index)=>{const value=String(form.querySelector(`[name="stepDuration_${index}"]`)?.value || "").trim(); return value==="" ? baseDuration : Math.max(0,Number(value)||0);}); duration=form.querySelector('[name="sequence"]')?.checked ? durations.reduce((sum,value)=>sum+value,0) : Math.max(0,...durations); }
+  output.textContent=`Previsão final: ${formatDate(datePlusDays(start,duration))} · ${duration} dias corridos`;
+}
+
 function renderCreatePanel() {
   const parent = getItem(ui.createParentId);
   const editable = accessibleItems().filter((item) => canEditItem(currentUser(), item));
   const defaults = parent ? { type:"substage", ownerId:parent.ownerId, organizationId:parent.organizationId, sectorId:parent.sectorId, state:parent.state, plannedStartAt:parent.baselineStartAt || parent.plannedStartAt || today() } : { type:"project" };
+  const previewDate=datePlusDays(defaults.plannedStartAt || today(),defaults.plannedDurationDays || 0);
   return `${panelHeader(parent ? "Novo subitem" : "Cadastro", parent ? `Adicionar a ${parent.title}` : "Novo item")}
     <form id="createItemForm" class="drawer-body form-stack">
       ${itemFormFields(defaults, true)}
       <details class="form-details" ${parent ? "open" : ""}><summary>Vincular a um item</summary><label>Item pai<select name="parentId">${option("","Sem item pai",!parent)}${editable.map((item) => option(item.id,item.title,item.id === parent?.id)).join("")}</select></label></details>
       <details class="form-details"><summary>Adicionar etapas de uma vez</summary><label>Uma etapa por linha<textarea name="quickSteps" rows="4" placeholder="Elaborar escopo da vaga&#10;Publicar nos locais&#10;Receber todos os currículos"></textarea></label><div id="quickStepRows" class="quick-step-list" aria-live="polite"></div><label class="toggle-label"><input type="checkbox" name="sequence" checked/>Conectar etapas por TI</label></details>
+      <div id="schedulePreview" class="schedule-preview" role="status">Previsão final: ${formatDate(previewDate)}</div>
       <div class="drawer-actions"><button class="button primary" type="submit">${icon("check")}Criar item</button><button class="button quiet" type="button" data-action="close-panel">Cancelar</button></div>
     </form>`;
 }
@@ -1091,6 +1103,9 @@ function bindPanel() {
       } catch (error) { panelFailure(error); }
     }
   };
+  root.querySelector('[name="quickSteps"]')?.addEventListener("input",(event)=>{ renderQuickStepRows(event.target.value.split("\n")); updateSchedulePreview(); });
+  root.querySelectorAll('#createItemForm [name="plannedStartAt"],#createItemForm [name="plannedDurationDays"],#createItemForm [name="sequence"]').forEach((input)=>input.addEventListener("input",updateSchedulePreview));
+  root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) updateSchedulePreview(); });
   document.querySelector("#deleteCascade")?.addEventListener("change", (event) => { ui.deletion.cascade = event.target.checked; renderPanel(false); });
   submitHandler("deleteForm", (form) => {
     const {kind,id,cascade} = ui.deletion;
