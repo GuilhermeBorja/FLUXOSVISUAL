@@ -139,6 +139,7 @@ function render() {
         <div class="mode-tabs" role="tablist" aria-label="Visualização">
           <button role="tab" id="tableTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "table"}" data-view="table" class="${ui.overviewMode === "table" ? "active" : ""}">${icon("table-2")}Sintética</button>
           <button role="tab" id="graphTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "graph"}" data-view="graph" class="${ui.overviewMode === "graph" ? "active" : ""}">${icon("network")}Analítica</button>
+          <button role="tab" id="ganttTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "gantt"}" data-view="gantt" class="${ui.overviewMode === "gantt" ? "active" : ""}">${icon("table-2")}Gantt</button>
         </div>
         <div class="view-filters">
           <label class="search-box">${icon("search")}<input id="searchInput" type="search" placeholder="Buscar item ou responsável" value="${escapeHtml(state.filters.query)}" aria-label="Buscar item ou responsável"/></label>
@@ -147,8 +148,8 @@ function render() {
         </div>
       </section>
       ${ui.filtersOpen ? renderFilters() : ""}
-      <section id="workspaceView" role="tabpanel" aria-labelledby="${ui.overviewMode === "table" ? "tableTab" : "graphTab"}">
-        ${ui.overviewMode === "table" ? renderTable(items) : renderGraph(items)}
+      <section id="workspaceView" role="tabpanel" aria-labelledby="${ui.overviewMode === "table" ? "tableTab" : ui.overviewMode === "graph" ? "graphTab" : "ganttTab"}">
+        ${ui.overviewMode === "table" ? renderTable(items) : ui.overviewMode === "graph" ? renderGraph(items) : renderGantt(items)}
       </section>
       <footer class="workspace-footer"><span>${escapeHtml(permissionLevels[user.permissionLevel])}</span><span>Dados de demonstração salvos neste navegador</span></footer>
     </main>
@@ -216,6 +217,89 @@ function renderTable(items) {
 
 function emptyMarkup() {
   return `<div class="empty-state">${icon("search")}<strong>Nenhum item nesta visão</strong><span>Ajuste os filtros ou crie um novo item.</span>${state.filters.query || filterCount() ? '<button class="button quiet" data-action="clear-filters">Limpar filtros</button>' : ""}</div>`;
+}
+
+function scheduleAnalysis(items) {
+  const children = new Set(items.map((item) => item.parentId).filter(Boolean));
+  let tasks = items.filter((item) => !children.has(item.id));
+  if (!tasks.length) tasks = items;
+  const taskIds = new Set(tasks.map((item) => item.id));
+  const temporalTypes = new Set(["TI","II","TT","IF"]);
+  const dependencies = relationsFor(items).filter((relation) => temporalTypes.has(relation.relationType) && taskIds.has(relation.sourceId) && taskIds.has(relation.targetId));
+  const sortedDates = tasks.map((item) => item.plannedStartAt).filter(Boolean).sort();
+  const startDate = sortedDates[0] || today();
+  const reliable = tasks.length > 0 && tasks.every((item) => item.plannedStartAt && item.dueAt && item.dueAt >= item.plannedStartAt);
+  const duration = new Map();
+  const plannedStart = new Map();
+  for (const item of tasks) {
+    const days = item.plannedStartAt && item.dueAt
+      ? Math.max(0,(new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000)
+      : 1;
+    duration.set(item.id,days);
+    plannedStart.set(item.id,item.plannedStartAt ? Math.max(0,(new Date(item.plannedStartAt + "T12:00:00") - new Date(startDate + "T12:00:00")) / 86400000) : 0);
+  }
+  const incoming = new Map(tasks.map((item) => [item.id,[]]));
+  const outgoing = new Map(tasks.map((item) => [item.id,[]]));
+  dependencies.forEach((relation) => {
+    incoming.get(relation.targetId).push(relation);
+    outgoing.get(relation.sourceId).push(relation);
+  });
+  const indegree = new Map(tasks.map((item) => [item.id,incoming.get(item.id).length]));
+  const queue = tasks.filter((item) => indegree.get(item.id) === 0).map((item) => item.id);
+  const order = [];
+  while (queue.length) {
+    const id = queue.shift();
+    order.push(id);
+    for (const relation of outgoing.get(id)) {
+      const next = indegree.get(relation.targetId) - 1;
+      indegree.set(relation.targetId,next);
+      if (next === 0) queue.push(relation.targetId);
+    }
+  }
+  if (order.length !== tasks.length) return {valid:false,reliable:false,startDate,finishDate:"",durationDays:0,rows:tasks.map((item) => ({item,startOffset:plannedStart.get(item.id),duration:duration.get(item.id),slack:null,critical:false})),message:"Há um ciclo nas dependências temporais. O caminho crítico não pode ser calculado."};
+  const earliest = new Map(tasks.map((item) => [item.id,plannedStart.get(item.id)]));
+  const offsetFor = (relation) => {
+    const predDuration = duration.get(relation.sourceId);
+    const nextDuration = duration.get(relation.targetId);
+    const lag = Number(relation.lagDays) || 0;
+    if (relation.relationType === "TI") return predDuration + lag;
+    if (relation.relationType === "II") return lag;
+    if (relation.relationType === "TT") return predDuration + lag - nextDuration;
+    return lag - nextDuration;
+  };
+  for (const id of order) for (const relation of outgoing.get(id)) {
+    earliest.set(relation.targetId,Math.max(earliest.get(relation.targetId),earliest.get(id) + offsetFor(relation)));
+  }
+  const terminalIds = tasks.map((item) => item.id).filter((id) => outgoing.get(id).length === 0);
+  const projectFinish = Math.max(0,...terminalIds.map((id) => earliest.get(id) + duration.get(id)));
+  const latest = new Map(tasks.map((item) => [item.id,projectFinish - duration.get(item.id)]));
+  for (const id of [...order].reverse()) for (const relation of outgoing.get(id)) {
+    latest.set(id,Math.min(latest.get(id),latest.get(relation.targetId) - offsetFor(relation)));
+  }
+  const rows = tasks.map((item) => {
+    const es = earliest.get(item.id);
+    const slack = Math.max(0,latest.get(item.id) - es);
+    return {item,startOffset:es,duration:duration.get(item.id),slack,critical:slack < 0.01};
+  });
+  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectFinish),rows,message:reliable ? "" : "Cronograma incompleto: preencha início e término ideal para uma previsão confiável."};
+}
+
+function renderGantt(items) {
+  const analysis = scheduleAnalysis(items);
+  const maxDay = Math.max(1,...analysis.rows.map((row) => row.startOffset + row.duration));
+  let html = '<div class="gantt-card"><div class="gantt-heading"><div><h2>Cronograma e caminho crítico</h2><p>Dependências TI, II, TT e IF · duração em dias corridos</p></div><div><strong>Previsão de término</strong><span>' + escapeHtml(analysis.finishDate ? formatDate(analysis.finishDate) : "—") + '</span></div></div>';
+  if (analysis.message) html += '<div class="notice ' + (analysis.valid ? '' : 'error') + '" role="' + (analysis.valid ? 'status' : 'alert') + '">' + escapeHtml(analysis.message) + '</div>';
+  if (!analysis.rows.length) return html + emptyMarkup() + '</div>';
+  html += '<div class="gantt-scroll"><div class="gantt-axis"><span>Item</span><div><span>Início do plano: ' + escapeHtml(formatDate(analysis.startDate)) + '</span><span>Término calculado: ' + escapeHtml(formatDate(analysis.finishDate)) + '</span></div></div>';
+  html += analysis.rows.map((row) => {
+    const left = Math.max(0,Math.min(100,row.startOffset / maxDay * 100));
+    const width = Math.max(1,Math.min(100 - left,Math.max(1,row.duration / maxDay * 100)));
+    const start = shiftedDate(analysis.startDate,row.startOffset);
+    const finish = shiftedDate(analysis.startDate,row.startOffset + row.duration);
+    const incoming = relationsFor(items).filter((relation) => relation.targetId === row.item.id && ["TI","II","TT","IF"].includes(relation.relationType)).map((relation) => getItem(relation.sourceId)?.title).filter(Boolean);
+    return '<div class="gantt-row"><button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small>' + escapeHtml(userName(row.item.ownerId)) + ' · ' + escapeHtml(labelOf(statusCatalog,row.item.status)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button><div class="gantt-track"><div class="gantt-bar ' + (row.critical && analysis.valid ? 'critical' : '') + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga " + row.slack.toFixed(1) + "d")) + '"></div><span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + (incoming.length ? 'Depende de: ' + escapeHtml(incoming.join(", ")) : 'Sem predecessoras') + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
+  }).join("");
+  return html + '</div></div>';
 }
 
 function renderGraph(items) {
