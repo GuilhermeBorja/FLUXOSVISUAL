@@ -11,7 +11,7 @@ test("templates têm ações separadas e criação é acessível no cabeçalho",
   assert.match(workspace, /data-action="templates">.*?Modelos/s);
   assert.match(workspace, /data-action="create-from-template">.*?Criar conforme template/s);
   assert.match(workspace, /action === "create-from-template"/);
-  assert.match(workspace, /ui.templateCreationMode ? "Criar conforme template" : "Modelos"/);
+  assert.ok(workspace.includes('ui.templateCreationMode ? "Criar conforme template" : "Modelos"'));
 });
 
 test("propagação começa no item selecionado e evita repetir nós", () => {
