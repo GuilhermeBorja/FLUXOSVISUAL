@@ -185,3 +185,11 @@ test("atividades canceladas não ampliam a previsão nem o caminho crítico", ()
   assert.equal(analysis.durationDays,2);
   assert.equal(analysis.rows.some((row)=>row.item.id==="cancelled"),false);
 });
+
+test("cronograma sem atividades ativas não apresenta data fictícia de término", () => {
+  const analysis = analyzeSchedule([{id:"cancelled",parentId:"",status:"cancelled",plannedStartAt:"2026-01-01",dueAt:"2026-01-11",plannedDurationDays:10}],[]);
+  assert.equal(analysis.valid,true);
+  assert.equal(analysis.reliable,false);
+  assert.equal(analysis.finishDate,"");
+  assert.match(analysis.message,/Não há atividades ativas/);
+});
