@@ -301,7 +301,8 @@ function rowFillColor(item, depth) {
   const settings = state.rowFillSettings || {};
   const projectId = rootOf(item)?.id || "";
   const projectColor = settings.projects?.[projectId];
-  const levelColor = settings.levels?.[String(Math.min(depth, 3))];
+  const levelDefaults = ["#ffffff","#f5f8fa","#edf3f6","#e4edf2"];
+  const levelColor = settings.levels?.[String(Math.min(depth, 3))] || levelDefaults[Math.min(depth, 3)];
   const color = projectColor || levelColor || "";
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "transparent";
 }
