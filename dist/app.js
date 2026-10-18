@@ -971,34 +971,53 @@ function moveItemHierarchy(id, nextParentId = "") {
       visited.add(cursor.id); cursor = getItem(cursor.parentId);
     }
   }
-  const previousParentId = item.parentId || "";
-  const relation = state.relations.find((entry) => entry.relationType === "contains" && entry.targetId === item.id && entry.sourceId === previousParentId);
-  if (nextParent) {
-    if (relation) {
-      relation.previousSourceId = relation.sourceId; relation.previousTargetId = relation.targetId;
-      relation.sourceId = nextParent.id; relation.updatedAt = nowIso(); relation.updatedBy = currentUser().id;
-    } else state.relations.push({id:uid("rel"),sourceId:nextParent.id,targetId:item.id,relationType:"contains",lagDays:0,createdBy:currentUser().id,createdAt:nowIso(),description:"Hierarquia visual"});
-    item.parentId = nextParent.id;
-  } else {
-    if (relation) { archiveRecord("archivedRelations",relation); state.relations = state.relations.filter((entry) => entry.id !== relation.id); }
-    item.parentId = "";
+
+  // A hierarchy move touches parent IDs, CONTÉM relations, parent summaries,
+  // audit events and calculated dates. Keep a complete in-memory rollback point
+  // so a temporal-cycle or other schedule validation failure cannot leave a
+  // partially applied move in local state.
+  const rollback = {
+    items: state.items.map((entry) => ({...entry})),
+    relations: state.relations.map((entry) => ({...entry})),
+    events: state.events.map((entry) => ({...entry})),
+    archivedRelations: (state.archivedRelations || []).map((entry) => ({...entry})),
+  };
+  try {
+    const previousParentId = item.parentId || "";
+    const relation = state.relations.find((entry) => entry.relationType === "contains" && entry.targetId === item.id && entry.sourceId === previousParentId);
+    if (nextParent) {
+      if (relation) {
+        relation.previousSourceId = relation.sourceId; relation.previousTargetId = relation.targetId;
+        relation.sourceId = nextParent.id; relation.updatedAt = nowIso(); relation.updatedBy = currentUser().id;
+      } else state.relations.push({id:uid("rel"),sourceId:nextParent.id,targetId:item.id,relationType:"contains",lagDays:0,createdBy:currentUser().id,createdAt:nowIso(),description:"Hierarquia visual"});
+      item.parentId = nextParent.id;
+    } else {
+      if (relation) { archiveRecord("archivedRelations",relation); state.relations = state.relations.filter((entry) => entry.id !== relation.id); }
+      item.parentId = "";
+    }
+    const newSiblings = state.items.filter((entry) => entry.id !== item.id && entry.parentId === item.parentId);
+    item.sortOrder = newSiblings.length ? Math.max(...newSiblings.map((entry) => Number(entry.sortOrder ?? state.items.indexOf(entry)))) + 100 : 0;
+    createEvent(item.id,"parent_changed",previousParentId,nextParentId,"Hierarquia visual alterada.");
+    const pending = [item.id], visitedSubtree = new Set();
+    while (pending.length) {
+      const currentId = pending.shift();
+      if (visitedSubtree.has(currentId)) continue;
+      visitedSubtree.add(currentId);
+      syncContainsRelations(currentId);
+      state.items.filter((entry) => entry.parentId === currentId).forEach((child) => pending.push(child.id));
+    }
+    if (previousParentId) syncParentSummary(previousParentId);
+    if (nextParentId) syncParentSummary(nextParentId);
+    const schedule = recalculatePlannedDates();
+    if (!schedule.valid) throw new Error(schedule.message);
+    return true;
+  } catch (error) {
+    state.items = rollback.items;
+    state.relations = rollback.relations;
+    state.events = rollback.events;
+    state.archivedRelations = rollback.archivedRelations;
+    throw error;
   }
-  const newSiblings = state.items.filter((entry) => entry.id !== item.id && entry.parentId === item.parentId);
-  item.sortOrder = newSiblings.length ? Math.max(...newSiblings.map((entry) => Number(entry.sortOrder ?? state.items.indexOf(entry)))) + 100 : 0;
-  createEvent(item.id,"parent_changed",previousParentId,nextParentId,"Hierarquia visual alterada.");
-  const pending = [item.id], visitedSubtree = new Set();
-  while (pending.length) {
-    const currentId = pending.shift();
-    if (visitedSubtree.has(currentId)) continue;
-    visitedSubtree.add(currentId);
-    syncContainsRelations(currentId);
-    state.items.filter((entry) => entry.parentId === currentId).forEach((child) => pending.push(child.id));
-  }
-  if (previousParentId) syncParentSummary(previousParentId);
-  if (nextParentId) syncParentSummary(nextParentId);
-  const schedule = recalculatePlannedDates();
-  if (!schedule.valid) throw new Error(schedule.message);
-  return true;
 }
 
 function reorderItem(id, targetId, after = false) {
