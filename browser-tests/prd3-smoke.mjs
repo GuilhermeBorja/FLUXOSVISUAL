@@ -65,6 +65,56 @@ try {
   await page.getByRole("tab", { name: /Gantt/ }).click();
   await page.locator(`.gantt-item[data-select="${crossViewItem.id}"]`).getByText("P0 cross-view consistency edited").waitFor();
 
+  // P0 M-02: verify identity survives relation creation, reordering, completion,
+  // archiving and restoration in all three views.
+  const mutationPeerId = await page.evaluate(() => {
+    const peer = createItem({
+      title: "P0 cross-view mutation peer",
+      type: "task",
+      status: "in_progress",
+      ownerId: "u_luis",
+      organizationId: "org_castro",
+      sectorId: "sec_pmo",
+      state: "PE",
+      plannedStartAt: "2026-10-20",
+      dueAt: "2026-10-23",
+      plannedDurationDays: 3,
+      weight: 1,
+    });
+    render();
+    return peer.id;
+  });
+  await page.evaluate(({ id, peerId }) => {
+    createRelation(id, peerId, "blocks");
+    reorderItem(id, peerId, true);
+    const item = getItem(id);
+    updateItem(id, { ...item, status: "done", progressPercent: 100 }, nowIso(), "P0 M-02 completion mutation");
+    render();
+  }, { id: crossViewItem.id, peerId: mutationPeerId });
+
+  const assertCrossViewPresence = async (present) => {
+    await page.getByRole("tab", { name: /Sintética/ }).click();
+    const row = page.locator(`tr[data-row="${crossViewItem.id}"]`);
+    if (present) await row.waitFor();
+    else await row.waitFor({ state: "detached" });
+
+    await page.getByRole("tab", { name: /Analítica/ }).click();
+    const node = page.locator(`.graph-node[data-node="${crossViewItem.id}"]`);
+    if (present) await node.waitFor();
+    else await node.waitFor({ state: "detached" });
+
+    await page.getByRole("tab", { name: /Gantt/ }).click();
+    const bar = page.locator(`.gantt-item[data-select="${crossViewItem.id}"]`);
+    if (present) await bar.waitFor();
+    else await bar.waitFor({ state: "detached" });
+  };
+  await assertCrossViewPresence(true);
+
+  await page.evaluate((id) => { archiveItem(id); render(); }, crossViewItem.id);
+  await assertCrossViewPresence(false);
+  await page.evaluate((id) => { restoreArchivedItem(id); render(); }, crossViewItem.id);
+  await assertCrossViewPresence(true);
+
   await page.getByRole("tab", { name: /Sintética/ }).click();
 
   await page.getByRole("tab", { name: /Gantt/ }).click();
