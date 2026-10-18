@@ -125,3 +125,11 @@ test("cores de estado configuradas são repassadas aos nós do grafo", () => {
   assert.match(graph, /stroke="\$\{esc\(statusColor\)\}"/);
   assert.match(workspace, /statusColor: \(item\) => statusConfig\(item\.status\)\.color/);
 });
+
+test("cores das linhas são configuráveis por nível e por projeto", () => {
+  assert.match(workspace, /data-row-fill-level/);
+  assert.match(workspace, /data-row-fill-project/);
+  assert.match(workspace, /settings-reset-row-colors/);
+  assert.match(workspace, /function rowFillColor\(item, depth\)/);
+  assert.match(css, /--row-fill/);
+});
