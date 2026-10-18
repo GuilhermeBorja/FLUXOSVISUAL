@@ -59,3 +59,11 @@ test("cadastro exige duração explícita e subitens herdam o início de referê
   assert.match(workspace, /item\.parentId \? `<div class="schedule-summary">/);
   assert.match(workspace, /parentId:parent\.id/);
 });
+
+test("nós do grafo exibem início e término idealizados e instrução de arraste coerente", () => {
+  assert.match(graph, /class="node-ideal-start"/);
+  assert.match(graph, /class="node-ideal-end"/);
+  assert.match(workspace, /idealStart: \(item\) => item\.plannedStartAt/);
+  assert.match(workspace, /idealEnd: \(item\) => item\.dueAt/);
+  assert.match(workspace, /Arraste um nó individualmente/);
+});
