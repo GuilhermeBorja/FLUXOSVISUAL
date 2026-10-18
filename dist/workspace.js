@@ -333,8 +333,8 @@ function emptyMarkup() {
 
 function scheduleAnalysis(items) {
   const children = new Set(items.map((item) => item.parentId).filter(Boolean));
-  let tasks = items.filter((item) => !children.has(item.id));
-  if (!tasks.length) tasks = items;
+  let tasks = items.filter((item) => !children.has(item.id) && item.status !== "cancelled");
+  if (!tasks.length) tasks = items.filter((item) => item.status !== "cancelled");
   const taskIds = new Set(tasks.map((item) => item.id));
   const temporalTypes = new Set(["TI","II","TT","IF"]);
   const dependencies = relationsFor(items).filter((relation) => temporalTypes.has(relation.relationType) && taskIds.has(relation.sourceId) && taskIds.has(relation.targetId));
