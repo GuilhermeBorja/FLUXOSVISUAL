@@ -453,6 +453,7 @@ body.panel-open { overflow: hidden; }
 .gantt-bar.at-risk {
   background: #c69b2d;
 }
+.gantt-bar.cancelled { background: #b7c0c7; opacity: .65; }
 
 .gantt-dates {
   position: absolute;
