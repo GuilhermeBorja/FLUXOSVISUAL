@@ -10,12 +10,12 @@
 
 | Estado | Quantidade |
 |---|---:|
-| preservado | 19 |
+| preservado | 20 |
 | corrigido | 7 |
 | regressão encontrada | 0 |
-| não verificado | 18 |
+| não verificado | 17 |
 
-Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados. Entre os P0 parciais, 1 segue como não verificado: R2-15 (magnetismo do grafo).
+Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual. Nenhum P0 parcial permanece como `não verificado`; isso não libera produção, pois ainda faltam inspeção visual manual do grafo e fechamento dos cenários integrados listados abaixo.
 
 ## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
@@ -29,7 +29,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 | R2-09 | Perfis GPO padrão atribuíveis a usuários e exceções individuais | preservado | Testes cobrem padrão fechado, negação sem mutação, regras por escopo, perfil herdado e exceção individual. Falta matriz completa de precedência por operação/escopo e alteração de perfil após atribuição. |
 | R2-11 | Editar item pai: nome, responsável e término idealizado; previsto herdado | preservado | Teste P0 valida edição do nome/responsável, repactuação do pai, recálculo da previsão dos descendentes, baseline original inalterada e eventos de auditoria. CI #145 passou; a inspeção visual do painel ainda não foi verificada. |
 | R2-13 | “Pronto” substituído por “Liberado para execução”, atribuído automaticamente quando predecessor liberar | preservado | Teste automatizado verifica múltiplas predecessoras e bloqueios antes da liberação automática. Falta cobrir reabertura, aprovação e correção, inclusive regressão de estado após mudança de predecessor. |
-| R2-15 | Magnetismo dos nós inspirado em mindmap | não verificado | Contrato verifica o fallback de arraste individual, mas não prova magnetismo visual. Executar pan/zoom, encaixe de nós, persistência de posições após recarregar e interações em grafos densos. |
+| R2-15 | Magnetismo dos nós inspirado em mindmap | preservado | Tentativa controlada implementa resposta proporcional por distância. Smoke browser #177 confirma nó selecionado seguindo o ponteiro, nó relacionado movendo proporcionalmente, posições salvas, estabilidade após soltura, zoom, pan e troca de agrupamento. Falta inspeção visual manual em resoluções e grafos densos; não repetir tentativa de magnetismo sem autorização. |
 | R2-19 | Propagação segue sequência da Sintética, passa pelos subitens, retorna ao pai e continua | preservado | `tests/prd3-ui-contract.test.mjs` executa o algoritmo de propagação em uma hierarquia com subitem, neto, ramo irmão bloqueado e componente desconectado; valida a ordem `selecionado → descendentes → pai → ramo irmão → componente restante`, sem repetição e com marcação do bloqueio. CI #162 passou. Falta validar manualmente filtros e grafos reais/densos. |
 | R2-22 | Botão “Criar conforme template” ao lado de “Novo item” | preservado | Requisito já marcado Conforme na matriz. Teste de contrato verifica ações separadas Modelos/Criar conforme template e botão acessível no cabeçalho. |
 | R2-24 | Percentual de avanço e estado se retroalimentam | preservado | Testes cobrem conclusão/reabertura, percentual e status herdado de grupos. Falta percorrer a matriz completa de transições para todos os estados e validar os reflexos nas três visões. |
@@ -84,7 +84,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 - **GPO e integridade transacional:** o teste [26a78c34](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/26a78c34cc42d0f4917ea9e7087ad055a429f668) reproduziu mutação parcial antes da negação GPO; corrigido no [commit 46864d31](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/46864d319ef2001d0de5052f381f13fa49258eee). O CI #140 passou com 75 testes e smoke browser.
 - **Parent editing e folgas:** os testes P0 de edição/repactuação do pai e folgas numéricas do caminho crítico passaram no [CI #145](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171144437).
 - **Prévia de subitem:** o teste browser reproduziu a data final errada quando o início do pai era diferente de hoje; corrigido no [commit 379b6335](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/379b6335f530b611258a0b88bf32c7c020aec1e3), validado no CI #150.
-- **Validação consolidada mais recente:** [CI #168](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175277872), sintaxe, testes automatizados, build e smoke browser aprovados; cenários P0 de R2-19, R2-25, M-01, M-02, M-09 e M-13 passaram. M-01 agora está classificado como preservado nos cenários cobertos; combinações adicionais seguem pendentes.
+- **Validação consolidada mais recente:** [CI #177](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175581995), sintaxe, testes automatizados, build e smoke browser aprovados; cenários P0 de R2-15, R2-19, R2-25, M-01, M-02, M-09 e M-13 passaram. A inspeção visual manual e os cenários integrados adicionais continuam pendentes.
 
 ## 4. Ordem de execução pendente
 
