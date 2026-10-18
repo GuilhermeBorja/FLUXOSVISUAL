@@ -403,7 +403,9 @@ function renderGraphTree(items) {
     return html + '</div>';
   }
   const roots = items.filter((item) => !visible.has(item.parentId));
-  return '<nav class="graph-tree" aria-label="Árvore de itens"><h3>Navegar itens<small class="tree-hint">Marque caixas para destacar um conjunto</small></h3><div class="graph-tree-list">' + roots.map((item) => visit(item,0)).join("") + '</div></nav>';
+  const owners = [...new Set(items.map((item) => item.ownerId).filter(Boolean))].sort((a,b)=>userName(a).localeCompare(userName(b),"pt-BR"));
+  const ownerFilters = '<section class="graph-owner-filters"><h4>Responsáveis</h4>' + owners.map((id)=>'<button type="button" data-highlight-owner="' + escapeHtml(id) + '" aria-pressed="' + (ui.graphOwnerHighlight===id) + '" class="' + (ui.graphOwnerHighlight===id ? 'active' : '') + '">' + escapeHtml(userName(id)) + '</button>').join('') + (ui.graphOwnerHighlight ? '<button type="button" class="clear-owner-filter" data-highlight-owner="">Limpar destaque</button>' : '') + '</section>';
+  return '<nav class="graph-tree" aria-label="Árvore de itens">' + ownerFilters + '<h3>Navegar itens<small class="tree-hint">Marque caixas para destacar um conjunto</small></h3><div class="graph-tree-list">' + roots.map((item) => visit(item,0)).join("") + '</div></nav>';
 }
 
 function renderGraph(items) {
@@ -447,7 +449,7 @@ function mountGraph(items) {
     onPositions: (positions) => { ui.positions[layoutKey()] = positions; state.graphPositions = ui.positions; saveState(); },
     onZoom: (value) => { const label = document.querySelector("#zoomLabel"); if (label) label.textContent = `${value}%`; },
   });
-  if (ui.graphHighlight) document.querySelectorAll("#graphCanvas [data-node]").forEach((element) => element.classList.toggle("dimmed",signalOf(getItem(element.dataset.node)) !== ui.graphHighlight));
+  if (ui.graphHighlight || ui.graphOwnerHighlight) document.querySelectorAll("#graphCanvas [data-node]").forEach((element) => { const item=getItem(element.dataset.node); const signalMatches=!ui.graphHighlight || signalOf(item)===ui.graphHighlight; const ownerMatches=!ui.graphOwnerHighlight || item.ownerId===ui.graphOwnerHighlight; element.classList.toggle("dimmed",!signalMatches || !ownerMatches); });
   ui.graphKey = graphKey;
 }
 
@@ -839,6 +841,7 @@ function bindWorkspace() {
       ui.graphHighlight = button.dataset.highlightSignal === "all" || ui.graphHighlight === button.dataset.highlightSignal ? "" : button.dataset.highlightSignal;
       render(); return;
     }
+    if (button.dataset.highlightOwner !== undefined) { ui.graphOwnerHighlight = button.dataset.highlightOwner || ""; render(); return; }
     if (button.dataset.expand) {
       const id = button.dataset.expand; ui.collapsed ||= new Set();
       if (!ui.showSubitems) { ui.showSubitems = true; ui.collapsed.delete(id); }
