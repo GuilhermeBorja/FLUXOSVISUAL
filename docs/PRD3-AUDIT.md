@@ -8,7 +8,7 @@
 
 | ID | Fonte | Requisito / critério de aceite | Prioridade | Arquivos afetados | Estado | Testes, evidência e pendência | Decisão |
 |---|---|---|---|---|---|---|---|
-| R2-01 | PRD2 | Ao criar ou mover um item para subitem, vinculá-lo a todos os pais pela relação CONTÉM | P0 | dist/app.js; tests/core.test.mjs | Parcial | Contenção sincronizada na subárvore ao mover; teste cobre neto e ancestrais. Falta validar criação, reordenação, remoção e restauração. | Não liberar; fechar pendências |
+| R2-01 | PRD2 | Ao criar ou mover um item para subitem, vinculá-lo a todos os pais pela relação CONTÉM | P0 | dist/app.js; tests/core.test.mjs | Parcial | Contenção sincronizada na subárvore ao mover; testes cobrem neto/ancestrais e rollback transacional de movimento e criação quando a validação temporal falha. Falta validar criação, reordenação, remoção e restauração em todos os caminhos. | Não liberar; fechar pendências |
 | R2-02 | PRD2 | Redimensionar, ocultar e mostrar colunas na Sintética | P0 | dist/workspace.js; dist/styles.css; tests/prd3-ui-contract.test.mjs | Parcial | Colunas ocultáveis e redimensionamento por arraste foram verificados em Chromium; viewport móvel de 390px foi testada. Faltam as cinco resoluções completas e teste de redimensionamento por teclado. | Não liberar; fechar pendências |
 | R2-03 | PRD2 | Histórico dos filhos consultável no histórico do pai | P1 | dist/workspace.js; tests/prd3-ui-contract.test.mjs | Parcial | Histórico consulta descendentes e identifica a origem; teste de agregação e filtro de visibilidade incluído. Faltam permissões, arquivamento e duplicação. | Não liberar; fechar pendências |
 | R2-04 | PRD2 | Trabalhar com durações e relações, não exigir datas individuais na criação de cada atividade | P0 | dist/app.js; dist/workspace.js; tests/core.test.mjs; tests/prd3-ui-contract.test.mjs | Parcial | Duração explícita, previsão sem duração presumida, início herdado e duração por etapa em lote. Falta validar a pré-visualização integrada antes da confirmação. | Não liberar; fechar pendências |
@@ -59,6 +59,12 @@
 | M-11 | PRD Mestre v1.1 | Limitações de anexos locais explicitadas; sem simular backend | P1 | dist/app.js; dist/workspace.js; README.md | Parcial | Auditar avisos em todas as superfícies. | Não liberar |
 | M-12 | PRD Mestre v1.1 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | P0 | dist/app.js; tests/core.test.mjs; README.md | Parcial | Falta matriz completa; autorização é apenas client-side. | Não liberar |
 | M-13 | PRD Mestre v1.1 | Critérios de aceite, testes e evidência rastreáveis | P0 | docs/PRD3.md; docs/PRD3-AUDIT.md; .github/workflows/prd3-validation.yml | Parcial | CI automatizado passa, mas faltam testes visuais/interação e fechamento dos itens parciais. | Não liberar |
+
+## Correções transacionais recentes — aguardando CI
+
+- `moveItemHierarchy` restaura itens, relações, eventos e relações arquivadas se a validação temporal falhar.
+- `createItem` restaura itens, relações, eventos e relações arquivadas se a validação temporal falhar.
+- Foram adicionados testes de regressão para ambos os cenários. Não marcar como aprovados até verificar o resultado do workflow acionado por esses commits.
 
 ## Validação automatizada
 
