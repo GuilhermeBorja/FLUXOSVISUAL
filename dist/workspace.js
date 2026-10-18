@@ -111,6 +111,7 @@ function mountIcons() {
 }
 
 function render() {
+  if (state.setupComplete === false) { renderMasterSetup(); return; }
   if (graphInstance) { ui.graphTransform = graphInstance.getTransform(); graphInstance.destroy(); graphInstance = null; }
   if (!currentUser() || currentUser().disabled) {
     state.currentUserId = "";
@@ -136,6 +137,7 @@ function render() {
         <button class="button quiet" data-action="templates">${icon("workflow")}Modelos</button>
         ${canCreateItem(user) ? `<button class="button quiet" data-action="templates">${icon("workflow")}Criar conforme template</button><button class="button primary" data-action="create">${icon("plus")}Novo item</button>` : ""}
       </section>
+      ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
       <section class="workspace-controls" aria-label="Visualização e filtros">
         <div class="mode-tabs" role="tablist" aria-label="Visualização">
@@ -162,9 +164,32 @@ function render() {
   mountIcons();
 }
 
+function renderMasterSetup() {
+  app.innerHTML = `<main class="login-screen"><section class="login-card">
+    <div class="brand">${icon("workflow")}<span>FLUXO VISUAL</span></div>
+    <h1>Criar usuário master</h1>
+    <p>O workspace começará vazio. O master poderá cadastrar a organização, os setores e os demais usuários.</p>
+    <form id="masterSetupForm" class="form-stack"><label>Nome do administrador<input name="name" required maxlength="120" autocomplete="name"/></label><label>E-mail<input name="email" type="email" required autocomplete="email"/></label><button class="button primary" type="submit">Criar usuário master</button></form>
+    <div class="demo-note"><strong>Protótipo de validação</strong><span>Os dados permanecem neste navegador. Esta etapa não substitui autenticação segura no servidor.</span></div>
+    </section></main>`;
+  document.querySelector("#masterSetupForm").addEventListener("submit",(event)=>{
+    event.preventDefault();
+    const form=new FormData(event.currentTarget), name=String(form.get("name")||"").trim(), email=String(form.get("email")||"").trim().toLowerCase();
+    if (!name || !email) return;
+    if (state.users.some((user)=>user.email.toLowerCase()===email)) { notify("Já existe um usuário com este e-mail.","error"); return; }
+    const user={id:uid("user"),name,email,state:"",organizationId:"",sectorId:"",role:"master",disabled:false};
+    state.users.push(user);
+    state.permissionRules=Object.keys(permissionOperationLabels).map((operation)=>({id:uid("gpo"),subjectType:"user",subjectId:user.id,operation,scopeType:"global",scopeId:"",effect:"allow",createdBy:user.id,createdAt:nowIso()}));
+    state.setupComplete=true; state.currentUserId=user.id; state.workspaceName="";
+    createEvent(user.id,"created","","master","Usuário master criado.");
+    saveState(); render();
+  });
+  mountIcons();
+}
+
 function renderLogin() {
   app.innerHTML = `<main class="login-screen"><section class="login-card">
-    <div class="brand">${icon("workflow")}<span>Fluxos</span></div>
+    <div class="brand">${icon("workflow")}<span>FLUXO VISUAL</span></div>
     <h1>Acesse sua operação</h1>
     <p>Escolha um usuário para testar as regras GPO de demonstração.</p>
     <form id="loginForm"><label>Usuário<select name="userId" required>${state.users.filter((user) => !user.disabled).map((user) => option(user.id, `${user.name} · ${orgName(user.organizationId)}`)).join("")}</select></label><button class="button primary" type="submit">Entrar</button></form>
@@ -823,6 +848,7 @@ function bindWorkspace() {
     const action = button.dataset.action;
     if (action === "create") { returnFocus = button; ui.panel = "create"; ui.createParentId = ""; renderPanel(); }
     else if (action === "admin") { returnFocus = button; ui.panel = "admin"; renderPanel(); }
+    else if (action === "configure-workspace") { returnFocus = button; ui.adminTab = "organizations"; ui.panel = "admin"; renderPanel(); }
     else if (action === "templates") { returnFocus = button; ui.templateId = ""; ui.panel = "templates"; renderPanel(); }
     else if (action === "filters") { ui.filtersOpen = !ui.filtersOpen; render(); }
     else if (action === "clear-filters") { state.filters = {query:"",status:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}; saveState(); render(); }
