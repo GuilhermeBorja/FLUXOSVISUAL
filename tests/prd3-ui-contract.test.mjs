@@ -21,9 +21,12 @@ test("propagação começa no item selecionado e evita repetir nós", () => {
   assert.match(graph, /Finish its subtree, then climb/);
 });
 
-test("fallback do grafo move o nó selecionado sem arrastar todo o componente", () => {
-  assert.match(graph, /move the selected node only/);
-  assert.doesNotMatch(graph, /const nodes = model\.nodes\.filter\(\(node\) => model\.connected\.get\(node\.id\) === componentId\)/);
+test("magnetismo controlado move nós relacionados proporcionalmente sem reexecutar forças", () => {
+  assert.match(graph, /Controlled PRD3 magnetism attempt/);
+  assert.match(graph, /distanceById\.set\(neighborId, distanceById\.get\(currentId\) \+ 1\)/);
+  assert.match(graph, /Math\.max\(0\.08, Math\.pow\(0\.32, distance\)\)/);
+  assert.match(graph, /gesture\.kind === "nodes" \? origin\.influence \?\? 1 : 1/);
+  assert.match(graph, /function savePositions\(\)/);
 });
 
 test("configurações locais permitem alterar colunas e restaurar larguras automáticas", () => {
