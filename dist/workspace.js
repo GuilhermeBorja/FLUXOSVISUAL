@@ -330,16 +330,23 @@ function scheduleAnalysis(items) {
   const dependencies = relationsFor(items).filter((relation) => temporalTypes.has(relation.relationType) && taskIds.has(relation.sourceId) && taskIds.has(relation.targetId));
   const sortedDates = tasks.map((item) => item.plannedStartAt).filter(Boolean).sort();
   const startDate = sortedDates[0] || today();
-  const reliable = tasks.length > 0 && tasks.every((item) => item.plannedStartAt && item.dueAt && item.dueAt >= item.plannedStartAt);
   const duration = new Map();
   const plannedStart = new Map();
+  let durationsComplete = tasks.length > 0;
   for (const item of tasks) {
-    const days = item.plannedStartAt && item.dueAt
-      ? Math.max(0,(new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000)
-      : 1;
-    duration.set(item.id,days);
+    const explicitDuration = Number(item.plannedDurationDays);
+    const hasExplicitDuration = item.plannedDurationDays !== null && item.plannedDurationDays !== undefined && item.plannedDurationDays !== "" && Number.isFinite(explicitDuration) && explicitDuration >= 0;
+    const hasDateRange = item.plannedStartAt && item.dueAt && item.dueAt >= item.plannedStartAt;
+    const days = hasExplicitDuration
+      ? explicitDuration
+      : hasDateRange
+        ? Math.max(0,(new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000)
+        : null;
+    if (days === null) durationsComplete = false;
+    duration.set(item.id,days ?? 0);
     plannedStart.set(item.id,item.plannedStartAt ? Math.max(0,(new Date(item.plannedStartAt + "T12:00:00") - new Date(startDate + "T12:00:00")) / 86400000) : 0);
   }
+  const reliable = tasks.length > 0 && durationsComplete && tasks.every((item) => item.plannedStartAt && (item.plannedDurationDays !== undefined && item.plannedDurationDays !== null && item.plannedDurationDays !== "" || item.dueAt && item.dueAt >= item.plannedStartAt));
   const incoming = new Map(tasks.map((item) => [item.id,[]]));
   const outgoing = new Map(tasks.map((item) => [item.id,[]]));
   dependencies.forEach((relation) => {
@@ -383,7 +390,7 @@ function scheduleAnalysis(items) {
     const slack = Math.max(0,latest.get(item.id) - es);
     return {item,startOffset:es,duration:duration.get(item.id),slack,critical:slack < 0.01};
   });
-  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectFinish),rows,message:reliable ? "" : "Cronograma incompleto: defina a data inicial e a duração planejada das atividades para uma previsão confiável."};
+  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectFinish),rows,message:reliable ? "" : "Cronograma incompleto: informe a data inicial idealizada e uma duração explícita (ou início e término válidos) para cada atividade; nenhuma duração é presumida."};
 }
 
 function renderGantt(items) {
