@@ -28,6 +28,7 @@ try {
   await page.locator(".graph-svg").waitFor();
   assert.ok(await page.locator(".node-ideal-start").count() > 0);
   assert.ok(await page.locator(".node-ideal-end").count() > 0);
+  assert.ok((await page.locator(".node-duration").first().textContent()).includes("Resp."));
 
   await page.getByRole("button", { name: /Configurações/ }).click();
   await page.locator('[data-row-fill-level="1"]').waitFor();
@@ -36,6 +37,13 @@ try {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await page.locator(".ops-shell").waitFor();
+  await page.locator('[data-action="close-panel"]').click();
+  await page.getByRole("tab", { name: /Sintética/ }).click();
+  const showSubitems = page.locator("#showSubitems");
+  if (!(await showSubitems.isChecked())) await showSubitems.check();
+  const childRow = page.locator('tr[data-depth="1"]').first();
+  await childRow.waitFor();
+  assert.equal(await childRow.evaluate((row) => getComputedStyle(row).getPropertyValue("--row-fill").trim()), "#123456");
   assert.equal(errors.length, 0, errors.join("\n"));
 
   await page.setViewportSize({ width: 390, height: 844 });
