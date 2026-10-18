@@ -503,3 +503,18 @@ test("P0 integrado: mover subárvore, editar dependência e arquivar/restaurar p
   assert.equal(run('state.relations.every((r)=>!!getItem(r.sourceId) && !!getItem(r.targetId))'),true);
   assert.equal(run('JSON.stringify([child.baselineStartAt,child.baselineDueAt,grandchild.baselineStartAt,grandchild.baselineDueAt])'),run('baseline'));
 });
+
+
+test("P0 GPO: precedência de escopo e exceção individual é determinística e nega sem mutação", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";item=getItem("item_doors");currentUser().profileId="profile_test";originalTitle=item.title;');
+  run('createPermissionRule({subjectType:"profile",subjectId:"profile_test",operation:"edit_item",scopeType:"global",scopeId:"",effect:"deny"});');
+  run('createPermissionRule({subjectType:"profile",subjectId:"profile_test",operation:"edit_item",scopeType:"organization",scopeId:item.organizationId,effect:"allow"});');
+  run('createPermissionRule({subjectType:"profile",subjectId:"profile_test",operation:"edit_item",scopeType:"sector",scopeId:item.sectorId,effect:"deny"});');
+  run('createPermissionRule({subjectType:"profile",subjectId:"profile_test",operation:"edit_item",scopeType:"item",scopeId:item.id,effect:"allow"});');
+  assert.equal(run('canEditItem(currentUser(),item)'),true,"escopo do item deve prevalecer sobre setor, organização e global");
+  run('createPermissionRule({subjectType:"user",subjectId:"u_luis",operation:"edit_item",scopeType:"item",scopeId:item.id,effect:"deny"});');
+  assert.equal(run('canEditItem(currentUser(),item)'),false,"regra individual no mesmo escopo deve prevalecer sobre perfil");
+  assert.throws(() => run('updateItem(item.id,{...item,title:"Mutação negada"},nowIso())'),/GPO/);
+  assert.equal(run('getItem(item.id).title'),run("originalTitle"));
+});
