@@ -1026,6 +1026,12 @@ function updateRelation(id, input) {
 }
 
 function createEvent(itemId, eventType, fromValue, toValue, comment, effectiveAt = nowIso()) {
+  const item = getItem(itemId), actor = currentUser();
+  const organizationId = item?.organizationId || actor?.organizationId || "";
+  const sectorId = item?.sectorId || actor?.sectorId || "";
+  const organizationName = state.organizations.find((entry)=>entry.id===organizationId)?.name || "";
+  const sectorName = state.sectors.find((entry)=>entry.id===sectorId)?.name || "";
+  const stateSnapshot = item?.state || actor?.state || "";
   state.events.push({
     id: uid("event"),
     itemId,
@@ -1033,6 +1039,10 @@ function createEvent(itemId, eventType, fromValue, toValue, comment, effectiveAt
     fromValue,
     toValue,
     userId: currentUser()?.id || "system",
+    actorNameSnapshot: actor?.name || "Sistema",
+    actorOrganizationNameSnapshot: state.organizations.find((entry)=>entry.id===actor?.organizationId)?.name || "",
+    organizationIdSnapshot: organizationId, organizationNameSnapshot: organizationName,
+    sectorIdSnapshot: sectorId, sectorNameSnapshot: sectorName, stateSnapshot,
     createdAt: nowIso(),
     effectiveAt,
     comment: comment || "",
