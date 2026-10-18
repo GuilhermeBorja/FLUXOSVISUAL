@@ -429,3 +429,15 @@ test("P0: predecessora cancelada não desloca a previsão da atividade ativa", (
   assert.equal(run('active.plannedStartAt'),"2026-10-01");
   assert.equal(run('active.dueAt'),"2026-10-03");
 });
+
+test("P0: arquivar e restaurar subárvore preserva relações CONTÉM e temporais", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...' + defaults + ',title:"Raiz",type:"project"});parent=createItem({...' + defaults + ',title:"Pai",parentId:root.id});child=createItem({...' + defaults + ',title:"Filho",parentId:parent.id});external=createItem({...' + defaults + ',title:"Externo"});createRelation(child.id,external.id,"TI",1);relationIds=state.relations.map((r)=>r.id).sort().join(",");archiveItem(parent.id);');
+  assert.equal(run('getItem(parent.id).archivedAt!=="" && getItem(child.id).archivedAt!==""'),true);
+  assert.equal(run('state.relations.map((r)=>r.id).sort().join(",")===relationIds'),true);
+  run('restoreArchivedItem(parent.id);');
+  assert.equal(run('getItem(parent.id).archivedAt'),"");
+  assert.equal(run('getItem(child.id).archivedAt'),"");
+  assert.equal(run('state.relations.map((r)=>r.id).sort().join(",")===relationIds'),true);
+  assert.equal(run('state.relations.every((r)=>!!getItem(r.sourceId) && !!getItem(r.targetId))'),true);
+});
