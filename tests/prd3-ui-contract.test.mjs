@@ -244,3 +244,9 @@ test("timer do nó mede o tempo com o responsável atual", () => {
   const timer = vm.runInNewContext(source + "\nownerElapsedLabel",sandbox);
   assert.equal(timer({id:"task",ownerId:"u2",createdAt:"2026-01-01T00:00:00.000Z",completedAt:""}),"1440");
 });
+
+
+test("P0: a Sintética não apresenta peso inválido zero como peso padrão 1", () => {
+  assert.ok(workspace.includes('<td class="weight-cell">${Number(item.weight ?? 1)}</td>'));
+  assert.equal(workspace.includes("Number(item.weight || 1)"), false);
+});
