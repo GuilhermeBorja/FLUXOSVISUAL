@@ -376,7 +376,7 @@ function renderGantt(items) {
     return {item,startOffset,duration,slack:null,critical:false,structural:true,depth,children};
   });
   const maxDay = Math.max(1,...rows.map((row) => row.startOffset + row.duration + (row.slack || 0)));
-  let html = '<div class="gantt-card"><div class="gantt-heading"><div><h2>Cronograma e caminho crítico</h2><p>Dependências temporais · duração em dias corridos</p></div><div><strong>Previsão de término</strong><span>' + escapeHtml(analysis.finishDate ? formatDate(analysis.finishDate) : "—") + '</span></div></div>';
+  let html = '<div class="gantt-card"><div class="gantt-heading"><div><h2>Cronograma e caminho crítico</h2></div><div><strong>Previsão de término</strong><span>' + escapeHtml(analysis.finishDate ? formatDate(analysis.finishDate) : "—") + '</span></div></div>';
   html += '<div class="gantt-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ' + (ui.showSubitems ? 'checked' : '') + '/>Mostrar subitens</label>' + (canManageGpo(currentUser()) ? '<label class="risk-setting">Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="' + Math.max(1,Math.min(60,Number(state.riskThresholdDays) || 3)) + '"/></label>' : '') + '</div>';
   if (analysis.message) html += '<div class="notice ' + (analysis.valid ? '' : 'error') + '" role="' + (analysis.valid ? 'status' : 'alert') + '">' + escapeHtml(analysis.message) + '</div>';
   if (!rows.length) return html + emptyMarkup() + '</div>';
