@@ -767,7 +767,8 @@ function renderAdmin() {
   const tabs = [];
   if (canManageAnyUsers(currentUser())) tabs.push({id:"users",label:"Usuários"});
   if (canManageAnyOrganization(currentUser()) || gpoDecision(currentUser(),"manage_organization",null) === true) tabs.push({id:"organizations",label:"Empresas e setores"});
-  if (canManageGpo(currentUser())) { tabs.push({id:"gpo",label:"GPO"}); tabs.push({id:"statuses",label:"Status"}); tabs.push({id:"archive",label:"Arquivados"}); }
+  if (canManageGpo(currentUser())) { tabs.push({id:"gpo",label:"GPO"}); tabs.push({id:"statuses",label:"Status"}); }
+  if (canManageGpo(currentUser()) || state.items.some((item)=>item.archivedAt && canEditItem(currentUser(),item))) tabs.push({id:"archive",label:"Arquivados"});
   if (canManageAnyOrganization(currentUser()) || canManageGpo(currentUser())) tabs.push({id:"types",label:"Tipos de item"});
   if (!tabs.some((tab) => tab.id === ui.adminTab)) ui.adminTab = tabs[0]?.id || "users";
   return `${panelHeader("Administração","Cadastros e permissões")}<div class="panel-tabs" role="tablist">${tabs.map((tab) => `<button role="tab" aria-selected="${ui.adminTab === tab.id}" data-admin-tab="${tab.id}" class="${ui.adminTab === tab.id ? "active" : ""}">${tab.label}</button>`).join("")}</div><div class="drawer-body">
@@ -775,7 +776,7 @@ function renderAdmin() {
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}${gpoDecision(currentUser(),"manage_organization",null) === true ? `<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section>` : ""}<section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.filter((org) => canManageOrganization(currentUser(),org.id)).map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "gpo" && canManageGpo(currentUser()) ? renderGpo() : ""}
     ${ui.adminTab === "statuses" && canManageGpo(currentUser()) ? renderStatusSettings() : ""}
-    ${ui.adminTab === "archive" && canManageGpo(currentUser()) ? renderArchivedItems() : ""}
+    ${ui.adminTab === "archive" && (canManageGpo(currentUser()) || state.items.some((item)=>item.archivedAt && canEditItem(currentUser(),item))) ? renderArchivedItems() : ""}
     ${ui.adminTab === "types" ? renderTypeSettings() : ""}
   </div>`;
 }
