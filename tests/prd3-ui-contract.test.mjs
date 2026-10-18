@@ -174,3 +174,14 @@ test("preenchimento de linha prioriza projeto, depois nível, e valida a cor", (
   assert.equal(colorFor({project:"projectC"},1),"#123456");
   assert.equal(colorFor({project:"projectC"},0),"#ffffff");
 });
+
+test("atividades canceladas não ampliam a previsão nem o caminho crítico", () => {
+  const items = [
+    {id:"active",parentId:"",status:"in_progress",plannedStartAt:"2026-01-01",dueAt:"2026-01-03",plannedDurationDays:2},
+    {id:"cancelled",parentId:"",status:"cancelled",plannedStartAt:"2026-01-01",dueAt:"2026-04-11",plannedDurationDays:100},
+  ];
+  const analysis = analyzeSchedule(items,[]);
+  assert.equal(analysis.valid,true);
+  assert.equal(analysis.durationDays,2);
+  assert.equal(analysis.rows.some((row)=>row.item.id==="cancelled"),false);
+});
