@@ -273,3 +273,22 @@ test("edição é revertida integralmente quando o cronograma detecta ciclo", ()
   assert.equal(run("getItem(first.id).title"),"Original A");
   assert.equal(run("state.events.length"),run("oldEvents"));
 });
+
+
+test("editar relação preserva o ID e registra a alteração", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`a=createItem({...${defaults},title:"Origem"});b=createItem({...${defaults},title:"Destino B"});c=createItem({...${defaults},title:"Destino C"});rel=createRelation(a.id,b.id,"TI",0,"Inicial");relId=rel.id;updateRelation(rel.id,{sourceId:a.id,targetId:c.id,relationType:"TT",lagDays:2,description:"Atualizada"});`);
+  assert.equal(run("state.relations.some((r)=>r.id===relId && r.targetId===c.id && r.relationType===\"TT\" && r.lagDays===2 && r.description===\"Atualizada\")"),true);
+  assert.equal(run('state.events.some((e)=>e.eventType==="relation_updated" && e.itemId===b.id)'),true);
+});
+
+test("transformar um item em aprovação preserva identidade, relações e histórico", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`a=createItem({...${defaults},title:"Atividade"});b=createItem({...${defaults},title:"Dependente"});rel=createRelation(a.id,b.id,"TI");beforeEvents=state.events.length;updateItem(a.id,{...a,type:"approval"},nowIso(),"Transformado em aprovação");`);
+  assert.equal(run('getItem(a.id).type'),"approval");
+  assert.equal(run("getItem(a.id).id"),run("a.id"));
+  assert.equal(run("state.relations.some((r)=>r.id===rel.id && r.sourceId===a.id && r.targetId===b.id)"),true);
+  assert.equal(run('state.events.some((e)=>e.itemId===a.id && e.eventType==="type_changed" && e.toValue==="approval")'),true);
+});
