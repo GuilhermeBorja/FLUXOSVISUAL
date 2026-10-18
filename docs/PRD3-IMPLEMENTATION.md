@@ -75,3 +75,6 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 - **Atividades canceladas no Gantt:** canceladas deixam de ampliar a previsão e não participam do caminho crítico; se não houver atividade ativa, a previsão de término fica vazia em vez de mostrar uma data fictícia. As barras canceladas usam apresentação neutra. Testes de regressão passaram.
 - **Criação em lote:** cada etapa agora exige duração explícita; a previsão não reutiliza silenciosamente a duração do item pai como padrão para etapas. Teste de contrato passou.
 - **CI mais recente:** https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166237466 — sintaxe, testes e build aprovados.
+
+- **Seletores de status:** cores configuradas agora são aplicadas aos seletores operacionais, além de tabela, grafo e Gantt. Teste de contrato passou.
+- **CI mais recente:** https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166377642 — sintaxe, testes e build aprovados.
