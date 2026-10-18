@@ -659,3 +659,5 @@ body.panel-open { overflow: hidden; }
 .graph-owner-filters{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line,#dce3e7)}.graph-owner-filters h4{width:100%;margin:0;font-size:12px;color:var(--muted,#62717a)}.graph-owner-filters button{border:1px solid var(--line,#dce3e7);border-radius:999px;padding:5px 9px;background:var(--surface,#fff);font-size:12px}.graph-owner-filters button.active{border-color:var(--accent,#287d62);background:var(--surface-subtle,#eef5f1);font-weight:600}.graph-owner-filters .clear-owner-filter{border-style:dashed}
 
 .status-badge{border-color:color-mix(in srgb,var(--status-color,#687780) 30%,transparent)}.status-symbol{display:inline-flex;align-items:center;justify-content:center;color:var(--status-color,#687780)}.status-symbol svg{width:13px;height:13px;stroke:currentColor}
+
+.drawer{resize:horizontal;overflow:auto;min-width:min(320px,90vw);max-width:90vw}.drawer-body{overflow:auto}
