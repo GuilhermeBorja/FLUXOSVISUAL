@@ -943,12 +943,13 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
     createdBy: currentUser()?.id || "system",
     createdAt: nowIso(),
   };
+  const previousTargetParentId = target.parentId || "";
   state.relations.push(relation);
   if (relationType === "contains" && (!target.parentId || target.parentId === sourceId)) target.parentId = sourceId;
   const schedule = recalculatePlannedDates();
   if (!schedule.valid) {
     state.relations = state.relations.filter((entry) => entry.id !== relation.id);
-    if (relationType === "contains") target.parentId = "";
+    target.parentId = previousTargetParentId;
     throw new Error(schedule.message);
   }
   createEvent(targetId, "relation_created", "", relationType, relation.description || `Relação criada a partir de ${getItem(sourceId)?.title}.`);
