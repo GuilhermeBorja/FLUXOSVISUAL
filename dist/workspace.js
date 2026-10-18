@@ -430,7 +430,7 @@ function mountGraph(items) {
     labels: {
       owner: userName, organization: orgName, relation: (id) => labelOf(relationTypes, id),
       type: (item) => itemTypeConfig(item.type,item.organizationId).label, typeColor: (item) => itemTypeConfig(item.type,item.organizationId).color, status: (item) => signalLabel(item),
-      signal: signalOf, duration: elapsedLabel, planned: plannedLabel, project: rootOf,
+      signal: signalOf, duration: elapsedLabel, planned: plannedLabel, baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
       progress: (item) => Math.round(Number(item.progressPercent || 0)),
       expected: (item) => forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
       deviation: (item) => {
