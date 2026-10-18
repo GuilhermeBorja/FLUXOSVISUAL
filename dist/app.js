@@ -1,8 +1,8 @@
 const STORAGE_KEY = "fluxosVisualState.v2";
 
 const statusCatalog = [
-  { id: "backlog", label: "Backlog" },
-  { id: "ready", label: "Pronto" },
+  { id: "backlog", label: "Lista de pendências" },
+  { id: "ready", label: "Liberado para execução" },
   { id: "in_progress", label: "Em execução" },
   { id: "waiting", label: "Aguardando" },
   { id: "blocked", label: "Bloqueado" },
@@ -232,6 +232,10 @@ function loadState() {
         for (const item of parsed.items || []) {
           if (item.type === "approval") item.approvalRound ||= 1;
           item.weight ??= 1;
+          item.plannedDurationDays = Number.isFinite(Number(item.plannedDurationDays)) ? Math.max(0, Number(item.plannedDurationDays)) : (item.plannedStartAt && item.dueAt ? Math.max(0, (new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000) : 0);
+          item.baselineStartAt ||= item.plannedStartAt || "";
+          item.baselineDueAt ||= item.dueAt || "";
+          item.replannedDueAt ??= "";
           if (item.status === "approved") item.status = "done";
           if (item.status === "rejected") item.status = "correction";
           item.progressPercent ??= completeStatus(item.status) ? 100 : item.status === "in_progress" ? 50 : 0;
@@ -816,6 +820,10 @@ function createItem(input) {
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
+    plannedDurationDays: Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0),
+    baselineStartAt: input.plannedStartAt || today(),
+    baselineDueAt: input.dueAt || "",
+    replannedDueAt: "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (completeStatus(input.status) ? 100 : 0)),
     completedAt: completeStatus(input.status) ? nowIso() : "",
@@ -1383,4 +1391,49 @@ function removeOrganization(id) {
   registryEvent("organization",plan.organization,`${result.items} itens, ${plan.users.length} usuários e ${plan.sectors.length} setores excluídos.`);
   state.organizations = state.organizations.filter((entry) => entry.id !== id);
   return {...result,users:plan.users.length,sectors:plan.sectors.length,organizations:1};
+}
+
+function datePlusDays(dateValue, days) {
+  if (!dateValue) return "";
+  const date = new Date(String(dateValue).slice(0,10) + "T12:00:00");
+  if (!Number.isFinite(date.getTime())) return "";
+  date.setDate(date.getDate() + Number(days || 0));
+  return date.getFullYear() + "-" + String(date.getMonth()+1).padStart(2,"0") + "-" + String(date.getDate()).padStart(2,"0");
+}
+
+function itemDurationDays(item) {
+  if (Number.isFinite(Number(item.plannedDurationDays))) return Math.max(0, Number(item.plannedDurationDays));
+  if (item.plannedStartAt && item.dueAt) return Math.max(0, (new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000);
+  return 0;
+}
+
+function recalculatePlannedDates() {
+  const temporal = new Set(["TI","II","TT","IF"]);
+  const items = state.items, byId = new Map(items.map((item) => [item.id,item]));
+  const dependencies = state.relations.filter((r) => temporal.has(r.relationType) && byId.has(r.sourceId) && byId.has(r.targetId));
+  const incoming = new Map(items.map((item) => [item.id,[]])), outgoing = new Map(items.map((item) => [item.id,[]]));
+  dependencies.forEach((r) => { incoming.get(r.targetId).push(r); outgoing.get(r.sourceId).push(r); });
+  const indegree = new Map(items.map((item) => [item.id,incoming.get(item.id).length]));
+  const queue = items.filter((item) => indegree.get(item.id) === 0).map((item) => item.id), order = [];
+  while (queue.length) { const id = queue.shift(); order.push(id); for (const r of outgoing.get(id)) { const n = indegree.get(r.targetId)-1; indegree.set(r.targetId,n); if (n === 0) queue.push(r.targetId); } }
+  if (order.length !== items.length) return {valid:false,message:"Há um ciclo nas dependências temporais. As datas não foram recalculadas."};
+  const durations = new Map(items.map((item) => [item.id,itemDurationDays(item)]));
+  const starts = new Map(items.map((item) => [item.id,item.baselineStartAt || item.plannedStartAt || today()]));
+  for (const id of order) {
+    const duration = durations.get(id), candidates = [];
+    for (const r of incoming.get(id)) {
+      const pred = byId.get(r.sourceId), ps = starts.get(pred.id), pf = datePlusDays(ps,durations.get(pred.id)), lag = Number(r.lagDays) || 0;
+      if (r.relationType === "TI") candidates.push(datePlusDays(pf,lag));
+      else if (r.relationType === "II") candidates.push(datePlusDays(ps,lag));
+      else if (r.relationType === "TT") candidates.push(datePlusDays(pf,lag-duration));
+      else if (r.relationType === "IF") candidates.push(datePlusDays(ps,lag-duration));
+    }
+    if (candidates.length) starts.set(id,candidates.filter(Boolean).sort().at(-1));
+  }
+  for (const item of items) {
+    if (items.some((child) => child.parentId === item.id && child.status !== "cancelled")) continue;
+    item.plannedStartAt = starts.get(item.id) || item.baselineStartAt || item.plannedStartAt || today();
+    item.dueAt = datePlusDays(item.plannedStartAt,durations.get(item.id));
+  }
+  return {valid:true};
 }
