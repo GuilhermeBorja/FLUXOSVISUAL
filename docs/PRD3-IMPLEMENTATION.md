@@ -81,3 +81,5 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 
 - **Timer do responsável no grafo:** o nó mostra o tempo decorrido desde a atribuição do responsável atual, usando o último evento de troca de responsável; o tooltip também separa esse valor do tempo total do item. Teste dinâmico passou: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166466903.
 - **Documentação do grafo:** README agora descreve a sequência real da propagação (subárvore, retorno pelos ancestrais e demais ramos sem repetir nós).
+
+- **Smoke test real de navegador:** CI agora instala Chromium e executa Playwright contra a aplicação estática. A última execução validou navegação Sintética/Analítica/Gantt, datas e timer no grafo, aplicação de cor de linha, criação de subitem sem data inicial própria e viewport móvel: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166897202.
