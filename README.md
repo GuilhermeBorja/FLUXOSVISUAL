@@ -1,4 +1,4 @@
-# Fluxos · Gestão operacional
+# Fluxo Visual
 
 Protótipo navegável para explorar a gestão de projetos, atividades, relações e aprovações. A branch `feature/prd-evolution` reúne as melhorias funcionais desta rodada e publica a demonstração no [GitHub Pages](https://guilhermeborja.github.io/FLUXOSVISUAL/).
 
@@ -7,7 +7,7 @@ Protótipo navegável para explorar a gestão de projetos, atividades, relaçõe
 1. Abra o [aplicativo publicado](https://guilhermeborja.github.io/FLUXOSVISUAL/).
 2. Entre com um perfil demonstrativo. Luis tem regras GPO globais para explorar os cadastros e permissões; outros usuários simulam escopos mais restritos.
 3. Use **Sintética** para expandir subitens, filtrar, reordenar, ajustar vários itens ou abrir a edição de um item.
-4. Use **Analítica** para navegar pela árvore, selecionar um item e destacar os itens relacionados; o segundo clique abre os detalhes. O grafo pode ser agrupado por projeto, responsável, empresa ou conexões, e arrastar um nó move seus itens conectados.
+4. Use **Analítica** para navegar pela árvore, selecionar um item e destacar os itens relacionados; o segundo clique abre os detalhes. O grafo pode ser agrupado por projeto, responsável, empresa ou conexões, e arrastar um nó move apenas o nó selecionado; use os controles de agrupamento para organizar a visão.
 5. Use **Gantt** para consultar a hierarquia, predecessoras, duração, folgas, riscos e caminho crítico.
 
 ## Regras funcionais da demonstração
