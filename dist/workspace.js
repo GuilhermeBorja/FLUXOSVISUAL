@@ -250,7 +250,7 @@ function renderPanel(focus = true) {
   let content = "";
   if (ui.panel === "create") content = renderCreatePanel();
   else if (ui.panel === "admin" && canManageUsers(currentUser())) content = renderAdmin();
-  else if (ui.panel === "delete" && (ui.deletion?.kind === "item" ? canRemoveItem(currentUser(),getItem(ui.deletion.id)) : canRemoveItem(currentUser()))) content = renderDeletionPanel();
+  else if (ui.panel === "delete" && (ui.deletion?.kind === "item" ? canRemoveItem(currentUser(),getItem(ui.deletion.id)) : ui.deletion?.kind === "user" ? canManageUsers(currentUser()) : canRemoveItem(currentUser()))) content = renderDeletionPanel();
   else if (ui.panel === "item" && canViewItem(currentUser(), getItem(ui.selectedItemId))) content = renderItemPanel(getItem(ui.selectedItemId));
   if (!content) { closePanel(); return; }
   root.innerHTML = `<div class="panel-shade" data-action="close-panel"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1">${content}</aside>`;
@@ -423,12 +423,13 @@ function renderGpo() {
 }
 
 function renderAdmin() {
-  const tabs = [{id:"users",label:"Usuários"},{id:"organizations",label:"Empresas"},{id:"permissions",label:"Alçadas"},{id:"gpo",label:"GPO"}];
+  const tabs = [{id:"users",label:"Usuários"},{id:"organizations",label:"Empresas"},{id:"permissions",label:"Alçadas"}];
+  if (canManageGpo(currentUser())) tabs.push({id:"gpo",label:"GPO"});
   return `${panelHeader("Administração","Cadastros e permissões")}<div class="panel-tabs" role="tablist">${tabs.map((tab) => `<button role="tab" aria-selected="${ui.adminTab === tab.id}" data-admin-tab="${tab.id}" class="${ui.adminTab === tab.id ? "active" : ""}">${tab.label}</button>`).join("")}</div><div class="drawer-body">
     ${ui.adminTab === "users" ? `<div class="admin-list">${state.users.map((user) => `<div class="admin-entry"><span><strong>${escapeHtml(user.name)}${user.disabled ? " (inativo)" : ""}</strong><small>${escapeHtml(orgName(user.organizationId))} · ${escapeHtml(sectorName(user.sectorId))}</small></span><span class="level-tag">Nível ${user.permissionLevel}</span>${user.disabled ? `<button class="icon-button" data-toggle-user="${escapeHtml(user.id)}" aria-label="Reativar ${escapeHtml(user.name)}" title="Reativar usuário">${icon("rotate-ccw")}</button>` : ""}${deleteButton("user",user.id,user.name,user.id === currentUser().id,"Entre com outro administrador para excluir seu usuário.")}</div>`).join("")}</div><section class="panel-section"><h3>Novo usuário</h3><form id="userForm" class="form-stack"><div class="form-row"><label>Nome<input name="name" required/></label><label>E-mail<input name="email" type="email" required/></label></div><div class="form-row"><label>Empresa<select name="organizationId" id="userOrganization">${state.organizations.map((org) => option(org.id,org.name,org.id === currentUser().organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="userSector">${state.sectors.filter((sector) => sector.organizationId === currentUser().organizationId).map((sector) => option(sector.id,sector.name)).join("")}</select></label></div><div class="form-row"><label>Estado (UF)<input name="state" value="${escapeHtml(currentUser().state)}" maxlength="2" required/></label><label>Alçada<select name="permissionLevel">${Object.entries(permissionLevels).map(([level,label]) => option(level,`${level} · ${label}`,level === "1")).join("")}</select></label></div><button class="button primary" type="submit">${icon("plus")}Cadastrar usuário</button></form></section>` : ""}
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section><section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "permissions" ? `<form id="permissionForm" class="form-stack"><label>Usuário<select name="userId" id="permissionUser">${state.users.filter((user) => !user.disabled).map((user) => option(user.id,user.name)).join("")}</select></label><label>Alçada<select name="permissionLevel" id="permissionLevel">${Object.entries(permissionLevels).map(([level,label]) => option(level,`${level} · ${label}`,Number(level) === state.users.find((user) => !user.disabled)?.permissionLevel)).join("")}</select></label><button class="button primary" type="submit">Salvar alçada</button></form><ol class="permission-list">${Object.entries(permissionLevels).map(([level,label]) => `<li value="${level}">${escapeHtml(label)}</li>`).join("")}</ol>` : ""}
-    ${ui.adminTab === "gpo" ? renderGpo() : ""}
+    ${ui.adminTab === "gpo" && canManageGpo(currentUser()) ? renderGpo() : ""}
   </div>`;
 }
 
@@ -446,6 +447,7 @@ function renderOrganizationRegistry() {
 function openDeletion(kind,id) {
   try {
     if (kind === "item") requireDeletionPermission(getItem(id));
+    else if (kind === "user" && !canManageUsers(currentUser())) throw new Error("Sua alçada não permite gerenciar usuários.");
     else if (kind === "relation") {
       const relation = state.relations.find((entry) => entry.id === id);
       const target = relation && getItem(relation.targetId);
