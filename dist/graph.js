@@ -249,18 +249,31 @@ const FluxosGraph = (() => {
       const children = new Map();
       options.items.forEach((item)=>{ if(item.parentId && byId.has(item.parentId)) { if(!children.has(item.parentId)) children.set(item.parentId,[]); children.get(item.parentId).push(item); } });
       for (const entries of children.values()) entries.sort((a,b)=>Number(a.sortOrder ?? 0)-Number(b.sortOrder ?? 0));
-      let root = byId.get(id);
-      while (root?.parentId && byId.has(root.parentId)) root = byId.get(root.parentId);
+      function containsEdge(parentId, childId) {
+        return model.links.find((link)=>link.source.id===parentId && link.target.id===childId && link.relation.relationType==="contains")?.relation.id || "";
+      }
       function visit(itemId, incomingEdgeId = "") {
         if (visited.has(itemId) || !model.nodeById.has(itemId)) return;
         visited.add(itemId);
         path.push({nodeId:itemId,edgeId:incomingEdgeId});
-        for (const child of children.get(itemId) || []) {
-          const edge = model.links.find((link)=>link.source.id===itemId && link.target.id===child.id && link.relation.relationType==="contains");
-          visit(child.id,edge?.relation.id || "");
-        }
+        for (const child of children.get(itemId) || []) visit(child.id,containsEdge(itemId,child.id));
       }
-      if (root) visit(root.id);
+      // Begin at the explicitly selected item. Finish its subtree, then climb
+      // back through its ancestors and continue through each ancestor's remaining branches.
+      visit(id);
+      let branchId = id;
+      let parentId = byId.get(branchId)?.parentId || "";
+      const climbed = new Set();
+      while (parentId && byId.has(parentId) && !climbed.has(parentId)) {
+        climbed.add(parentId);
+        visit(parentId,containsEdge(parentId,branchId));
+        for (const sibling of children.get(parentId) || []) {
+          if (sibling.id !== branchId) visit(sibling.id,containsEdge(parentId,sibling.id));
+        }
+        branchId = parentId;
+        parentId = byId.get(branchId)?.parentId || "";
+      }
+      // Finally cover unrelated components in the current graph order, without loops or repeats.
       for (const node of model.nodes) visit(node.id);
       if (!path.length && model.nodeById.has(id)) path.push({nodeId:id});
       path.forEach((entry,index) => {
