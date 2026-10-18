@@ -156,4 +156,5 @@ test("contexto do responsável é herdado e a cor de status chega ao Gantt", () 
   assert.match(workspace, /sectorId:owner\?\.sectorId \|\| parent\?\.sectorId/);
   assert.match(workspace, /state:owner\?\.state \|\| parent\?\.state/);
   assert.match(workspace, /statusConfig\(row\.item\.status\)\.color/);
+  assert.match(workspace, /icon\(statusConfig\(row\.item\.status\)\.icon\)/);
 });
