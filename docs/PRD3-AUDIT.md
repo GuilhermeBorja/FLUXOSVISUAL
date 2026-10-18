@@ -82,3 +82,8 @@ A falha verificada no workflow `Validate PRD3` (run 39168227194) foi o teste de 
 ### Correção complementar do teste de fechamento
 
 A execução 39168432112 reproduziu o erro após trocar a asserção de contagem para visibilidade: o painel de configurações continuava visível ao iniciar a matriz de viewports. O smoke test agora aguarda o elemento `.drawer` ser removido do DOM logo após o comando de fechar, antes de executar essa matriz. A execução 39168493777 está em andamento; o requisito permanece não validado até o CI concluir.
+
+
+### Causa-raiz complementar identificada
+
+A execução 39168432112 confirmou que o teste ainda falhava porque, após validar o formulário de criação do subitem, o próprio teste mantinha esse painel aberto e em seguida exigia zero painéis visíveis ao avaliar a matriz de viewports. O smoke test agora fecha o formulário e aguarda o painel ser removido antes de medir as resoluções. A execução correspondente é a [39168536101](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168536101); confirmar o resultado antes de marcar CI como verde.
