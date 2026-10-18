@@ -239,12 +239,31 @@ function tableRows(items) {
   return rows;
 }
 
+const tableColumnOptions = [
+  ["select","Selecionar"],["id","ID"],["name","Nome"],["progress","Conclusão"],["owner","Responsável"],
+  ["created","Criação"],["start","Início ideal"],["actualStart","Início real"],["released","Liberada em"],
+  ["due","Término ideal"],["completed","Término real"],["elapsed","Duração total"],["activityDuration","Duração da atividade"],["weight","Peso"],["status","Status"],["actions","Ações"]
+];
+
+function renderColumnSettings() {
+  const hidden = new Set(state.hiddenTableColumns || []);
+  return `<div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-column-toggle="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}</div>`;
+}
+
+function applyTableColumnLayout() {
+  const hidden = new Set(state.hiddenTableColumns || []), widths = state.tableColumnWidths || {};
+  const table = document.querySelector(".synth-table"); if (!table) return;
+  const headers = [...table.querySelectorAll("thead th")];
+  headers.forEach((header,index)=>{ const [key] = tableColumnOptions[index] || []; if (!key) return; header.classList.toggle("column-hidden",hidden.has(key)); if (widths[key]) header.style.width=widths[key]+"px"; header.onpointerup=()=>{ const width=Math.round(header.getBoundingClientRect().width); if (width>40) { state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; saveState(); } }; });
+  table.querySelectorAll("tbody tr").forEach((row)=>[...row.children].forEach((cell,index)=>{const [key]=tableColumnOptions[index]||[]; if(key) cell.classList.toggle("column-hidden",hidden.has(key));}));
+}
+
 function renderTable(items) {
   ui.bulkSelected ||= new Set();
   const rows = tableRows(items);
   const selectedVisible = rows.filter(({item}) => ui.bulkSelected.has(item.id)).length;
   return `<div class="table-card">
-    <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/>Mostrar subitens</label><label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar visíveis</label><span class="secondary">${selectedVisible} selecionados · ${rows.length} linhas</span><button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Editar em lote</button></div>
+    <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/>Mostrar subitens</label><label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar visíveis</label><span class="secondary">${selectedVisible} selecionados · ${rows.length} linhas</span><button class="button quiet" type="button" data-action="columns" aria-expanded="${!!ui.columnsOpen}">Colunas</button><button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Editar em lote</button></div>${ui.columnsOpen ? renderColumnSettings() : ""}
     ${ui.bulkOpen && selectedVisible ? renderBulkEditor() : ""}
     ${!rows.length ? emptyMarkup() : `<div class="table-scroll"><table class="synth-table"><thead><tr><th><span class="sr-only">Selecionar</span></th><th>ID</th><th>Nome</th><th>Conclusão</th><th>Responsável</th><th>Criação</th><th>Início ideal</th><th>Início real</th><th>Liberada em</th><th>Término ideal</th><th>Término real</th><th>Duração total</th><th>Duração da atividade</th><th>Peso</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
       ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" data-row-draggable="${canChangeHierarchy(currentUser(),item) ? "true" : "false"}" draggable="${canChangeHierarchy(currentUser(),item)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}">
@@ -860,6 +879,7 @@ function bindWorkspace() {
     else if (action === "admin") { returnFocus = button; ui.panel = "admin"; renderPanel(); }
     else if (action === "configure-workspace") { returnFocus = button; ui.adminTab = "organizations"; ui.panel = "admin"; renderPanel(); }
     else if (action === "templates") { returnFocus = button; ui.templateId = ""; ui.panel = "templates"; renderPanel(); }
+    else if (action === "columns") { ui.columnsOpen = !ui.columnsOpen; render(); }
     else if (action === "filters") { ui.filtersOpen = !ui.filtersOpen; render(); }
     else if (action === "clear-filters") { state.filters = {query:"",status:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}; saveState(); render(); }
     else if (action === "logout") { closePanel(); state.currentUserId = ""; saveState(); render(); }
@@ -935,6 +955,8 @@ function bindWorkspace() {
     graphInstance?.selectMany([...ui.graphTreeSelectedIds]);
   }));
   submitHandler("bulkEditForm", applyBulkEdit);
+  document.querySelectorAll("[data-column-toggle]").forEach((input)=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.columnToggle; state.hiddenTableColumns= input.checked ? state.hiddenTableColumns.filter((entry)=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
+  applyTableColumnLayout();
 }
 
 function panelFailure(error) {
