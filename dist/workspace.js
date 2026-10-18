@@ -543,7 +543,7 @@ function renderQuickStepRows(titles) {
   const root = document.querySelector("#quickStepRows");
   if (!root) return;
   const rows = titles.map((title) => title.trim()).filter(Boolean).slice(0,100);
-  root.innerHTML = rows.map((title,index) => `<div class="quick-step-row"><strong>${index + 1}. ${escapeHtml(title)}</strong><label>Status<select name="stepStatus_${index}">${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => option(status.id,status.label,status.id === "backlog")).join("")}</select></label><label>Responsável<select name="stepOwner_${index}">${ownerOptions(currentUser().id)}</select></label><label>Peso<input type="number" name="stepWeight_${index}" min="0.1" step="0.1" value="1" required/></label><label>Duração (dias)<input type="number" name="stepDuration_${index}" min="0" step="0.5" placeholder="Usar término do fluxo"/></label></div>`).join("");
+  root.innerHTML = rows.map((title,index) => `<div class="quick-step-row"><strong>${index + 1}. ${escapeHtml(title)}</strong><label>Status<select name="stepStatus_${index}">${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => option(status.id,status.label,status.id === "backlog")).join("")}</select></label><label>Responsável<select name="stepOwner_${index}">${ownerOptions(currentUser().id)}</select></label><label>Peso<input type="number" name="stepWeight_${index}" min="0.1" step="0.1" value="1" required/></label><label>Duração (dias)<input type="number" name="stepDuration_${index}" min="0" step="1" placeholder="Usar término do fluxo"/></label></div>`).join("");
 }
 
 function renderAttachments(item,editable) {
@@ -578,7 +578,7 @@ function renderCreatePanel() {
 }
 
 function historyEventsFor(rootItem) {
-  const allowed = new Set(accessibleItems().map((item)=>item.id));
+  const allowed = new Set(state.items.filter((item)=>canViewItem(currentUser(),item)).map((item)=>item.id));
   const descendants = new Set([rootItem.id]);
   let changed = true;
   while (changed) { changed=false; for (const item of state.items) { if (allowed.has(item.id) && item.parentId && descendants.has(item.parentId) && !descendants.has(item.id)) { descendants.add(item.id); changed=true; } } }
