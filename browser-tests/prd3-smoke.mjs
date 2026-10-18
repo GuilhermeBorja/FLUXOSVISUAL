@@ -139,6 +139,62 @@ try {
   assert.ok(await page.locator(".node-ideal-end").count() > 0);
   assert.ok((await page.locator(".node-duration").first().textContent()).includes("Resp."));
 
+  // P0 R2-15: one controlled magnetism attempt. The selected node must follow
+  // the pointer while its linked node moves proportionally; zoom and pan remain usable.
+  const draggedNode = page.locator(`.graph-node[data-node="${crossViewItem.id}"]`);
+  const linkedNode = page.locator(`.graph-node[data-node="${mutationPeerId}"]`);
+  await draggedNode.waitFor();
+  await linkedNode.waitFor();
+  const beforeDrag = await page.evaluate(({ sourceId, peerId }) => {
+    const center = (selector) => {
+      const box = document.querySelector(selector).getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    return {
+      source: center(`.graph-node[data-node="${sourceId}"]`),
+      peer: center(`.graph-node[data-node="${peerId}"]`),
+    };
+  }, { sourceId: crossViewItem.id, peerId: mutationPeerId });
+  await page.mouse.move(beforeDrag.source.x, beforeDrag.source.y);
+  await page.mouse.down();
+  await page.mouse.move(beforeDrag.source.x + 60, beforeDrag.source.y + 30, { steps: 8 });
+  await page.mouse.up();
+  const afterDrag = await page.evaluate(({ sourceId, peerId }) => {
+    const center = (selector) => {
+      const box = document.querySelector(selector).getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    const saved = JSON.parse(localStorage.getItem("fluxosVisualState.v2") || "{}");
+    const positions = Object.values(saved.graphPositions || {});
+    return {
+      source: center(`.graph-node[data-node="${sourceId}"]`),
+      peer: center(`.graph-node[data-node="${peerId}"]`),
+      persisted: positions.some((entry) => entry[sourceId] && entry[peerId]),
+    };
+  }, { sourceId: crossViewItem.id, peerId: mutationPeerId });
+  const sourceDelta = Math.hypot(afterDrag.source.x - beforeDrag.source.x, afterDrag.source.y - beforeDrag.source.y);
+  const peerDelta = Math.hypot(afterDrag.peer.x - beforeDrag.peer.x, afterDrag.peer.y - beforeDrag.peer.y);
+  assert.ok(sourceDelta >= 40, `selected node did not follow pointer: ${sourceDelta}px`);
+  assert.ok(peerDelta >= 5, `linked node did not respond magnetically: ${peerDelta}px`);
+  assert.ok(peerDelta < sourceDelta * 0.75, `linked node movement was not proportional: source=${sourceDelta}px peer=${peerDelta}px`);
+  assert.equal(afterDrag.persisted, true, "dragged graph positions were not saved");
+
+  const zoomBefore = await page.locator("#zoomLabel").textContent();
+  await page.locator(".graph-svg").hover();
+  await page.mouse.wheel(0, -120);
+  await page.waitForTimeout(100);
+  assert.notEqual(await page.locator("#zoomLabel").textContent(), zoomBefore, "graph zoom did not respond to wheel input");
+  const svgBox = await page.locator(".graph-svg").boundingBox();
+  assert.ok(svgBox);
+  const panStart = { x: svgBox.x + 12, y: svgBox.y + 12 };
+  const panBefore = await linkedNode.boundingBox();
+  await page.mouse.move(panStart.x, panStart.y);
+  await page.mouse.down();
+  await page.mouse.move(panStart.x + 35, panStart.y + 22, { steps: 5 });
+  await page.mouse.up();
+  const panAfter = await linkedNode.boundingBox();
+  assert.ok(Math.abs(panAfter.x - panBefore.x) > 15, "graph pan did not move the scene");
+
   await page.getByRole("button", { name: /Configurações/ }).click();
   const drawer = page.locator(".drawer");
   await drawer.evaluate(async (element) => {
