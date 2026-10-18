@@ -11,7 +11,7 @@ Esta matriz separa a existência de código da validação funcional. `Parcial` 
 | R2-01 | Ao criar ou mover um item para subitem, vinculá-lo a todos os pais pela relação CONTÉM | Parcial | Contenção sincronizada na subárvore ao mover; teste cobre neto e ancestrais. Falta validar criação, reordenação, remoção e restauração. |
 | R2-02 | Redimensionar, ocultar e mostrar colunas na Sintética | Parcial | Colunas configuráveis, autoajuste e responsividade existem. Faltam testes visuais nas cinco resoluções e operação por teclado. |
 | R2-03 | Histórico dos filhos consultável no histórico do pai | Parcial | Histórico consulta descendentes e identifica a origem. Faltam testes de permissões, arquivamento e ausência de duplicação. |
-| R2-04 | Trabalhar com durações e relações, não exigir datas individuais na criação de cada atividade | Parcial | Duração explícita, previsão sem duração presumida e início herdado pelo subitem. Falta pré-visualização completa da rede antes de confirmar o lote. |
+| R2-04 | Trabalhar com durações e relações, não exigir datas individuais na criação de cada atividade | Parcial | Duração explícita, previsão sem duração presumida, início herdado pelo subitem e duração explícita por etapa em lote. Falta validação funcional integrada da pré-visualização da rede antes de confirmar. |
 | R2-05 | Início e término idealizados imutáveis após criação, salvo repactuação explícita | Parcial | Baseline e repactuação separadas; teste confirma baseline preservada. Falta auditar todas as operações e eventos. |
 | R2-06 | Previsão derivada das durações e relações | Parcial | Rede temporal, paralelismo, caminho crítico, ciclos e fórmulas TI/II/TT/IF têm testes. Falta validação integrada com dados reais. |
 | R2-07 | Transformar um tipo de item em aprovação | Parcial | Conversão para aprovação preservando ID, relações e histórico tem teste de regressão. |
@@ -28,9 +28,9 @@ Esta matriz separa a existência de código da validação funcional. `Parcial` 
 | R2-18 | Alinhar integralmente o painel do item e remover textos auxiliares desnecessários | Parcial | Painel reorganizado; falta inspeção visual para confirmar alinhamento e remoção de textos. |
 | R2-19 | Propagação segue sequência da Sintética, passa pelos subitens, retorna ao pai e continua | Parcial | Percurso começa no item selecionado, visita descendentes e retorna pelos ancestrais. Falta validação manual com filtros e grafos complexos. |
 | R2-20 | Padronizar proporção do eixo horizontal do Gantt | Parcial | Eixo proporcional e ticks existem; faltam testes de zoom e escalas curtas/longas. |
-| R2-21 | Escolher cor de preenchimento das linhas para diferenciar indentação e projeto | Parcial | Preenchimento da Sintética configurável por nível e projeto. Falta validar contraste e persistência em múltiplas resoluções. |
+| R2-21 | Escolher cor de preenchimento das linhas para diferenciar indentação e projeto | Parcial | Preenchimento da Sintética configurável por nível e projeto, com persistência local e fallback seguro. Falta validar contraste e persistência em múltiplas resoluções. |
 | R2-22 | Botão “Criar conforme template” ao lado de “Novo item” | Conforme | Ações Modelos e Criar conforme template são distintas e lado a lado; teste de contrato passou. |
-| R2-23 | Modificar cores e ícones dos estados | Parcial | Cores/ícones configuráveis; cor do estado repassada ao grafo. Falta comprovar reflexão em Gantt, seletores, legenda e tooltips. |
+| R2-23 | Modificar cores e ícones dos estados | Parcial | Cores configuráveis aplicadas à tabela, grafo, Gantt e seletores; ícones configurados aparecem no Gantt. Falta comprovar consistência completa na legenda e tooltips. |
 | R2-24 | Percentual de avanço e estado se retroalimentam | Parcial | Avanço, conclusão, reabertura e bloqueios têm regras e testes. Falta matriz de transições de todos os estados. |
 | R2-25 | Exibir início idealizado, término idealizado e duração idealizada ao abrir item | Parcial | Painel mostra início, término e duração; baseline separada. Falta revisão visual por tipo de item. |
 | R2-26 | Empresa, setor e estado herdados do responsável; remover de “Descrição e contexto” | Parcial | Empresa, setor e UF são derivados do responsável na entrada. Falta testar troca de responsável em itens existentes e fallback. |
@@ -39,7 +39,7 @@ Esta matriz separa a existência de código da validação funcional. `Parcial` 
 | R2-29 | Redimensionar painéis de cadastro e itens | Parcial | Redimensionamento de painéis existe. Faltam testes de mouse/teclado, limites, persistência e telas pequenas. |
 | R2-30 | Simplificar “Mostrar subitens como na visão sintética” para “Mostrar subitens” | Conforme | Rótulo Mostrar subitens está presente na Sintética. |
 | R2-31 | Nome do programa “Fluxo Visual”, remover “Gestão Operacional” e substituir texto genérico pelo nome da organização | Parcial | Título e identidade visual padronizados em parte. Falta auditar README, metadados, login e todos os textos. |
-| R2-32 | Grafo exibe término idealizado inicial abaixo do nome e timer do responsável | Parcial | Nós exibem início/término idealizados, baseline, responsável e duração total. Falta validar visualmente timer e término em nós densos. |
+| R2-32 | Grafo exibe término idealizado inicial abaixo do nome e timer do responsável | Parcial | Nós exibem início/término idealizados, baseline e responsável; timer mostra tempo com o responsável atual e o tooltip separa o tempo total. Falta validar visualmente em nós densos. |
 | R2-33 | Clicar no responsável na árvore lateral destaca os itens desse responsável | Parcial | Árvore lateral oferece destaque por responsável. Falta teste de interação e reversão sem perda de contexto. |
 
 ## Requisitos transversais
@@ -62,6 +62,6 @@ Esta matriz separa a existência de código da validação funcional. `Parcial` 
 
 ## Validação automatizada recente
 
-- Última execução integral bem-sucedida consultada: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39165700000
+- Última execução integral bem-sucedida consultada: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166466903
 - Testes cobrem contenção ancestral, rollback em ciclo, fórmulas de cronograma, caminho crítico, edição de relações, conversão para aprovação, templates e cores.
 - CI verde não equivale a aprovação funcional final. Atualizar esta matriz somente com evidência real.
