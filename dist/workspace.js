@@ -1236,7 +1236,7 @@ function bindPanel() {
     const sectorId = String(form.get("sectorId") || "");
     const stateCode = String(form.get("state") || "").trim().toUpperCase();
     if (!name) throw new Error("Informe o nome.");
-    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) throw new Error("Informe um e-mail válido.");
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Informe um e-mail válido.");
     if (state.users.some((entry) => entry.id !== userId && entry.email.toLowerCase() === email)) throw new Error("Este e-mail já está cadastrado.");
     if (!canManageUsers(currentUser(),organizationId)) throw new Error("O GPO não permite transferir o usuário para esta empresa.");
     if (!state.sectors.some((sector) => sector.id === sectorId && sector.organizationId === organizationId)) throw new Error("Selecione um setor da empresa escolhida.");
