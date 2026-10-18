@@ -299,7 +299,7 @@ test("P0 R2-19: propagação percorre subárvore, sobe aos pais e visita ramos r
     setTimeout:(callback,delay)=>{timers.push({callback,delay});return timers.length;},
     clearTimeout:()=>{},
   };
-  const propagate = vm.runInNewContext(source+"\\npropagate",sandbox);
+  const propagate = vm.runInNewContext(source+"\npropagate",sandbox);
   assert.equal(propagate("a"),true);
   const finishDelay = items.length * 430 + 1800;
   const order = [];
