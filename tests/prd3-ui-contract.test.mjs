@@ -227,6 +227,6 @@ test("histórico do pai agrega eventos descendentes sem expor itens não autoriz
 
 test("seletores operacionais usam a cor configurada para cada estado", () => {
   assert.match(workspace, /function statusOption\(status, selected = false\)/);
-  assert.match(workspace, /style:\$\{escapeHtml\(statusConfig\(status\.id\)\.color\)\}/);
+  assert.match(workspace, /style="color:\$\{escapeHtml\(statusConfig\(status\.id\)\.color\)\}"/);
   assert.match(workspace, /map\(\(status\) => statusOption\(status/);
 });
