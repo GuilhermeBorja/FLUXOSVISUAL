@@ -77,3 +77,8 @@
 ### CI após correção do smoke test
 
 A falha verificada no workflow `Validate PRD3` (run 39168227194) foi o teste de responsividade que usava `.drawer.count() === 0`, embora o painel fechado permaneça como elemento oculto no DOM. O teste passou a exigir `.drawer:visible`. A nova execução automática 39168432112 foi iniciada; não registrar como validada até que seu resultado terminal esteja disponível.
+
+
+### Correção complementar do teste de fechamento
+
+A execução 39168432112 reproduziu o erro após trocar a asserção de contagem para visibilidade: o painel de configurações continuava visível ao iniciar a matriz de viewports. O smoke test agora aguarda o elemento `.drawer` ser removido do DOM logo após o comando de fechar, antes de executar essa matriz. A execução 39168493777 está em andamento; o requisito permanece não validado até o CI concluir.
