@@ -1553,7 +1553,7 @@ function recalculatePlannedDates() {
       else if (r.relationType === "TT") candidates.push(datePlusDays(pf,lag-duration));
       else if (r.relationType === "IF") candidates.push(datePlusDays(ps,lag-duration));
     }
-    if (candidates.length) starts.set(id,candidates.filter(Boolean).sort().at(-1));
+    if (candidates.length) { const earliestAllowed=starts.get(id); const dependencyStart=candidates.filter(Boolean).sort().at(-1); starts.set(id,earliestAllowed && dependencyStart ? (earliestAllowed > dependencyStart ? earliestAllowed : dependencyStart) : earliestAllowed || dependencyStart); }
   }
   for (const item of items) {
     if (items.some((child) => child.parentId === item.id && child.status !== "cancelled")) continue;
