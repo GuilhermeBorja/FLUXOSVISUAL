@@ -1,0 +1,33 @@
+name: Validate PRD3
+
+on:
+  push:
+    branches:
+      - PRD3
+  pull_request:
+    branches:
+      - PRD3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Run automated tests
+        run: npm test
+      - name: Build vendor bundle
+        run: npm run build
