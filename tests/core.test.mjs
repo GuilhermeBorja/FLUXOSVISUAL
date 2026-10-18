@@ -413,3 +413,12 @@ test("P0: falha ao aplicar template reverte integralmente itens, relações e ev
   assert.throws(() => run('applyFlowTemplate(template.id,{organizationId:"org_castro",sectorId:"sec_pmo",state:"PE",title:"Instância inválida",startDate:today()})'),/perdeu sua referência/);
   assert.equal(run("JSON.stringify(state)===before"),true);
 });
+
+test("P0: término baseline é capturado quando calculado pela duração inicial", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('item=createItem({...' + defaults + ',title:"Duração sem término informado",plannedStartAt:"2026-10-25",dueAt:"",plannedDurationDays:3});');
+  assert.equal(run('item.dueAt'),"2026-10-28");
+  assert.equal(run('item.baselineDueAt'),"2026-10-28");
+  run('recalculatePlannedDates();');
+  assert.equal(run('item.baselineDueAt'),"2026-10-28");
+});
