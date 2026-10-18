@@ -117,6 +117,18 @@ try {
 
   await page.getByRole("tab", { name: /Sintética/ }).click();
 
+  // P0 R2-25: opening an item exposes the schedule/baseline fields and duration.
+  await page.locator(`button[data-select="${crossViewItem.id}"]`).first().click();
+  await page.locator("#updateItemForm").waitFor();
+  const itemScheduleSummary = await page.locator("#updateItemForm .schedule-summary").innerText();
+  assert.match(itemScheduleSummary, /Início previsto/);
+  assert.match(itemScheduleSummary, /Término previsto/);
+  assert.match(itemScheduleSummary, /Início baseline/);
+  assert.match(itemScheduleSummary, /Término baseline/);
+  assert.equal(await page.locator('#updateItemForm [name="plannedDurationDays"]').inputValue(), "2");
+  await page.getByRole("button", { name: /Fechar painel/ }).click();
+  await page.locator(".drawer").waitFor({ state: "detached" });
+
   await page.getByRole("tab", { name: /Gantt/ }).click();
   await page.locator(".gantt-card").waitFor();
   assert.equal(await page.locator(".gantt-axis").count(), 1);
