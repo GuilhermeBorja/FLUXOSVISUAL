@@ -245,19 +245,24 @@ const FluxosGraph = (() => {
       if (!model.nodeById.has(id)) return false;
       const path = [];
       const visited = new Set();
-      let cursor = id;
-      const flowTypes = new Set(["contains","TI","II","TT","IF","blocks","approves"]);
-      while (cursor && !visited.has(cursor)) {
-        visited.add(cursor);
-        const item = model.nodeById.get(cursor)?.item;
-        const entry = {nodeId:cursor};
-        path.push(entry);
-        if (item?.status === "blocked") break;
-        const next = model.links.find((link) => link.source.id === cursor && flowTypes.has(link.relation.relationType) && !visited.has(link.target.id));
-        if (!next) break;
-        entry.edgeId = next.relation.id;
-        cursor = next.target.id;
+      const byId = new Map(options.items.map((item)=>[item.id,item]));
+      const children = new Map();
+      options.items.forEach((item)=>{ if(item.parentId && byId.has(item.parentId)) { if(!children.has(item.parentId)) children.set(item.parentId,[]); children.get(item.parentId).push(item); } });
+      for (const entries of children.values()) entries.sort((a,b)=>Number(a.sortOrder ?? 0)-Number(b.sortOrder ?? 0));
+      let root = byId.get(id);
+      while (root?.parentId && byId.has(root.parentId)) root = byId.get(root.parentId);
+      function visit(itemId, incomingEdgeId = "") {
+        if (visited.has(itemId) || !model.nodeById.has(itemId)) return;
+        visited.add(itemId);
+        path.push({nodeId:itemId,edgeId:incomingEdgeId});
+        for (const child of children.get(itemId) || []) {
+          const edge = model.links.find((link)=>link.source.id===itemId && link.target.id===child.id && link.relation.relationType==="contains");
+          visit(child.id,edge?.relation.id || "");
+        }
       }
+      if (root) visit(root.id);
+      for (const node of model.nodes) visit(node.id);
+      if (!path.length && model.nodeById.has(id)) path.push({nodeId:id});
       path.forEach((entry,index) => {
         propagationTimers.push(setTimeout(() => {
           nodeElements.forEach((element) => element.classList.remove("propagation-current"));
