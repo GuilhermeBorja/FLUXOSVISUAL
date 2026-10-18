@@ -509,7 +509,7 @@ function gpoDecision(user, operation, item = null) {
     if (rule.scopeType === "global") return true;
     if (!item) return false;
     if (rule.scopeType === "state") return item.state === rule.scopeId;
-    if (rule.scopeType === "organization") return item.organizationId === rule.scopeId;
+    if (rule.scopeType === "organization") return item.organizationId === (rule.scopeId === "@user" ? user.organizationId : rule.scopeId);
     if (rule.scopeType === "sector") return item.sectorId === rule.scopeId;
     if (rule.scopeType === "item") return item.id === rule.scopeId;
     if (rule.scopeType === "creator") return item.createdBy === rule.scopeId;
