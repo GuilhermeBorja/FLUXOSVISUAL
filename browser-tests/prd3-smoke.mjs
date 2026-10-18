@@ -44,6 +44,12 @@ try {
   const childRow = page.locator('tr[data-depth="1"]').first();
   await childRow.waitFor();
   assert.equal(await childRow.evaluate((row) => getComputedStyle(row).getPropertyValue("--row-fill").trim()), "#123456");
+
+  await page.locator('button[data-select="item_adm"]').first().click();
+  await page.locator('[data-action="new-subitem"]').click();
+  await page.locator("#createItemForm").waitFor();
+  assert.equal(await page.locator('#createItemForm [name="plannedStartAt"]').count(), 0);
+  assert.equal(await page.locator('#createItemForm [name="plannedDurationDays"]').inputValue(), "");
   assert.equal(errors.length, 0, errors.join("\n"));
 
   await page.setViewportSize({ width: 390, height: 844 });
