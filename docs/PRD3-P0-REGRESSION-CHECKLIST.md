@@ -10,12 +10,12 @@
 
 | Estado | Quantidade |
 |---|---:|
-| preservado | 17 |
+| preservado | 18 |
 | corrigido | 7 |
 | regressão encontrada | 0 |
-| não verificado | 20 |
+| não verificado | 19 |
 
-Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados. Entre os P0 parciais, 3 seguem como não verificados: R2-15 (magnetismo do grafo), M-01 (matriz completa de integridade de relações) e M-13 (fechamento da rastreabilidade).
+Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados. Entre os P0 parciais, 2 seguem como não verificados: R2-15 (magnetismo do grafo) e M-01 (matriz completa de integridade de relações).
 
 ## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
@@ -42,7 +42,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 | M-09 | Aprovações/correções preservam decisão, motivo, autor, data e rodada | preservado | `tests/p0-integrity.test.mjs` valida reprovação na rodada 1, motivo/revisor/data, criação da revisão, reenvio na rodada 2, encadeamento por `previousDecisionId` e aprovação final. CI #158 passou. Repetições de reprovação e combinações de responsáveis/perfis GPO ainda precisam de matriz ampliada. |
 | M-10 | Templates preservam estrutura, relações, pesos, durações e rollback | preservado | CI #122 passou nos testes de template: subitens, pesos, durações, relação temporal interna e rollback integral após referência inválida. Falta ampliar para múltiplos tipos de relação e matriz GPO. |
 | M-12 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | corrigido | Teste P0 reproduziu mutação parcial: o título mudava antes de uma repactuação ser negada pelo GPO. Corrigido no commit 46864d31 com pré-validação de permissões; CI #140 passou com 75/75 testes e smoke browser. GPO segue client-side e a matriz completa de operações continua pendente. |
-| M-13 | Critérios de aceite, testes e evidência rastreáveis | não verificado | A matriz foi atualizada e o CI #150 passou com 77/77 testes e smoke browser. Ainda há 24 requisitos não verificados; não liberar produção até fechar todos os P0. |
+| M-13 | Critérios de aceite, testes e evidência rastreáveis | preservado | `tests/prd3-audit.test.mjs` valida 44 requisitos parciais únicos, estado permitido e evidência/pendência preenchida por linha, além da consistência do resumo de estados. CI #168 passou. A rastreabilidade está estruturada; 19 requisitos continuam não verificados e o gate de produção permanece bloqueado. |
 
 ## 2. Checklist dos demais itens parciais
 
@@ -84,7 +84,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 - **GPO e integridade transacional:** o teste [26a78c34](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/26a78c34cc42d0f4917ea9e7087ad055a429f668) reproduziu mutação parcial antes da negação GPO; corrigido no [commit 46864d31](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/46864d319ef2001d0de5052f381f13fa49258eee). O CI #140 passou com 75 testes e smoke browser.
 - **Parent editing e folgas:** os testes P0 de edição/repactuação do pai e folgas numéricas do caminho crítico passaram no [CI #145](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171144437).
 - **Prévia de subitem:** o teste browser reproduziu a data final errada quando o início do pai era diferente de hoje; corrigido no [commit 379b6335](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/379b6335f530b611258a0b88bf32c7c020aec1e3), validado no CI #150.
-- **Validação consolidada mais recente:** [CI #165](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175180885), sintaxe, testes automatizados, build e smoke browser aprovados; cenários P0 de R2-19, R2-25, M-01, M-02 e M-09 passaram.
+- **Validação consolidada mais recente:** [CI #168](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175277872), sintaxe, testes automatizados, build e smoke browser aprovados; cenários P0 de R2-19, R2-25, M-01, M-02, M-09 e M-13 passaram.
 
 ## 4. Ordem de execução pendente
 
