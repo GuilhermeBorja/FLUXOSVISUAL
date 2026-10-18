@@ -732,11 +732,33 @@ function startApprovalRevision(id, correctionOwnerId, note = "") {
   return revision;
 }
 
+function archiveItem(itemId) {
+  const user=currentUser(), root=getItem(itemId);
+  if (!root || !canEditItem(user,root)) throw new Error("O GPO não permite arquivar este item.");
+  const ids=[], seen=new Set(), queue=[root.id];
+  while(queue.length){ const id=queue.shift(); if(seen.has(id)) continue; seen.add(id); const item=getItem(id); if(!item) continue; ids.push(item); state.items.filter((child)=>child.parentId===id).forEach((child)=>queue.push(child.id)); }
+  const archivedAt=nowIso();
+  for(const item of ids){ if(item.archivedAt) continue; item.archivedAt=archivedAt; item.archivedBy=user.id; createEvent(item.id,"archived","",archivedAt,"Item arquivado; hierarquia preservada."); }
+  if(root.parentId) syncParentSummary(root.parentId);
+  return ids.length;
+}
+
+function restoreArchivedItem(itemId) {
+  const user=currentUser(), root=getItem(itemId);
+  if (!root || !root.archivedAt || !canEditItem(user,root)) throw new Error("O GPO não permite restaurar este item.");
+  const ids=[], seen=new Set(), queue=[root.id];
+  while(queue.length){ const id=queue.shift(); if(seen.has(id)) continue; seen.add(id); const item=getItem(id); if(!item) continue; ids.push(item); state.items.filter((child)=>child.parentId===id && child.archivedAt).forEach((child)=>queue.push(child.id)); }
+  for(const item of ids){ item.archivedAt=""; item.archivedBy=""; createEvent(item.id,"restored","","active","Item restaurado."); }
+  recalculatePlannedDates();
+  if(root.parentId) syncParentSummary(root.parentId);
+  return ids.length;
+}
+
 function visibleItems() {
   const user = currentUser();
   const query = state.filters.query.trim().toLowerCase();
   return state.items
-    .filter((item) => canViewItem(user, item))
+    .filter((item) => !item.archivedAt && canViewItem(user, item))
     .filter((item) => state.filters.status === "all" || item.status === state.filters.status)
     .filter((item) => state.filters.type === "all" || item.type === state.filters.type)
     .filter((item) => state.filters.owner === "all" || item.ownerId === state.filters.owner)
@@ -1101,7 +1123,7 @@ function removeAttachment(id) {
 function syncParentSummary(parentId, effectiveAt = nowIso()) {
   const parent = getItem(parentId);
   if (!parent) return;
-  const children = state.items.filter((item) => item.parentId === parentId && item.status !== "cancelled");
+  const children = state.items.filter((item) => item.parentId === parentId && item.status !== "cancelled" && !item.archivedAt);
   if (!parent.baselineStartAt) parent.baselineStartAt = children.map((item)=>item.baselineStartAt || item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "";
   if (!parent.baselineDueAt) parent.baselineDueAt = children.map((item)=>item.baselineDueAt || item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "";
   if (!children.length) return;
@@ -1113,7 +1135,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   function collectLeaves(itemId) {
     if (visited.has(itemId)) return;
     visited.add(itemId);
-    const nested = state.items.filter((item) => item.parentId === itemId && item.status !== "cancelled");
+    const nested = state.items.filter((item) => item.parentId === itemId && item.status !== "cancelled" && !item.archivedAt);
     if (!nested.length) { const item = getItem(itemId); if (item && !["project", "process"].includes(item.type)) descendants.push(item); }
     else nested.forEach((item) => collectLeaves(item.id));
   }
@@ -1489,7 +1511,7 @@ function itemDurationDays(item) {
 
 function recalculatePlannedDates() {
   const temporal = new Set(["TI","II","TT","IF"]);
-  const items = state.items, byId = new Map(items.map((item) => [item.id,item]));
+  const items = state.items.filter((item)=>!item.archivedAt), byId = new Map(items.map((item) => [item.id,item]));
   const dependencies = state.relations.filter((r) => temporal.has(r.relationType) && byId.has(r.sourceId) && byId.has(r.targetId));
   const incoming = new Map(items.map((item) => [item.id,[]])), outgoing = new Map(items.map((item) => [item.id,[]]));
   dependencies.forEach((r) => { incoming.get(r.targetId).push(r); outgoing.get(r.sourceId).push(r); });
