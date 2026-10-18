@@ -214,3 +214,11 @@ test("relação CONTÉM é mantida com todos os ancestrais ao mover subitens", (
   assert.equal(run('state.relations.some((r)=>r.sourceId===parent.id && r.targetId===child.id && r.relationType==="contains")'),false);
   assert.equal(run('state.relations.some((r)=>r.sourceId===other.id && r.targetId===child.id && r.relationType==="contains")'),true);
 });
+test("perfil GPO é herdado e regra individual prevalece como exceção", () => {
+  const run=context(); run('state.currentUserId="u_luis";');
+  run('state.permissionProfiles.push({id:"profile_test",name:"Teste"}); state.users.find((user)=>user.id==="u_virginia").profileId="profile_test";');
+  run('createPermissionRule({subjectType:"profile",subjectId:"profile_test",operation:"view_item",scopeType:"global",scopeId:"",effect:"deny"});');
+  assert.equal(run('gpoDecision(state.users.find((user)=>user.id==="u_virginia"),"view_item",getItem("item_doors"))'),false);
+  run('createPermissionRule({subjectType:"user",subjectId:"u_virginia",operation:"view_item",scopeType:"global",scopeId:"",effect:"allow"});');
+  assert.equal(run('gpoDecision(state.users.find((user)=>user.id==="u_virginia"),"view_item",getItem("item_doors"))'),true);
+});
