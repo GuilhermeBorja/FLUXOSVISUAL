@@ -7,6 +7,7 @@ const source=readFileSync(new URL("../dist/app.js",import.meta.url),"utf8");
 function context(storage=new Map()) {
   const sandbox=vm.createContext({console,document:{querySelector:()=>({})},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)}});
   vm.runInContext(source,sandbox);
+  vm.runInContext("state=seedState();",sandbox);
   const run=script=>vm.runInContext(script,sandbox);
   run('state.currentUserId="u_luis";');
   return run;
