@@ -851,6 +851,7 @@ function createItem(input) {
   state.items.push(item);
   createEvent(item.id, "created", "", item.status, "Item criado.", item.createdAt);
   if (item.parentId) createRelation(item.parentId, item.id, "contains", 0);
+  if (item.parentId) syncContainsRelations(item.id);
   const schedule = recalculatePlannedDates();
   if (!schedule.valid) throw new Error(schedule.message);
   if (item.parentId) syncParentSummary(item.parentId);
@@ -874,7 +875,9 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
       ancestors.add(cursor.id);
       cursor = getItem(cursor.parentId);
     }
-    if (target.parentId && target.parentId !== sourceId) throw new Error("O item ja possui um pai. Use outra relacao para conexoes transversais.");
+    let ancestorCursor = target.parentId, sourceIsAncestor = false; const ancestorSeen = new Set();
+    while (ancestorCursor && !ancestorSeen.has(ancestorCursor)) { if (ancestorCursor === sourceId) { sourceIsAncestor = true; break; } ancestorSeen.add(ancestorCursor); ancestorCursor = getItem(ancestorCursor)?.parentId || ""; }
+    if (target.parentId && target.parentId !== sourceId && !sourceIsAncestor) throw new Error("O item já possui outro pai. Relações CONTÉM adicionais precisam apontar para um ancestral.");
   }
   const exists = state.relations.some(
     (relation) =>
@@ -894,7 +897,7 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
     createdAt: nowIso(),
   };
   state.relations.push(relation);
-  if (relationType === "contains") target.parentId = sourceId;
+  if (relationType === "contains" && (!target.parentId || target.parentId === sourceId)) target.parentId = sourceId;
   const schedule = recalculatePlannedDates();
   if (!schedule.valid) {
     state.relations = state.relations.filter((entry) => entry.id !== relation.id);
@@ -903,6 +906,19 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
   }
   createEvent(targetId, "relation_created", "", relationType, relation.description || `Relação criada a partir de ${getItem(sourceId)?.title}.`);
   return relation;
+}
+
+function syncContainsRelations(itemId) {
+  const item=getItem(itemId); if (!item) return;
+  const desired=[], seen=new Set(); let cursor=getItem(item.parentId);
+  while (cursor && !seen.has(cursor.id)) { seen.add(cursor.id); desired.push(cursor.id); cursor=getItem(cursor.parentId); }
+  const desiredSet=new Set(desired);
+  const stale=state.relations.filter((relation)=>relation.relationType==="contains" && relation.targetId===itemId && !desiredSet.has(relation.sourceId));
+  for (const relation of stale) { archiveRecord("archivedRelations",relation); state.relations=state.relations.filter((entry)=>entry.id!==relation.id); }
+  for (const sourceId of desired) {
+    if (state.relations.some((relation)=>relation.relationType==="contains" && relation.sourceId===sourceId && relation.targetId===itemId)) continue;
+    state.relations.push({id:uid("rel"),sourceId,targetId:itemId,relationType:"contains",lagDays:0,description:"Vínculo de ancestralidade",createdBy:currentUser()?.id || "system",createdAt:nowIso()});
+  }
 }
 
 function canChangeHierarchy(user, item) {
@@ -924,7 +940,7 @@ function moveItemHierarchy(id, nextParentId = "") {
     }
   }
   const previousParentId = item.parentId || "";
-  const relation = state.relations.find((entry) => entry.relationType === "contains" && entry.targetId === item.id);
+  const relation = state.relations.find((entry) => entry.relationType === "contains" && entry.targetId === item.id && entry.sourceId === previousParentId);
   if (nextParent) {
     if (relation) {
       relation.previousSourceId = relation.sourceId; relation.previousTargetId = relation.targetId;
@@ -938,6 +954,7 @@ function moveItemHierarchy(id, nextParentId = "") {
   const newSiblings = state.items.filter((entry) => entry.id !== item.id && entry.parentId === item.parentId);
   item.sortOrder = newSiblings.length ? Math.max(...newSiblings.map((entry) => Number(entry.sortOrder ?? state.items.indexOf(entry)))) + 100 : 0;
   createEvent(item.id,"parent_changed",previousParentId,nextParentId,"Hierarquia visual alterada.");
+  syncContainsRelations(item.id);
   if (previousParentId) syncParentSummary(previousParentId);
   if (nextParentId) syncParentSummary(nextParentId);
   const schedule = recalculatePlannedDates();
@@ -986,9 +1003,10 @@ function updateRelation(id, input) {
     if (priorTarget?.parentId === relation.sourceId) { priorTarget.parentId = ""; affectedParents.add(relation.sourceId); }
   }
   Object.assign(relation, { sourceId: source.id, targetId: target.id, relationType: input.relationType, lagDays: Number(input.lagDays) || 0, description: String(input.description || "").trim(), updatedAt: nowIso(), updatedBy: user.id, previousSourceId: previous.sourceId, previousTargetId: previous.targetId, previousRelationType: previous.relationType });
-  if (input.relationType === "contains") { target.parentId = source.id; affectedParents.add(source.id); }
+  if (input.relationType === "contains") { if (!target.parentId || target.parentId === source.id) target.parentId = source.id; affectedParents.add(source.id); }
   createEvent(previous.targetId, "relation_updated", previous.relationType, input.relationType, `Relação atualizada: ${getItem(previous.sourceId)?.title} → ${source.title}.`);
   if (target.id !== previous.targetId) createEvent(target.id, "relation_updated", previous.targetId, relation.id, relation.description || "Relação transferida para este item.");
+  if (relation.relationType === "contains") syncContainsRelations(target.id);
   if (previous.relationType === "contains") affectedParents.add(previous.sourceId);
   for (const parentId of affectedParents) syncParentSummary(parentId);
   const schedule = recalculatePlannedDates();
