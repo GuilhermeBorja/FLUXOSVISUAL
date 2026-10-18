@@ -85,3 +85,11 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 - **Smoke test real de navegador:** CI agora instala Chromium e executa Playwright contra a aplicação estática. A última execução validou navegação Sintética/Analítica/Gantt, datas e timer no grafo, aplicação de cor de linha, criação de subitem sem data inicial própria e viewport móvel: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166897202.
 
 - **Redimensionamento de coluna verificado em Chromium:** o teste revelou que o cabeçalho não posicionava corretamente o handle e a tabela não expandia junto da coluna. O handle agora é ancorado no `th`, o arraste é acompanhado no documento e a largura total da tabela é recalculada durante o movimento. A execução de navegador passou com ocultação, reexibição e arraste da coluna: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39167615310.
+
+
+## Correções transacionais adicionais — 18/10/2026
+
+- **Movimentação hierárquica atômica:** se a validação do cronograma falhar durante a mudança de pai, a operação restaura itens, relações, eventos e relações arquivadas ao estado anterior. Isso evita hierarquia parcialmente alterada.
+- **Criação de item atômica:** falhas na validação do cronograma agora revertem o item recém-criado, relações de contenção, eventos e alterações relacionadas ao arquivamento de relações.
+- **Testes de regressão:** adicionados cenários que simulam um ciclo temporal preexistente e verificam que mover uma subárvore ou criar um item não deixa alterações parciais.
+- **Status de validação:** os testes foram adicionados ao workflow existente. A aprovação só deve ser registrada após a execução do CI correspondente; estas mudanças não fecham por si só a auditoria integral do PRD3.
