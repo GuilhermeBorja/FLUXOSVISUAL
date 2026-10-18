@@ -363,7 +363,7 @@ function scheduleAnalysis(items) {
     const slack = Math.max(0,latest.get(item.id) - es);
     return {item,startOffset:es,duration:duration.get(item.id),slack,critical:slack < 0.01};
   });
-  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectFinish),rows,message:reliable ? "" : "Cronograma incompleto: preencha início e término ideal para uma previsão confiável."};
+  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectFinish),rows,message:reliable ? "" : "Cronograma incompleto: defina a data inicial e a duração planejada das atividades para uma previsão confiável."};
 }
 
 function renderGantt(items) {
