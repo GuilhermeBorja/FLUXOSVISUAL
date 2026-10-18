@@ -986,7 +986,14 @@ function moveItemHierarchy(id, nextParentId = "") {
   const newSiblings = state.items.filter((entry) => entry.id !== item.id && entry.parentId === item.parentId);
   item.sortOrder = newSiblings.length ? Math.max(...newSiblings.map((entry) => Number(entry.sortOrder ?? state.items.indexOf(entry)))) + 100 : 0;
   createEvent(item.id,"parent_changed",previousParentId,nextParentId,"Hierarquia visual alterada.");
-  syncContainsRelations(item.id);
+  const pending = [item.id], visitedSubtree = new Set();
+  while (pending.length) {
+    const currentId = pending.shift();
+    if (visitedSubtree.has(currentId)) continue;
+    visitedSubtree.add(currentId);
+    syncContainsRelations(currentId);
+    state.items.filter((entry) => entry.parentId === currentId).forEach((child) => pending.push(child.id));
+  }
   if (previousParentId) syncParentSummary(previousParentId);
   if (nextParentId) syncParentSummary(nextParentId);
   const schedule = recalculatePlannedDates();
