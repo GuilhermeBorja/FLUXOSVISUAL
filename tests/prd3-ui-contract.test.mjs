@@ -230,3 +230,17 @@ test("seletores operacionais usam a cor configurada para cada estado", () => {
   assert.match(workspace, /style="color:\$\{escapeHtml\(statusConfig\(status\.id\)\.color\)\}"/);
   assert.match(workspace, /map\(\(status\) => statusOption\(status/);
 });
+
+
+test("timer do nó mede o tempo com o responsável atual", () => {
+  const start = workspace.indexOf("function ownerElapsedLabel(item) {");
+  const end = workspace.indexOf("function activityDurationLabel(item) {", start);
+  const source = workspace.slice(start, end);
+  const sandbox = {
+    state:{events:[{itemId:"task",eventType:"owner_changed",toValue:"u2",effectiveAt:"2026-01-02T00:00:00.000Z"}]},
+    nowIso:()=> "2026-01-03T00:00:00.000Z",
+    durationFromMinutes:(minutes)=>String(minutes),
+  };
+  const timer = vm.runInNewContext(source + "\nownerElapsedLabel",sandbox);
+  assert.equal(timer({id:"task",ownerId:"u2",createdAt:"2026-01-01T00:00:00.000Z",completedAt:""}),"1440");
+});
