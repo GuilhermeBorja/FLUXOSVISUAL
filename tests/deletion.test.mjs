@@ -5,9 +5,10 @@ import { readFileSync } from "node:fs";
 
 const source=readFileSync(new URL("../dist/app.js",import.meta.url),"utf8");
 function context(storage=new Map()) {
+  const hasSavedState=storage.has("fluxosVisualState.v2");
   const sandbox=vm.createContext({console,document:{querySelector:()=>({})},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)}});
   vm.runInContext(source,sandbox);
-  vm.runInContext('state=localStorage.getItem("fluxosVisualState.v2") ? loadState() : seedState();',sandbox);
+  vm.runInContext(hasSavedState ? "state=loadState();" : "state=seedState();",sandbox);
   const run=script=>vm.runInContext(script,sandbox);
   run('state.currentUserId="u_luis";');
   return run;
