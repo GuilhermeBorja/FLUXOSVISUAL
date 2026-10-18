@@ -53,3 +53,9 @@ test("Gantt não presume duração de um dia quando a duração está ausente", 
   assert.match(workspace, /nenhuma duração é presumida/);
   assert.doesNotMatch(workspace, /: 1;\s*duration\.set\(item\.id,days\)/);
 });
+
+test("cadastro exige duração explícita e subitens herdam o início de referência", () => {
+  assert.match(workspace, /Informe a duração planejada para calcular a previsão/);
+  assert.match(workspace, /item\.parentId \? `<div class="schedule-summary">/);
+  assert.match(workspace, /parentId:parent\.id/);
+});
