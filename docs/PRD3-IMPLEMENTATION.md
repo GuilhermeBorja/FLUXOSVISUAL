@@ -93,3 +93,6 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 - **Criação de item atômica:** falhas na validação do cronograma agora revertem o item recém-criado, relações de contenção, eventos e alterações relacionadas ao arquivamento de relações.
 - **Testes de regressão:** adicionados cenários que simulam um ciclo temporal preexistente e verificam que mover uma subárvore ou criar um item não deixa alterações parciais.
 - **Status de validação:** os testes foram adicionados ao workflow existente. A aprovação só deve ser registrada após a execução do CI correspondente; estas mudanças não fecham por si só a auditoria integral do PRD3.
+
+
+- **Relação CONTÉM em falha:** a criação de relação agora preserva o parentId anterior se a validação do cronograma falhar. Foi adicionado teste para o caso em que o item já tem pai, mas a relação de contenção está ausente e a rede temporal está inválida.
