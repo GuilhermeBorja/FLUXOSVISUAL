@@ -110,6 +110,7 @@ function render() {
       </header>
       <section class="workspace-heading">
         <div><h1>Processos e demandas</h1><p>${items.length} ${items.length === 1 ? "item visível" : "itens visíveis"}</p></div>
+        <button class="button quiet" data-action="templates">${icon("workflow")}Modelos</button>
         ${canCreateItem(user) ? `<button class="button primary" data-action="create">${icon("plus")}Novo item</button>` : ""}
       </section>
       <div id="noticeRoot">${noticeMarkup()}</div>
@@ -249,6 +250,7 @@ function renderPanel(focus = true) {
   if (!ui.panel) { root.innerHTML = ""; document.body.classList.remove("panel-open"); return; }
   let content = "";
   if (ui.panel === "create") content = renderCreatePanel();
+  else if (ui.panel === "templates") content = renderTemplatesPanel();
   else if (ui.panel === "admin" && canManageUsers(currentUser())) content = renderAdmin();
   else if (ui.panel === "delete" && (ui.deletion?.kind === "item" ? canRemoveItem(currentUser(),getItem(ui.deletion.id)) : ui.deletion?.kind === "user" ? canManageUsers(currentUser()) : canRemoveItem(currentUser()))) content = renderDeletionPanel();
   else if (ui.panel === "item" && canViewItem(currentUser(), getItem(ui.selectedItemId))) content = renderItemPanel(getItem(ui.selectedItemId));
@@ -314,6 +316,7 @@ function renderItemPanel(item) {
   if (ui.panelTab === "details") html += editable
     ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Registro da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button><button class="button quiet" type="button" data-action="new-subitem">' + icon("plus") + 'Subitem</button></div></form>' + renderChildren(item)
     : renderReadOnly(item) + renderChildren(item);
+  if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
   if (ui.panelTab === "relations") html += renderRelations(item,relations,editable);
   if (ui.panelTab === "history") html += renderHistory(events);
   if (ui.panelTab === "approval" && item.type === "approval") html += renderApprovalPanel(item);
@@ -394,6 +397,23 @@ function renderApprovalPanel(item) {
       '<small> · Registrado por ' + escapeHtml(userName(entry.createdBy)) + '</small></li>';
   }).join("") + '</ol>';
   return html + '</section>';
+}
+
+function renderTemplatesPanel() {
+  const user = currentUser();
+  const templates = (state.templates || []).filter((entry) => entry.organizationId === user.organizationId || user.permissionLevel === 10);
+  let html = panelHeader("Modelos","Fluxos reutilizáveis");
+  html += '<div class="drawer-body"><p class="muted">Os modelos são armazenados neste navegador e podem ser aplicados dentro do escopo permitido pela sua alçada.</p>';
+  if (!templates.length) html += '<p class="secondary">Nenhum modelo disponível para esta empresa. Abra um projeto ou processo editável e salve-o como modelo.</p>';
+  else html += '<div class="admin-list">' + templates.map((entry) => '<div class="admin-entry"><span><strong>' + escapeHtml(entry.name) + '</strong><small>' + escapeHtml(orgName(entry.organizationId)) + ' · ' + entry.items.length + ' itens · ' + entry.relations.length + ' relações</small></span><button type="button" class="button quiet" data-apply-template="' + escapeHtml(entry.id) + '">Revisar</button>' + ((entry.createdBy === user.id || user.permissionLevel === 10) ? '<button type="button" class="icon-button delete-icon" data-remove-template="' + escapeHtml(entry.id) + '" aria-label="Excluir modelo">' + icon("trash-2") + '</button>' : '') + '</div>').join("") + '</div>';
+  const selected = templates.find((entry) => entry.id === ui.templateId);
+  if (selected) {
+    const organizations = editableOrganizations();
+    const organizationId = organizations.some((entry) => entry.id === user.organizationId) ? user.organizationId : organizations[0]?.id || "";
+    const sectors = state.sectors.filter((entry) => entry.organizationId === organizationId);
+    html += '<section class="panel-section"><h3>Revisar aplicação</h3><p>O modelo cria novas identidades. Todos os itens entram em “Não iniciada” e as relações são recriadas.</p><form id="templateApplyForm" class="form-stack"><label>Nome do fluxo<input name="title" value="' + escapeHtml(selected.rootTitle) + '" required maxlength="240"/></label><div class="form-row"><label>Empresa<select name="organizationId" id="templateOrganization">' + organizations.map((entry) => option(entry.id,entry.name,entry.id === organizationId)).join("") + '</select></label><label>Setor<select name="sectorId" id="templateSector">' + sectors.map((entry) => option(entry.id,entry.name,entry.id === user.sectorId)).join("") + '</select></label></div><div class="form-row"><label>Estado (UF)<input name="state" value="' + escapeHtml(user.state) + '" maxlength="2" required/></label><label>Data inicial<input type="date" name="startDate" value="' + today() + '" required/></label></div><details class="form-details"><summary>Itens que serão criados (' + selected.items.length + ')</summary><ol>' + selected.items.map((entry) => '<li>' + escapeHtml(entry.title) + ' · ' + escapeHtml(labelOf(itemTypes,entry.type)) + '</li>').join("") + '</ol></details><button class="button primary" type="submit">' + icon("plus") + 'Criar fluxo a partir do modelo</button></form></section>';
+  }
+  return html + '</div>';
 }
 
 function renderGpo() {
@@ -520,6 +540,7 @@ function bindWorkspace() {
     const action = button.dataset.action;
     if (action === "create") { returnFocus = button; ui.panel = "create"; ui.createParentId = ""; renderPanel(); }
     else if (action === "admin") { returnFocus = button; ui.panel = "admin"; renderPanel(); }
+    else if (action === "templates") { returnFocus = button; ui.templateId = ""; ui.panel = "templates"; renderPanel(); }
     else if (action === "filters") { ui.filtersOpen = !ui.filtersOpen; render(); }
     else if (action === "clear-filters") { state.filters = {query:"",status:"all",type:"all",owner:"all"}; saveState(); render(); }
     else if (action === "logout") { closePanel(); state.currentUserId = ""; saveState(); render(); }
@@ -569,6 +590,12 @@ function bindPanel() {
     if (action === "new-subitem") { ui.createParentId = ui.selectedItemId; ui.panel = "create"; renderPanel(); }
     if (button.dataset.removeRelation) {
       openDeletion("relation",button.dataset.removeRelation);
+    }
+    if (button.dataset.applyTemplate) { ui.templateId = button.dataset.applyTemplate; renderPanel(false); return; }
+    if (button.dataset.removeTemplate) {
+      try { removeFlowTemplate(button.dataset.removeTemplate); saveState(); notify("Modelo removido."); renderPanel(false); }
+      catch (error) { panelFailure(error); }
+      return;
     }
     if (button.dataset.removeGpoRule) {
       try { removePermissionRule(button.dataset.removeGpoRule); saveState(); renderPanel(false); }
@@ -651,6 +678,14 @@ function bindPanel() {
     if (user.permissionLevel === 10 && level !== 10 && state.users.filter((entry) => !entry.disabled && entry.permissionLevel === 10).length <= 1) throw new Error("Mantenha pelo menos um administrador ativo.");
     user.permissionLevel = level; saveState(); notify("Alçada atualizada."); if (!canManageUsers(currentUser())) { closePanel(); render(); } else renderPanel(false);
   });
+  submitHandler("templateSaveForm", (form) => {
+    const template = saveFlowTemplate(ui.selectedItemId,String(form.get("name") || ""));
+    saveState(); notify("Modelo salvo: " + template.name); renderPanel(false);
+  });
+  submitHandler("templateApplyForm", (form) => {
+    const result = applyFlowTemplate(ui.templateId,{title:String(form.get("title") || ""),organizationId:String(form.get("organizationId") || ""),sectorId:String(form.get("sectorId") || ""),state:String(form.get("state") || "").toUpperCase(),startDate:String(form.get("startDate") || today())});
+    saveState(); ui.selectedItemId = result.items[0].id; ui.panel = "item"; ui.panelTab = "details"; ui.templateId = ""; notify("Fluxo criado com " + result.items.length + " itens."); render();
+  });
   submitHandler("gpoRuleForm", (form) => {
     if (!canManageGpo(currentUser())) throw new Error("Sem permissão para configurar o GPO.");
     const [subjectType,subjectId] = String(form.get("subject") || "").split(":");
@@ -676,6 +711,7 @@ function bindPanel() {
   });
   bindOrganizationSelect("itemOrganization","itemSector");
   bindOrganizationSelect("userOrganization","userSector");
+  bindOrganizationSelect("templateOrganization","templateSector");
   document.querySelector("#permissionUser")?.addEventListener("change", (event) => { document.querySelector("#permissionLevel").value = state.users.find((user) => user.id === event.target.value).permissionLevel; });
   root.querySelector(".drawer").addEventListener("keydown", (event) => {
     if (event.key === "Escape") { event.preventDefault(); closePanel(); }
@@ -703,8 +739,8 @@ function itemInput(form) {
 
 function exportVisible() {
   const items = accessibleItems(); const ids = new Set(items.map((item) => item.id));
-  const content = {version:state.version,exportedAt:nowIso(),items,relations:relationsFor(items),events:state.events.filter((event) => ids.has(event.itemId))};
-  if (canManageUsers(currentUser())) Object.assign(content,{organizations:state.organizations,sectors:state.sectors,users:state.users,events:state.events,archivedItems:state.archivedItems || [],archivedRelations:state.archivedRelations || [],archivedUsers:state.archivedUsers || [],archivedOrganizations:state.archivedOrganizations || [],archivedSectors:state.archivedSectors || [],registryEvents:state.registryEvents || []});
+  const content = {version:state.version,exportedAt:nowIso(),items,relations:relationsFor(items),events:state.events.filter((event) => ids.has(event.itemId)),approvalDecisions:(state.approvalDecisions || []).filter((entry) => ids.has(entry.itemId))};
+  if (canManageUsers(currentUser())) Object.assign(content,{organizations:state.organizations,sectors:state.sectors,users:state.users,permissionRules:state.permissionRules || [],templates:state.templates || [],events:state.events,approvalDecisions:state.approvalDecisions || [],archivedItems:state.archivedItems || [],archivedRelations:state.archivedRelations || [],archivedUsers:state.archivedUsers || [],archivedOrganizations:state.archivedOrganizations || [],archivedSectors:state.archivedSectors || [],registryEvents:state.registryEvents || []});
   const url = URL.createObjectURL(new Blob([JSON.stringify(content,null,2)],{type:"application/json"}));
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = `fluxos-${today()}.json`; anchor.click(); URL.revokeObjectURL(url);
   notify("Dados visíveis exportados.");
