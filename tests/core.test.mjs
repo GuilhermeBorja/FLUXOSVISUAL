@@ -381,3 +381,35 @@ beforeRelations=state.relations.length;
   assert.equal(run("state.relations.length"), run("beforeRelations"));
   assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===parent.id && r.targetId===child.id)'), false);
 });
+
+
+test("P0: progresso ponderado usa apenas folhas e não conta grupos duas vezes", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...'+defaults+',title:"Projeto",type:"project"});group=createItem({...'+defaults+',title:"Grupo",parentId:root.id,type:"stage"});a=createItem({...'+defaults+',title:"Atividade A",parentId:group.id,status:"in_progress",progressPercent:50,weight:2});b=createItem({...'+defaults+',title:"Atividade B",parentId:group.id,status:"done",progressPercent:100,weight:1});syncParentSummary(group.id);syncParentSummary(root.id);');
+  assert.equal(run("group.progressPercent"),67);
+  assert.equal(run("root.progressPercent"),67);
+});
+
+test("P0: grupo sem nenhum peso válido não inventa percentual de avanço", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...'+defaults+',title:"Projeto",type:"project"});leaf=createItem({...'+defaults+',title:"Atividade",parentId:root.id,status:"in_progress",progressPercent:80,weight:1});leaf.weight=0;syncParentSummary(root.id);');
+  assert.equal(run("root.progressPercent"),null);
+});
+
+test("P0: template preserva subitens, pesos, durações e relações temporais internas", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...'+defaults+',title:"Fluxo base",type:"project",plannedStartAt:"2026-10-25",dueAt:"2026-10-25",plannedDurationDays:0});a=createItem({...'+defaults+',title:"Etapa A",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3,weight:2});b=createItem({...'+defaults+',title:"Etapa B",parentId:root.id,plannedStartAt:"2026-10-28",dueAt:"2026-10-30",plannedDurationDays:2,weight:3});createRelation(a.id,b.id,"TI",1);template=saveFlowTemplate(root.id,"Modelo P0");result=applyFlowTemplate(template.id,{organizationId:"org_castro",sectorId:"sec_pmo",state:"PE",title:"Instância P0",startDate:"2026-11-01"});');
+  assert.equal(run("result.items.length"),3);
+  assert.equal(run("result.items[1].weight"),2);
+  assert.equal(run("result.items[1].plannedDurationDays"),3);
+  assert.equal(run("result.items[2].weight"),3);
+  assert.equal(run('state.relations.some((r)=>r.sourceId===result.items[1].id && r.targetId===result.items[2].id && r.relationType==="TI" && r.lagDays===1)'),true);
+  assert.equal(run('state.relations.some((r)=>r.sourceId===result.items[0].id && r.targetId===result.items[1].id && r.relationType==="contains")'),true);
+});
+
+test("P0: falha ao aplicar template reverte integralmente itens, relações e eventos", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...'+defaults+',title:"Fluxo base",type:"project"});child=createItem({...'+defaults+',title:"Etapa",parentId:root.id});template=saveFlowTemplate(root.id,"Modelo rollback");template.relations.push({sourceKey:"missing-key",targetKey:template.items[1].key,relationType:"TI",lagDays:0});before=JSON.stringify(state);');
+  assert.throws(() => run('applyFlowTemplate(template.id,{organizationId:"org_castro",sectorId:"sec_pmo",state:"PE",title:"Instância inválida",startDate:today()})'),/perdeu sua referência/);
+  assert.equal(run("JSON.stringify(state)===before"),true);
+});
