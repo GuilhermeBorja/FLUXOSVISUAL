@@ -835,6 +835,8 @@ function createItem(input) {
   state.items.push(item);
   createEvent(item.id, "created", "", item.status, "Item criado.", item.createdAt);
   if (item.parentId) createRelation(item.parentId, item.id, "contains", 0);
+  const schedule = recalculatePlannedDates();
+  if (!schedule.valid) throw new Error(schedule.message);
   if (item.parentId) syncParentSummary(item.parentId);
   return item;
 }
@@ -877,6 +879,12 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
   };
   state.relations.push(relation);
   if (relationType === "contains") target.parentId = sourceId;
+  const schedule = recalculatePlannedDates();
+  if (!schedule.valid) {
+    state.relations = state.relations.filter((entry) => entry.id !== relation.id);
+    if (relationType === "contains") target.parentId = "";
+    throw new Error(schedule.message);
+  }
   createEvent(targetId, "relation_created", "", relationType, relation.description || `Relação criada a partir de ${getItem(sourceId)?.title}.`);
   return relation;
 }
@@ -916,6 +924,8 @@ function moveItemHierarchy(id, nextParentId = "") {
   createEvent(item.id,"parent_changed",previousParentId,nextParentId,"Hierarquia visual alterada.");
   if (previousParentId) syncParentSummary(previousParentId);
   if (nextParentId) syncParentSummary(nextParentId);
+  const schedule = recalculatePlannedDates();
+  if (!schedule.valid) throw new Error(schedule.message);
   return true;
 }
 
@@ -965,6 +975,8 @@ function updateRelation(id, input) {
   if (target.id !== previous.targetId) createEvent(target.id, "relation_updated", previous.targetId, relation.id, relation.description || "Relação transferida para este item.");
   if (previous.relationType === "contains") affectedParents.add(previous.sourceId);
   for (const parentId of affectedParents) syncParentSummary(parentId);
+  const schedule = recalculatePlannedDates();
+  if (!schedule.valid) throw new Error(schedule.message);
   return relation;
 }
 
@@ -1088,6 +1100,7 @@ function validateItemInput(input, existing = null) {
   if (input.ownerId && !state.users.some((user) => user.id === input.ownerId && (!user.disabled || existing?.ownerId === user.id))) throw new Error("Selecione um responsável ativo.");
   if (input.weight !== undefined && (!Number.isFinite(Number(input.weight)) || Number(input.weight) <= 0)) throw new Error("O peso deve ser maior que zero.");
   if (input.progressPercent !== undefined && (!Number.isFinite(Number(input.progressPercent)) || Number(input.progressPercent) < 0 || Number(input.progressPercent) > 100)) throw new Error("O percentual deve ficar entre 0 e 100.");
+  if (input.plannedDurationDays !== undefined && (!Number.isFinite(Number(input.plannedDurationDays)) || Number(input.plannedDurationDays) < 0)) throw new Error("A duração deve ser um número de dias corridos igual ou maior que zero.");
   for (const field of ["plannedStartAt", "dueAt"]) {
     if (input[field] && (!/^\d{4}-\d{2}-\d{2}$/.test(input[field]) || !Number.isFinite(new Date(`${input[field]}T12:00:00`).getTime()))) throw new Error("Informe uma data válida.");
   }
@@ -1102,7 +1115,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   validateItemInput(input,item);
   if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro das regras GPO.");
   const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && entry.status !== "cancelled");
-  if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","weight"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
+  if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays","weight"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
   if ((item.type === "approval") !== (input.type === "approval")) throw new Error("Crie um novo item para alterar o tipo de uma etapa de aprovação.");
@@ -1111,13 +1124,13 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (wasComplete && !complete && (input.progressPercent === undefined || Number(input.progressPercent) === Number(item.progressPercent))) throw new Error("Informe um novo percentual ao reabrir uma atividade concluída.");
   if (complete) input = { ...input, progressPercent: 100 };
   if (wasComplete && complete && ((input.plannedStartAt ?? item.plannedStartAt) !== item.plannedStartAt || (input.dueAt ?? item.dueAt) !== item.dueAt)) throw new Error("As datas previstas ficam bloqueadas após a conclusão.");
-  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
+  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
   let changed = false;
   for (const [field,eventType] of Object.entries(fields)) {
     const rawNext = input[field] ?? item[field];
-    const next = field === "weight" || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
+    const next = ["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
     if (next === item[field]) continue;
-    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
+    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt","plannedDurationDays"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
     if (operation && gpoDecision(user, operation, item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
     createEvent(id,eventType,item[field],next,"",effectiveAt);
     item[field] = next; changed = true;
@@ -1126,7 +1139,12 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (wasComplete && !complete) { item.completedAt = ""; createEvent(id,"reopened","","","Item reaberto.",effectiveAt); }
   if (item.status === "in_progress" && !item.actualStartAt) { item.actualStartAt = effectiveAt; createEvent(id,"started","",effectiveAt,"Atividade iniciada.",effectiveAt); changed = true; }
   if (comment.trim()) { createEvent(id,"comment","","",comment.trim(),effectiveAt); changed = true; }
-  if (changed) { item.updatedAt = nowIso(); item.lastChangeAt = effectiveAt; if (item.parentId) syncParentSummary(item.parentId,effectiveAt); }
+  if (changed) {
+    item.updatedAt = nowIso(); item.lastChangeAt = effectiveAt;
+    if (item.parentId) syncParentSummary(item.parentId,effectiveAt);
+    const schedule = recalculatePlannedDates();
+    if (!schedule.valid) throw new Error(schedule.message);
+  }
   return changed;
 }
 
