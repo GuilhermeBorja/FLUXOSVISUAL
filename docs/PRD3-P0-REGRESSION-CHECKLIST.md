@@ -3,19 +3,19 @@
 **Branch:** `PRD3`  
 **Data:** 18/10/2026  
 **Escopo:** 44 itens que estavam marcados como parciais na matriz de auditoria, priorizando os P0.  
-**CI de referência:** [run #136 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170776873): sintaxe, 74 testes automatizados e smoke browser aprovados.  
+**CI de referência:** [run #140 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170945369): sintaxe, 75 testes automatizados e smoke browser aprovados.  
 **Limite:** os estados descrevem a evidência atual, não certificam o produto para produção. “Preservado” significa que o comportamento coberto pelos testes não regrediu; as pendências listadas continuam abertas.
 
 ## Resumo dos 44 itens
 
 | Estado | Quantidade |
 |---|---:|
-| preservado | 12 |
-| corrigido | 5 |
+| preservado | 11 |
+| corrigido | 6 |
 | regressão encontrada | 0 |
 | não verificado | 27 |
 
-Foram reproduzidos quatro defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; e relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos. Os quatro foram corrigidos e validados nos CI #131, #135 e #136 (74/74 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
+Foram reproduzidos cinco defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; e edição parcial antes de uma negação GPO. Os cinco foram corrigidos e validados nos CI #131, #135, #136 e #140 (75/75 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados.
 
 ## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
@@ -41,8 +41,8 @@ Foram reproduzidos quatro defeitos P0: peso zero legado interpretado como peso 1
 | M-06 | Caminho crítico/folgas corretos para rede temporal, paralelismo e defasagens | não verificado | Testes cobrem caminho crítico em uma rede, paralelismo, fórmulas de dependência, defasagem e ciclo. Ainda falta validar numericamente as folgas e uma rede integrada maior. |
 | M-09 | Aprovações/correções preservam decisão, motivo, autor, data e rodada | não verificado | Há teste para reprovação e criação de revisão ligada. Falta validar todas as rodadas, reabertura, autor/revisor, motivo, data/hora e encadeamento da decisão anterior. |
 | M-10 | Templates preservam estrutura, relações, pesos, durações e rollback | preservado | CI #122 passou nos testes de template: subitens, pesos, durações, relação temporal interna e rollback integral após referência inválida. Falta ampliar para múltiplos tipos de relação e matriz GPO. |
-| M-12 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | preservado | Testes cobrem GPO local por usuário/escopo, negação, padrão fechado e precedência perfil/exceção individual. Essa lógica é client-side; não representa autorização server-side. Falta completar a matriz de operações. |
-| M-13 | Critérios de aceite, testes e evidência rastreáveis | não verificado | A matriz foi atualizada e o CI #136 passou com 74/74 testes e smoke browser. Ainda há 27 requisitos não verificados; não liberar produção até fechar todos os P0. |
+| M-12 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | corrigido | Teste P0 reproduziu mutação parcial: o título mudava antes de uma repactuação ser negada pelo GPO. Corrigido no commit 46864d31 com pré-validação de permissões; CI #140 passou com 75/75 testes e smoke browser. GPO segue client-side e a matriz completa de operações continua pendente. |
+| M-13 | Critérios de aceite, testes e evidência rastreáveis | não verificado | A matriz foi atualizada e o CI #140 passou com 75/75 testes e smoke browser. Ainda há 27 requisitos não verificados; não liberar produção até fechar todos os P0. |
 
 ## 2. Checklist dos demais itens parciais
 
@@ -81,7 +81,8 @@ Foram reproduzidos quatro defeitos P0: peso zero legado interpretado como peso 1
 - **Consistência entre visões:** teste browser acrescentado em [commit f1245041](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/f12450413aceab80aa2a33f52ad02d3e988d5603); confirmou um item recém-criado na Sintética, Analítica e Gantt no [CI #123](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170217684).
 - **Integridade de relações:** o teste [130cd927](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/130cd927355520c0a6d1368135879a6fa324282a) reproduziu relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; corrigido no [commit 2c05b43a](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/2c05b43a0f57f0b67f4719ced4748379a21f663c). O CI #135 passou com 73 testes e o CI #136 validou também arquivar/restaurar relações.
 - **Baseline e rede temporal:** testes P0 adicionados nos commits [f6a673a4](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/f6a673a4c186c6b50fce0d0f1f479f3b86ce6184) e [194aa2a1](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/194aa2a1ff3b1aa8cced6e3233323fa12ae534d9) reproduziram baseline final vazia e previsão deslocada por predecessora cancelada; a correção está no [commit 13568c6a](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/13568c6a7ecf06dcb34b5594c56c8f53ec27ca01).
-- **Validação consolidada mais recente:** [CI #136](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170776873), 74/74 testes e smoke browser aprovados.
+- **GPO e integridade transacional:** o teste [26a78c34](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/26a78c34cc42d0f4917ea9e7087ad055a429f668) reproduziu mutação parcial antes da negação GPO; corrigido no [commit 46864d31](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/46864d319ef2001d0de5052f381f13fa49258eee). O CI #140 passou com 75 testes e smoke browser.
+- **Validação consolidada mais recente:** [CI #140](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39170945369), 75/75 testes e smoke browser aprovados.
 
 ## 4. Ordem de execução pendente
 
