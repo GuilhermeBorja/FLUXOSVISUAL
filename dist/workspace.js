@@ -310,19 +310,48 @@ function renderGantt(items) {
   return html + '</div></div>';
 }
 
+function renderGraphTree(items) {
+  const childMap = new Map();
+  const visible = new Map(items.map((item) => [item.id,item]));
+  items.forEach((item) => {
+    if (visible.has(item.parentId)) {
+      if (!childMap.has(item.parentId)) childMap.set(item.parentId,[]);
+      childMap.get(item.parentId).push(item);
+    }
+  });
+  ui.treeCollapsed ||= new Set();
+  const seen = new Set();
+  function visit(item, depth) {
+    if (seen.has(item.id)) return "";
+    seen.add(item.id);
+    const children = childMap.get(item.id) || [];
+    const collapsed = ui.treeCollapsed.has(item.id);
+    let html = '<div class="graph-tree-entry"><div class="graph-tree-row" style="--depth:' + Math.min(depth,8) + '">';
+    html += children.length ? '<button type="button" class="tree-toggle" data-tree-toggle="' + escapeHtml(item.id) + '" aria-expanded="' + !collapsed + '" aria-label="' + (collapsed ? "Expandir" : "Recolher") + '">' + icon(collapsed ? "chevron-right" : "chevron-down") + '</button>' : '<span class="tree-spacer"></span>';
+    html += '<button type="button" class="graph-tree-item" data-select="' + escapeHtml(item.id) + '" title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '<small>' + escapeHtml(labelOf(itemTypes,item.type)) + '</small></button></div>';
+    if (children.length && !collapsed) html += '<div class="graph-tree-children">' + children.map((child) => visit(child,depth + 1)).join("") + '</div>';
+    return html + '</div>';
+  }
+  const roots = items.filter((item) => !visible.has(item.parentId));
+  return '<nav class="graph-tree" aria-label="Árvore de itens"><h3>Navegar itens</h3><div class="graph-tree-list">' + roots.map((item) => visit(item,0)).join("") + '</div></nav>';
+}
+
 function renderGraph(items) {
-  return `<div class="graph-shell"><div class="graph-toolbar">
+  const legend = [{signal:"red",label:"Bloqueado / atraso"},{signal:"yellow",label:"Aguardando / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído / aprovado"},{signal:"gray",label:"Planejado / cancelado"}];
+  return `<div class="graph-layout">${renderGraphTree(items)}<div class="graph-shell"><div class="graph-toolbar">
     <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map((entry) => option(entry.id,entry.label,ui.grouping === entry.id)).join("")}</select></label>
     <span class="graph-instruction">Arraste os nós para organizar</span>
     <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
     </div><div id="graphCanvas" class="graph-canvas">${items.length ? "" : emptyMarkup()}</div>
-    <div class="graph-legend" aria-label="Legenda do farol"><span class="red"><b></b>Bloqueado / atraso</span><span class="yellow"><b></b>Aguardando / análise</span><span class="blue"><b></b>Em execução</span><span class="green"><b></b>Concluído / aprovado</span><span class="gray"><b></b>Planejado / cancelado</span></div></div>`;
+    <div class="graph-legend" aria-label="Legenda do farol">${legend.map((entry) => '<button type="button" class="' + entry.signal + (ui.graphHighlight === entry.signal ? ' active' : '') + '" data-highlight-signal="' + entry.signal + '" aria-pressed="' + (ui.graphHighlight === entry.signal) + '"><b></b>' + entry.label + '</button>').join("")}${ui.graphHighlight ? '<button type="button" class="button quiet" data-highlight-signal="all">Limpar destaque</button>' : ''}</div></div></div>`;
 }
 
 function layoutKey() { return `${currentUser().id}:${ui.grouping}`; }
 
 function mountGraph(items) {
   const graphKey = `${layoutKey()}:${items.map((item) => item.id).join("|")}`;
+  const schedule = scheduleAnalysis(items);
+  const forecasts = new Map(schedule.rows.map((row) => [row.item.id,shiftedDate(schedule.startDate,row.startOffset + row.duration)]));
   graphInstance = FluxosGraph.mount(document.querySelector("#graphCanvas"), {
     items, relations: relationsFor(items), grouping: ui.grouping,
     savedPositions: ui.positions[layoutKey()] || {}, selectedId: ui.selectedItemId,
@@ -332,12 +361,23 @@ function mountGraph(items) {
       owner: userName, organization: orgName, relation: (id) => labelOf(relationTypes, id),
       type: (item) => labelOf(itemTypes, item.type), status: (item) => signalLabel(item),
       signal: signalOf, duration: elapsedLabel, planned: plannedLabel, project: rootOf,
+      progress: (item) => Math.round(Number(item.progressPercent || 0)),
+      expected: (item) => forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
+      deviation: (item) => {
+        const forecast = forecasts.get(item.id);
+        if (!forecast || !item.dueAt) return "Sem dados suficientes";
+        const days = Math.round((new Date(forecast + "T12:00:00") - new Date(item.dueAt + "T12:00:00")) / 86400000);
+        return days > 0 ? days + "d depois do término ideal" : days < 0 ? Math.abs(days) + "d de folga" : "No término ideal";
+      },
+      blockers: (item) => state.relations.filter((relation) => relation.targetId === item.id && relation.relationType === "blocks").map((relation) => getItem(relation.sourceId)).filter((source) => source && !["done","approved"].includes(source.status)).map((source) => source.title).join(", ") || "Nenhum",
+      dependencies: (item) => state.relations.filter((relation) => relation.targetId === item.id && ["TI","II","TT","IF"].includes(relation.relationType)).map((relation) => getItem(relation.sourceId)?.title).filter(Boolean).join(", ") || "Nenhuma",
     },
     onSelect: (id) => openItem(id),
     onRelation: (relation) => { ui.panelTab = "relations"; openItem(relation.targetId, true); },
     onPositions: (positions) => { ui.positions[layoutKey()] = positions; state.graphPositions = ui.positions; saveState(); },
     onZoom: (value) => { const label = document.querySelector("#zoomLabel"); if (label) label.textContent = `${value}%`; },
   });
+  if (ui.graphHighlight) document.querySelectorAll("#graphCanvas [data-node]").forEach((element) => element.classList.toggle("dimmed",signalOf(getItem(element.dataset.node)) !== ui.graphHighlight));
   ui.graphKey = graphKey;
 }
 
@@ -645,6 +685,16 @@ function bindWorkspace() {
     if (button.dataset.deleteKind) { openDeletion(button.dataset.deleteKind,button.dataset.deleteId); return; }
     if (button.dataset.view) { ui.overviewMode = button.dataset.view; closePanel(); saveState(); render(); return; }
     if (button.dataset.select) { openItem(button.dataset.select); return; }
+    if (button.dataset.treeToggle) {
+      ui.treeCollapsed ||= new Set();
+      const id = button.dataset.treeToggle;
+      if (ui.treeCollapsed.has(id)) ui.treeCollapsed.delete(id); else ui.treeCollapsed.add(id);
+      render(); return;
+    }
+    if (button.dataset.highlightSignal) {
+      ui.graphHighlight = button.dataset.highlightSignal === "all" || ui.graphHighlight === button.dataset.highlightSignal ? "" : button.dataset.highlightSignal;
+      render(); return;
+    }
     if (button.dataset.expand) {
       const id = button.dataset.expand; ui.collapsed ||= new Set();
       if (!ui.showSubitems) { ui.showSubitems = true; ui.collapsed.delete(id); }
