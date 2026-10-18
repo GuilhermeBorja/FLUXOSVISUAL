@@ -155,6 +155,7 @@ const FluxosGraph = (() => {
               <text class="node-owner" text-anchor="middle" y="${node.radius + 64}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
               <text class="node-duration" text-anchor="middle" y="${node.radius + 84}">Total ${esc(options.labels.duration(node.item))}</text>
               <text class="node-status" text-anchor="middle" y="${node.radius + 103}" fill="${color.stroke}">${esc(options.labels.status(node.item))}</text>
+              <text class="node-baseline" text-anchor="middle" y="${node.radius + 123}">Baseline ${esc(options.labels.baseline ? options.labels.baseline(node.item) : "—")}</text>
             </g>`;
           }).join("")}</g>
         </g>
