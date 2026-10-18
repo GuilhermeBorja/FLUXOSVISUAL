@@ -20,6 +20,35 @@ try {
   assert.equal(await page.getByRole("tab", { name: /Analítica/ }).count(), 1);
   assert.equal(await page.getByRole("tab", { name: /Gantt/ }).count(), 1);
 
+  // P0 regression: the same newly created item must remain available in all
+  // three views after a real state mutation, without changing its identity.
+  const crossViewItem = await page.evaluate(() => {
+    const item = createItem({
+      title: "P0 cross-view consistency probe",
+      type: "task",
+      status: "in_progress",
+      ownerId: "u_luis",
+      organizationId: "org_castro",
+      sectorId: "sec_pmo",
+      state: "PE",
+      plannedStartAt: "2026-10-20",
+      dueAt: "2026-10-22",
+      plannedDurationDays: 2,
+      weight: 1,
+    });
+    render();
+    return { id: item.id, title: item.title };
+  });
+  await page.locator(`tr[data-row="${crossViewItem.id}"]`).waitFor();
+
+  await page.getByRole("tab", { name: /Analítica/ }).click();
+  await page.locator(`.graph-node[data-node="${crossViewItem.id}"]`).waitFor();
+
+  await page.getByRole("tab", { name: /Gantt/ }).click();
+  await page.locator(`.gantt-item[data-select="${crossViewItem.id}"]`).waitFor();
+
+  await page.getByRole("tab", { name: /Sintética/ }).click();
+
   await page.getByRole("tab", { name: /Gantt/ }).click();
   await page.locator(".gantt-card").waitFor();
   assert.equal(await page.locator(".gantt-axis").count(), 1);
