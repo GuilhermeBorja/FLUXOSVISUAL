@@ -286,18 +286,26 @@ function scheduleAnalysis(items) {
 
 function renderGantt(items) {
   const analysis = scheduleAnalysis(items);
-  const maxDay = Math.max(1,...analysis.rows.map((row) => row.startOffset + row.duration));
+  const computed = new Map(analysis.rows.map((row) => [row.item.id,row]));
+  const rows = items.map((item) => {
+    if (computed.has(item.id)) return computed.get(item.id);
+    const startOffset = item.plannedStartAt ? Math.max(0,(new Date(item.plannedStartAt + "T12:00:00") - new Date(analysis.startDate + "T12:00:00")) / 86400000) : 0;
+    const duration = item.plannedStartAt && item.dueAt ? Math.max(0,(new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000) : 0;
+    return {item,startOffset,duration,slack:null,critical:false,structural:true};
+  });
+  const maxDay = Math.max(1,...rows.map((row) => row.startOffset + row.duration));
   let html = '<div class="gantt-card"><div class="gantt-heading"><div><h2>Cronograma e caminho crítico</h2><p>Dependências TI, II, TT e IF · duração em dias corridos</p></div><div><strong>Previsão de término</strong><span>' + escapeHtml(analysis.finishDate ? formatDate(analysis.finishDate) : "—") + '</span></div></div>';
   if (analysis.message) html += '<div class="notice ' + (analysis.valid ? '' : 'error') + '" role="' + (analysis.valid ? 'status' : 'alert') + '">' + escapeHtml(analysis.message) + '</div>';
-  if (!analysis.rows.length) return html + emptyMarkup() + '</div>';
+  if (!rows.length) return html + emptyMarkup() + '</div>';
   html += '<div class="gantt-scroll"><div class="gantt-axis"><span>Item</span><div><span>Início do plano: ' + escapeHtml(formatDate(analysis.startDate)) + '</span><span>Término calculado: ' + escapeHtml(formatDate(analysis.finishDate)) + '</span></div></div>';
-  html += analysis.rows.map((row) => {
+  html += rows.map((row) => {
     const left = Math.max(0,Math.min(100,row.startOffset / maxDay * 100));
     const width = Math.max(1,Math.min(100 - left,Math.max(1,row.duration / maxDay * 100)));
     const start = shiftedDate(analysis.startDate,row.startOffset);
     const finish = shiftedDate(analysis.startDate,row.startOffset + row.duration);
     const incoming = relationsFor(items).filter((relation) => relation.targetId === row.item.id && ["TI","II","TT","IF"].includes(relation.relationType)).map((relation) => getItem(relation.sourceId)?.title).filter(Boolean);
-    return '<div class="gantt-row"><button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small>' + escapeHtml(userName(row.item.ownerId)) + ' · ' + escapeHtml(labelOf(statusCatalog,row.item.status)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button><div class="gantt-track"><div class="gantt-bar ' + (row.critical && analysis.valid ? 'critical' : '') + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga " + row.slack.toFixed(1) + "d")) + '"></div><span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + (incoming.length ? 'Depende de: ' + escapeHtml(incoming.join(", ")) : 'Sem predecessoras') + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
+    const barTone = row.critical && analysis.valid ? "critical" : isOverdue(row.item) ? "overdue" : isAtRisk(row.item) ? "at-risk" : "";
+    return '<div class="gantt-row ' + (row.structural ? 'structural' : '') + '"><button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small>' + escapeHtml(userName(row.item.ownerId)) + ' · ' + escapeHtml(labelOf(statusCatalog,row.item.status)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button><div class="gantt-track"><div class="gantt-bar ' + barTone + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga " + row.slack.toFixed(1) + "d")) + '"></div><span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + (incoming.length ? 'Depende de: ' + escapeHtml(incoming.join(", ")) : 'Sem predecessoras') + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
   }).join("");
   return html + '</div></div>';
 }
