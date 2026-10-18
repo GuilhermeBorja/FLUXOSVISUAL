@@ -3,7 +3,7 @@
 **Branch:** `PRD3`  
 **Data:** 18/10/2026  
 **Escopo:** 44 itens que estavam marcados como parciais na matriz de auditoria, priorizando os P0.  
-**CI de referência:** [run #154 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39174762832): sintaxe, testes automatizados, build e smoke browser aprovados.  
+**CI de referência:** [run #180 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175688111): sintaxe, testes automatizados, build e smoke browser aprovados.  
 **Limite:** os estados descrevem a evidência atual, não certificam o produto para produção. “Preservado” significa que o comportamento coberto pelos testes não regrediu; as pendências listadas continuam abertas.
 
 ## Resumo dos 44 itens
