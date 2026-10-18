@@ -339,3 +339,24 @@ beforeRelations=JSON.stringify(state.relations);
   assert.equal(run("state.events.length"), run("beforeEvents"));
   assert.equal(run("JSON.stringify(state.relations)"), run("beforeRelations"));
 });
+
+
+test("criação de item reverte item, relações e eventos se o cronograma for inválido", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`a=createItem({...${defaults},title:"Temporal A"});
+b=createItem({...${defaults},title:"Temporal B"});
+state.relations.push(
+  {id:uid("rel"),sourceId:a.id,targetId:b.id,relationType:"TI",lagDays:0},
+  {id:uid("rel"),sourceId:b.id,targetId:a.id,relationType:"TI",lagDays:0}
+);
+beforeItems=state.items.length;
+beforeRelations=JSON.stringify(state.relations);
+beforeEvents=state.events.length;
+`);
+  assert.throws(() => run(`createItem({...${defaults},title:"Não deve persistir"})`), /ciclo nas dependências temporais/);
+  assert.equal(run("state.items.length"), run("beforeItems"));
+  assert.equal(run("JSON.stringify(state.relations)"), run("beforeRelations"));
+  assert.equal(run("state.events.length"), run("beforeEvents"));
+  assert.equal(run('state.items.some((item)=>item.title==="Não deve persistir")'), false);
+});
