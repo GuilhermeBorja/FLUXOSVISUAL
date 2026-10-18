@@ -162,3 +162,33 @@ test("datas invertidas e status inválidos são rejeitados antes da criação", 
   assert.throws(()=>run(`createItem({...${defaults},dueAt:today(-1)})`),/término/i);
   assert.throws(()=>run(`createItem({...${defaults},status:"unknown"})`),/Status/);
 });
+
+test("cronograma recalcula datas a partir da duração e das relações, preservando a baseline", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...' + defaults + ',title:"Contratar fornecedor de gesso",plannedStartAt:"2026-10-25",dueAt:"2026-10-25",plannedDurationDays:0});' +
+      'a=createItem({...' + defaults + ',title:"Mapear fornecedor",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3});' +
+      'b=createItem({...' + defaults + ',title:"Elaborar escopo",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-27",plannedDurationDays:2});' +
+      'c=createItem({...' + defaults + ',title:"Equalizar",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3});' +
+      'd=createItem({...' + defaults + ',title:"Obter aprovação",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-26",plannedDurationDays:1});' +
+      'e=createItem({...' + defaults + ',title:"Contratar",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-25",plannedDurationDays:0});' +
+      'createRelation(a.id,b.id,"TI"); createRelation(b.id,c.id,"TI"); createRelation(c.id,d.id,"TI"); createRelation(d.id,e.id,"TI");');
+  assert.equal(run("a.plannedStartAt"),"2026-10-25");
+  assert.equal(run("b.plannedStartAt"),"2026-10-28");
+  assert.equal(run("c.plannedStartAt"),"2026-10-30");
+  assert.equal(run("d.plannedStartAt"),"2026-11-02");
+  assert.equal(run("e.plannedStartAt"),"2026-11-03");
+  assert.equal(run("e.dueAt"),"2026-11-03");
+  assert.equal(run("a.baselineStartAt"),"2026-10-25");
+  assert.equal(run("a.baselineDueAt"),"2026-10-28");
+});
+
+test("repactuação desloca previsão dos descendentes sem alterar a baseline original", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...' + defaults + ',title:"Grupo",plannedStartAt:"2026-10-25",dueAt:"2026-10-25"});' +
+      'a=createItem({...' + defaults + ',title:"Atividade",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3});' +
+      'updateItem(root.id,{...root,replannedDueAt:"2026-10-31"});');
+  assert.equal(run("a.plannedStartAt"),"2026-10-28");
+  assert.equal(run("a.dueAt"),"2026-10-31");
+  assert.equal(run("a.baselineStartAt"),"2026-10-25");
+  assert.equal(run("a.baselineDueAt"),"2026-10-28");
+});
