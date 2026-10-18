@@ -818,7 +818,7 @@ function saveFlowTemplate(rootId, name) {
   }));
   const relations = state.relations.filter((relation) => ids.has(relation.sourceId) && ids.has(relation.targetId) && relation.relationType !== "contains").map((relation) => ({sourceKey:relation.sourceId,targetKey:relation.targetId,relationType:relation.relationType,lagDays:relation.lagDays || 0}));
   state.templates ||= [];
-  const template = {id:uid("template"),name:name.trim(),createdBy:user.id,createdAt:nowIso(),rootTitle:root.title,items,relations};
+  const template = {id:uid("template"),name:name.trim(),organizationId:root.organizationId,createdBy:user.id,createdAt:nowIso(),rootTitle:root.title,items,relations};
   state.templates.push(template);
   registryEvent("template",template,"Fluxo salvo como modelo.","created");
   return template;
@@ -828,6 +828,7 @@ function applyFlowTemplate(templateId, input) {
   const user = currentUser();
   const template = state.templates?.find((entry) => entry.id === templateId);
   if (!template) throw new Error("Modelo não encontrado.");
+  if (template.organizationId !== user?.organizationId && user?.permissionLevel !== 10) throw new Error("Este modelo pertence a outra empresa.");
   const parent = {type:"project",organizationId:input.organizationId,sectorId:input.sectorId,state:input.state,createdBy:user?.id};
   if (!canCreateItem(user,parent)) throw new Error("Sua alçada não permite criar itens neste contexto.");
   if (!template.items?.length) throw new Error("O modelo não contém itens.");
