@@ -579,7 +579,7 @@ function renderItemPanel(item) {
   const events = historyEventsFor(item);
   const tabs = [{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"relations",label:"Relações (" + relations.length + ")"},{id:"history",label:"Histórico (" + events.length + ")"}];
   if (item.type === "approval") tabs.push({id:"approval",label:"Aprovação"});
-  let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title, canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : "");
+  let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title, (canEditItem(currentUser(),item) ? '<button class="button quiet" data-action="archive-item">' + icon("archive") + 'Arquivar</button>' : '') + (canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""));
   html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + ' · ' + elapsedLabel(item) + ' total</span></div>';
   html += '<div class="panel-tabs" role="tablist" aria-label="Detalhes do item">' + tabs.map((tab) => '<button role="tab" aria-selected="' + (ui.panelTab === tab.id) + '" class="' + (ui.panelTab === tab.id ? "active" : "") + '" data-panel-tab="' + tab.id + '">' + tab.label + '</button>').join("") + '</div><div class="drawer-body">';
   if (ui.panelTab === "details") html += editable
@@ -697,6 +697,11 @@ function renderTemplatesPanel() {
   return html + '</div>';
 }
 
+function renderArchivedItems() {
+  const items=state.items.filter((item)=>item.archivedAt && canEditItem(currentUser(),item)).sort((a,b)=>new Date(b.archivedAt)-new Date(a.archivedAt));
+  return `<section class="panel-section"><h3>Itens arquivados (${items.length})</h3><p class="muted">Arquivar preserva o histórico e a hierarquia. Restaurar um pai restaura também os descendentes arquivados.</p>${items.length ? `<div class="admin-list">${items.map((item)=>`<div class="admin-entry"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.archivedBy))} · ${formatDateTime(item.archivedAt)}</small></span><button class="button quiet" data-restore-item="${escapeHtml(item.id)}">${icon("rotate-ccw")}Restaurar</button></div>`).join("")}</div>` : `<p class="muted">Nenhum item arquivado.</p>`}</section>`;
+}
+
 function renderStatusSettings() {
   state.statusSettings ||= {};
   return `<section class="panel-section"><h3>Status operacionais</h3><p class="muted">Personalize o ícone e a cor exibidos para cada status. A mudança afeta a apresentação, não as regras de transição.</p><div class="type-settings-list">${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status)=>{ const config=statusConfig(status.id); return `<form class="type-setting form-row" data-status-setting="${escapeHtml(status.id)}"><strong>${icon(config.icon)}${escapeHtml(status.label)}</strong><label>Ícone<select name="icon">${availableItemIcons.map((name)=>option(name,name,name===config.icon)).join("")}</select></label><label>Cor<input name="color" type="color" value="${escapeHtml(config.color)}" required/></label><button class="button quiet" type="submit">Salvar</button></form>`; }).join("")}</div></section>`;
@@ -733,7 +738,7 @@ function renderAdmin() {
   const tabs = [];
   if (canManageAnyUsers(currentUser())) tabs.push({id:"users",label:"Usuários"});
   if (canManageAnyOrganization(currentUser()) || gpoDecision(currentUser(),"manage_organization",null) === true) tabs.push({id:"organizations",label:"Empresas e setores"});
-  if (canManageGpo(currentUser())) { tabs.push({id:"gpo",label:"GPO"}); tabs.push({id:"statuses",label:"Status"}); }
+  if (canManageGpo(currentUser())) { tabs.push({id:"gpo",label:"GPO"}); tabs.push({id:"statuses",label:"Status"}); tabs.push({id:"archive",label:"Arquivados"}); }
   if (canManageAnyOrganization(currentUser()) || canManageGpo(currentUser())) tabs.push({id:"types",label:"Tipos de item"});
   if (!tabs.some((tab) => tab.id === ui.adminTab)) ui.adminTab = tabs[0]?.id || "users";
   return `${panelHeader("Administração","Cadastros e permissões")}<div class="panel-tabs" role="tablist">${tabs.map((tab) => `<button role="tab" aria-selected="${ui.adminTab === tab.id}" data-admin-tab="${tab.id}" class="${ui.adminTab === tab.id ? "active" : ""}">${tab.label}</button>`).join("")}</div><div class="drawer-body">
@@ -741,6 +746,7 @@ function renderAdmin() {
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}${gpoDecision(currentUser(),"manage_organization",null) === true ? `<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section>` : ""}<section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.filter((org) => canManageOrganization(currentUser(),org.id)).map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "gpo" && canManageGpo(currentUser()) ? renderGpo() : ""}
     ${ui.adminTab === "statuses" && canManageGpo(currentUser()) ? renderStatusSettings() : ""}
+    ${ui.adminTab === "archive" && canManageGpo(currentUser()) ? renderArchivedItems() : ""}
     ${ui.adminTab === "types" ? renderTypeSettings() : ""}
   </div>`;
 }
@@ -1043,6 +1049,8 @@ function bindPanel() {
     event.stopPropagation();
     const action = button.dataset.action;
     if (action === "close-panel") { closePanel(); return; }
+    if (action === "archive-item") { try { const count=archiveItem(ui.selectedItemId); ui.selectedItemId=""; ui.panel=""; saveState(); notify(count + " item(ns) arquivado(s)."); render(); } catch(error) { panelFailure(error); } return; }
+    if (button.dataset.restoreItem) { try { const count=restoreArchivedItem(button.dataset.restoreItem); saveState(); notify(count + " item(ns) restaurado(s)."); renderPanel(false); } catch(error) { panelFailure(error); } return; }
     if (action === "cancel-deletion") { cancelDeletion(); return; }
     if (button.dataset.deleteKind) { openDeletion(button.dataset.deleteKind,button.dataset.deleteId); return; }
     if (button.dataset.panelTab) { ui.panelTab = button.dataset.panelTab; renderPanel(false); return; }
