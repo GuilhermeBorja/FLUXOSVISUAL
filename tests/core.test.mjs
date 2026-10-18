@@ -201,3 +201,16 @@ test("instalação nova inicia sem organização, usuários operacionais ou iten
   assert.equal(run("state.items.length"),0);
   assert.equal(run("state.users.length"),0);
 });
+test("relação CONTÉM é mantida com todos os ancestrais ao mover subitens", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...' + defaults + ',title:"Raiz"});' +
+      'parent=createItem({...' + defaults + ',title:"Pai",parentId:root.id});' +
+      'child=createItem({...' + defaults + ',title:"Filho",parentId:parent.id});' +
+      'other=createItem({...' + defaults + ',title:"Outro pai"});');
+  assert.equal(run('state.relations.some((r)=>r.sourceId===root.id && r.targetId===child.id && r.relationType==="contains")'),true);
+  assert.equal(run('state.relations.some((r)=>r.sourceId===parent.id && r.targetId===child.id && r.relationType==="contains")'),true);
+  run('moveItemHierarchy(child.id,other.id);');
+  assert.equal(run('state.relations.some((r)=>r.sourceId===root.id && r.targetId===child.id && r.relationType==="contains")'),false);
+  assert.equal(run('state.relations.some((r)=>r.sourceId===parent.id && r.targetId===child.id && r.relationType==="contains")'),false);
+  assert.equal(run('state.relations.some((r)=>r.sourceId===other.id && r.targetId===child.id && r.relationType==="contains")'),true);
+});
