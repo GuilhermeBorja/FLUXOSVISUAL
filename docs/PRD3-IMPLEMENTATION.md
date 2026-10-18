@@ -78,3 +78,6 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 
 - **Seletores de status:** cores configuradas agora são aplicadas aos seletores operacionais, além de tabela, grafo e Gantt. Teste de contrato passou.
 - **CI mais recente:** https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166377642 — sintaxe, testes e build aprovados.
+
+- **Timer do responsável no grafo:** o nó mostra o tempo decorrido desde a atribuição do responsável atual, usando o último evento de troca de responsável; o tooltip também separa esse valor do tempo total do item. Teste dinâmico passou: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166466903.
+- **Documentação do grafo:** README agora descreve a sequência real da propagação (subárvore, retorno pelos ancestrais e demais ramos sem repetir nós).
