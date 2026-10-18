@@ -46,6 +46,14 @@ function durationFromMinutes(minutes) {
   return `${days ? `${days}d ` : ""}${hours ? `${hours}h ` : ""}${minutes % 60}min`;
 }
 
+function ownerElapsedLabel(item) {
+  const assignment = (state.events || []).filter((event) => event.itemId === item.id && event.eventType === "owner_changed" && event.toValue === item.ownerId).sort((a,b) => new Date(b.effectiveAt || b.createdAt) - new Date(a.effectiveAt || a.createdAt))[0];
+  const start = assignment?.effectiveAt || assignment?.createdAt || item.createdAt;
+  const end = item.completedAt || nowIso();
+  const minutes = Math.max(0,Math.floor((new Date(end) - new Date(start)) / 60000));
+  return durationFromMinutes(minutes);
+}
+
 function activityDurationLabel(item) {
   const minutes = activityDurationMinutes(item);
   if (minutes === null) return state.relations.some((relation) => relation.targetId === item.id && ["TI","II","TT","IF"].includes(relation.relationType)) ? "Aguardando dependências" : "Não iniciada";
@@ -490,7 +498,7 @@ function mountGraph(items) {
     labels: {
       owner: userName, organization: orgName, relation: (id) => labelOf(relationTypes, id),
       type: (item) => itemTypeConfig(item.type,item.organizationId).label, typeColor: (item) => itemTypeConfig(item.type,item.organizationId).color, status: (item) => signalLabel(item),
-      signal: signalOf, statusColor: (item) => statusConfig(item.status).color, duration: elapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
+      signal: signalOf, statusColor: (item) => statusConfig(item.status).color, duration: elapsedLabel, ownerTimer: ownerElapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
       progress: (item) => Math.round(Number(item.progressPercent || 0)),
       expected: (item) => forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
       deviation: (item) => {
