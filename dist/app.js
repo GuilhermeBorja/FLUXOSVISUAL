@@ -239,7 +239,7 @@ function loadState() {
           item.weight ??= 1;
           item.plannedDurationDays = Number.isFinite(Number(item.plannedDurationDays)) ? Math.max(0, Number(item.plannedDurationDays)) : (item.plannedStartAt && item.dueAt ? Math.max(0, (new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000) : 0);
           item.baselineStartAt ||= item.plannedStartAt || "";
-          item.baselineDueAt ||= item.dueAt || "";
+          item.baselineDueAt ||= item.dueAt || datePlusDays(item.baselineStartAt || item.plannedStartAt || today(), item.plannedDurationDays || 0);
           item.replannedDueAt ??= "";
           if (item.status === "approved") item.status = "done";
           if (item.status === "rejected") item.status = "correction";
@@ -453,7 +453,7 @@ function createSeedItem(base, input) {
     dueAt: input.dueAt || "",
     plannedDurationDays: Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0),
     baselineStartAt: input.plannedStartAt || today(),
-    baselineDueAt: input.dueAt || "",
+    baselineDueAt: input.baselineDueAt || input.dueAt || datePlusDays(input.plannedStartAt || today(), Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0)),
     replannedDueAt: "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (["done","cancelled"].includes(input.status) ? 100 : 0)),
