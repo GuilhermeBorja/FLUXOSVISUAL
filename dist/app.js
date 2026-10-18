@@ -1123,11 +1123,14 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays","weight"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
-  if ((item.type === "approval") !== (input.type === "approval")) throw new Error("Crie um novo item para alterar o tipo de uma etapa de aprovação.");
+  if (input.type === "approval" && item.type !== "approval") { item.approvalRound ||= 1; item.approvalReviewerId ||= input.ownerId || ""; }
+  if (input.status === "cancelled") input = { ...input, progressPercent: 100 };
+  else if (Number(input.progressPercent ?? item.progressPercent ?? 0) > 0 && !["done","cancelled","blocked"].includes(input.status)) input = { ...input, status: "in_progress" };
   const wasComplete = completeStatus(item.status);
   const complete = completeStatus(input.status);
   if (wasComplete && !complete && (input.progressPercent === undefined || Number(input.progressPercent) === Number(item.progressPercent))) throw new Error("Informe um novo percentual ao reabrir uma atividade concluída.");
   if (complete) input = { ...input, progressPercent: 100 };
+  if (input.status === "cancelled") input = { ...input, progressPercent: 100 };
   if (wasComplete && complete && ((input.plannedStartAt ?? item.plannedStartAt) !== item.plannedStartAt || (input.dueAt ?? item.dueAt) !== item.dueAt)) throw new Error("As datas previstas ficam bloqueadas após a conclusão.");
   const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",replannedDueAt:"replanned_due_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
   let changed = false;
@@ -1440,6 +1443,13 @@ function recalculatePlannedDates() {
   const queue = items.filter((item) => indegree.get(item.id) === 0).map((item) => item.id), order = [];
   while (queue.length) { const id = queue.shift(); order.push(id); for (const r of outgoing.get(id)) { const n = indegree.get(r.targetId)-1; indegree.set(r.targetId,n); if (n === 0) queue.push(r.targetId); } }
   if (order.length !== items.length) return {valid:false,message:"Há um ciclo nas dependências temporais. As datas não foram recalculadas."};
+  for (const item of items) {
+    const deps = incoming.get(item.id) || [];
+    if (!deps.length || !["backlog","ready"].includes(item.status)) continue;
+    const released = deps.every((r) => { const pred=byId.get(r.sourceId); if (!pred) return false; if (r.relationType === "II" || r.relationType === "IF") return ["in_progress","done"].includes(pred.status); return pred.status === "done"; });
+    const nextStatus = released ? "ready" : "backlog";
+    if (item.status !== nextStatus) { createEvent(item.id,"status_changed",item.status,nextStatus,"Liberação calculada automaticamente pelas predecessoras."); item.status=nextStatus; }
+  }
   const durations = new Map(items.map((item) => [item.id,itemDurationDays(item)]));
   const starts = new Map(items.map((item) => [item.id,item.baselineStartAt || item.plannedStartAt || today()]));
   for (const id of order) {
