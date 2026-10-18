@@ -555,7 +555,7 @@ function renderAttachments(item,editable) {
 function renderCreatePanel() {
   const parent = getItem(ui.createParentId);
   const editable = accessibleItems().filter((item) => canEditItem(currentUser(), item));
-  const defaults = parent ? { type:"substage", ownerId:parent.ownerId, organizationId:parent.organizationId, sectorId:parent.sectorId, state:parent.state } : { type:"project" };
+  const defaults = parent ? { type:"substage", ownerId:parent.ownerId, organizationId:parent.organizationId, sectorId:parent.sectorId, state:parent.state, plannedStartAt:parent.baselineStartAt || parent.plannedStartAt || today() } : { type:"project" };
   return `${panelHeader(parent ? "Novo subitem" : "Cadastro", parent ? `Adicionar a ${parent.title}` : "Novo item")}
     <form id="createItemForm" class="drawer-body form-stack">
       ${itemFormFields(defaults, true)}
@@ -1212,6 +1212,10 @@ function bindPanel() {
     reopenApproval(ui.selectedItemId,String(form.get("note") || ""),Number(form.get("progressPercent")));
     saveState(); notify("Aprovação reaberta em nova rodada."); renderPanel(false);
   });
+  const parentSelect=root.querySelector('#createItemForm [name="parentId"]');
+  const initialStart=root.querySelector('#createItemForm [name="plannedStartAt"]');
+  initialStart?.addEventListener("change",()=>{ initialStart.dataset.touched="true"; });
+  parentSelect?.addEventListener("change",()=>{ const parent=getItem(parentSelect.value); if(!parent) return; if(initialStart && !initialStart.dataset.touched) initialStart.value=parent.baselineStartAt || parent.plannedStartAt || today(); const owner=root.querySelector('#createItemForm [name="ownerId"]'); if(owner && parent.ownerId) owner.value=parent.ownerId; });
   bindOrganizationSelect("itemOrganization","itemSector");
   bindOrganizationSelect("userOrganization","userSector");
   bindOrganizationSelect("templateOrganization","templateSector");
