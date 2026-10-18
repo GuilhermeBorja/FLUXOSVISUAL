@@ -222,5 +222,5 @@ test("histórico do pai agrega eventos descendentes sem expor itens não autoriz
     canViewItem:(_user,item)=>item.allowed,
   };
   const events = vm.runInNewContext(source + "\nhistoryEventsFor",sandbox)({id:"p"});
-  assert.deepEqual(events.map((event)=>event.id).sort(),["ec","eg","ep"]);
+  assert.equal(Array.from(events,(event)=>event.id).sort().join(","),"ec,eg,ep");
 });
