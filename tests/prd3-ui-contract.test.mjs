@@ -119,3 +119,9 @@ test("análise do Gantt sinaliza duração ausente e ciclos temporais", () => {
   assert.equal(cycle.valid,false);
   assert.match(cycle.message,/ciclo/);
 });
+
+test("cores de estado configuradas são repassadas aos nós do grafo", () => {
+  assert.match(graph, /const statusColor = options\.labels\.statusColor/);
+  assert.match(graph, /stroke="\$\{esc\(statusColor\)\}"/);
+  assert.match(workspace, /statusColor: \(item\) => statusConfig\(item\.status\)\.color/);
+});
