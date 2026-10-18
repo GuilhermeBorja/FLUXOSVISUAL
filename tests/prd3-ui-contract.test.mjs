@@ -133,3 +133,20 @@ test("cores das linhas são configuráveis por nível e por projeto", () => {
   assert.match(workspace, /function rowFillColor\(item, depth\)/);
   assert.match(css, /--row-fill/);
 });
+
+
+test("Gantt aplica as quatro fórmulas de dependência temporal", () => {
+  const items = [];
+  const relations = [];
+  for (const type of ["TI","II","TT","IF"]) {
+    items.push({id:"s"+type,parentId:"",plannedStartAt:"2026-01-01",dueAt:"2026-01-05",plannedDurationDays:4});
+    items.push({id:"t"+type,parentId:"",plannedStartAt:"2026-01-01",dueAt:"2026-01-03",plannedDurationDays:2});
+    relations.push({id:"r"+type,sourceId:"s"+type,targetId:"t"+type,relationType:type,lagDays:1});
+  }
+  const analysis = analyzeSchedule(items,relations);
+  assert.equal(analysis.valid,true);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="tTI").startOffset,5);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="tII").startOffset,1);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="tTT").startOffset,3);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="tIF").startOffset,0);
+});
