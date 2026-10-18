@@ -64,7 +64,8 @@
 
 - `moveItemHierarchy` restaura itens, relações, eventos e relações arquivadas se a validação temporal falhar.
 - `createItem` restaura itens, relações, eventos e relações arquivadas se a validação temporal falhar.
-- Foram adicionados testes de regressão para ambos os cenários. Não marcar como aprovados até verificar o resultado do workflow acionado por esses commits.
+- `createRelation` preserva o `parentId` anterior quando a criação da relação CONTÉM é revertida por cronograma inválido.
+- Foram adicionados testes de regressão para os três cenários. Não marcar como aprovados até verificar o resultado do workflow acionado por esses commits.
 
 ## Validação automatizada
 
