@@ -178,6 +178,12 @@ try {
   assert.ok(peerDelta >= 5, `linked node did not respond magnetically: ${peerDelta}px`);
   assert.ok(peerDelta < sourceDelta * 0.75, `linked node movement was not proportional: source=${sourceDelta}px peer=${peerDelta}px`);
   assert.equal(afterDrag.persisted, true, "dragged graph positions were not saved");
+  await page.waitForTimeout(250);
+  const afterSettle = await page.evaluate((id) => {
+    const box = document.querySelector(`.graph-node[data-node="${id}"]`).getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }, crossViewItem.id);
+  assert.ok(Math.hypot(afterSettle.x - afterDrag.source.x, afterSettle.y - afterDrag.source.y) < 1.5, "node continued moving after release");
 
   const zoomBefore = await page.locator("#zoomLabel").textContent();
   await page.locator(".graph-svg").hover();
@@ -209,6 +215,13 @@ try {
   await page.mouse.up();
   const panAfter = await linkedNode.boundingBox();
   assert.ok(Math.abs(panAfter.x - panBefore.x) > 15, "graph pan did not move the scene");
+
+  await page.locator("#groupingSelect").selectOption("connections");
+  await draggedNode.waitFor();
+  await linkedNode.waitFor();
+  await page.locator("#groupingSelect").selectOption("project");
+  await draggedNode.waitFor();
+  await linkedNode.waitFor();
 
   await page.getByRole("button", { name: /Configurações/ }).click();
   const drawer = page.locator(".drawer");
