@@ -1196,13 +1196,13 @@ function bindPanel() {
   submitHandler("organizationForm", (form) => {
     if (gpoDecision(currentUser(),"manage_organization",null) !== true) throw new Error("O GPO não permite cadastrar empresas.");
     const name = String(form.get("name")).trim(); if (!name) throw new Error("Informe o nome da empresa.");
-    state.organizations.push({id:uid("org"),name,state:String(form.get("state")).toUpperCase()}); saveState(); notify("Empresa cadastrada."); renderPanel(false);
+    const organization={id:uid("org"),name,state:String(form.get("state")).toUpperCase()}; state.organizations.push(organization); if(!currentUser().organizationId){currentUser().organizationId=organization.id; currentUser().state=organization.state;} saveState(); notify("Empresa cadastrada."); renderPanel(false);
   });
   submitHandler("sectorForm", (form) => {
     const organizationId = String(form.get("organizationId"));
     if (!canManageOrganization(currentUser(),organizationId)) throw new Error("O GPO não permite cadastrar setores nesta empresa.");
     const name = String(form.get("name")).trim(); if (!name) throw new Error("Informe o nome do setor.");
-    state.sectors.push({id:uid("sector"),name,organizationId}); saveState(); notify("Setor cadastrado."); renderPanel(false);
+    const sector={id:uid("sector"),name,organizationId}; state.sectors.push(sector); if(currentUser().organizationId===organizationId && !currentUser().sectorId) currentUser().sectorId=sector.id; saveState(); notify("Setor cadastrado."); renderPanel(false);
   });
   submitHandler("templateSaveForm", (form) => {
     const template = saveFlowTemplate(ui.selectedItemId,String(form.get("name") || ""));
