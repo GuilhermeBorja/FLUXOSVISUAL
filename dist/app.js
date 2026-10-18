@@ -879,7 +879,7 @@ function createItem(input) {
     dueAt: input.dueAt || "",
     plannedDurationDays: Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0),
     baselineStartAt: input.plannedStartAt || today(),
-    baselineDueAt: input.dueAt || "",
+    baselineDueAt: input.dueAt || (input.plannedDurationDays !== undefined && input.plannedDurationDays !== null && input.plannedDurationDays !== "" && Number.isFinite(Number(input.plannedDurationDays)) ? datePlusDays(input.plannedStartAt || today(), Math.max(0, Number(input.plannedDurationDays))) : ""),
     replannedDueAt: "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (completeStatus(input.status) ? 100 : 0)),
@@ -1584,7 +1584,9 @@ function recalculatePlannedDates() {
   for (const id of order) {
     const duration = durations.get(id), candidates = [];
     for (const r of incoming.get(id)) {
-      const pred = byId.get(r.sourceId), ps = starts.get(pred.id), pf = datePlusDays(ps,durations.get(pred.id)), lag = Number(r.lagDays) || 0;
+      const pred = byId.get(r.sourceId);
+      if (pred.status === "cancelled") continue;
+      const ps = starts.get(pred.id), pf = datePlusDays(ps,durations.get(pred.id)), lag = Number(r.lagDays) || 0;
       if (r.relationType === "TI") candidates.push(datePlusDays(pf,lag));
       else if (r.relationType === "II") candidates.push(datePlusDays(ps,lag));
       else if (r.relationType === "TT") candidates.push(datePlusDays(pf,lag-duration));
