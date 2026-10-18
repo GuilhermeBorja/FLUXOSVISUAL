@@ -1,18 +1,5 @@
 const STORAGE_KEY = "fluxosVisualState.v2";
 
-const permissionLevels = {
-  1: "Visualizar e editar apenas dados criados por você",
-  2: "Apenas visualizar todos os dados do seu estado",
-  3: "Visualizar e editar todos os dados do seu estado",
-  4: "Apenas visualizar todos os dados do seu setor",
-  5: "Visualizar e editar todos os dados do seu setor",
-  6: "Apenas visualizar todos os dados da sua empresa",
-  7: "Visualizar e editar todos os dados da sua empresa",
-  8: "Visualizar todos os dados",
-  9: "Visualizar e editar todos os dados",
-  10: "Visualizar, editar e remover todos os dados, criar e apagar usuários",
-};
-
 const statusCatalog = [
   { id: "backlog", label: "Backlog" },
   { id: "ready", label: "Pronto" },
@@ -20,25 +7,25 @@ const statusCatalog = [
   { id: "waiting", label: "Aguardando" },
   { id: "blocked", label: "Bloqueado" },
   { id: "under_review", label: "Em análise" },
-  { id: "approved", label: "Aprovado" },
-  { id: "rejected", label: "Rejeitado" },
   { id: "correction", label: "Em correção" },
   { id: "done", label: "Concluído" },
   { id: "cancelled", label: "Cancelado" },
 ];
 
 const itemTypes = [
-  { id: "project", label: "Projeto" },
-  { id: "process", label: "Processo" },
-  { id: "stage", label: "Etapa" },
-  { id: "substage", label: "Subetapa" },
-  { id: "task", label: "Tarefa" },
-  { id: "approval", label: "Aprovação" },
-  { id: "blocker", label: "Bloqueio" },
-  { id: "deliverable", label: "Entrega" },
-  { id: "milestone", label: "Marco" },
-  { id: "document", label: "Documento" },
+  { id: "project", label: "Projeto", icon: "folder-kanban", color: "#256b76" },
+  { id: "process", label: "Processo", icon: "workflow", color: "#54758b" },
+  { id: "stage", label: "Etapa", icon: "layers-2", color: "#7561a8" },
+  { id: "substage", label: "Subetapa", icon: "list-tree", color: "#8b77b5" },
+  { id: "task", label: "Tarefa", icon: "square-check", color: "#287d62" },
+  { id: "approval", label: "Aprovação", icon: "stamp", color: "#bd8b22" },
+  { id: "blocker", label: "Bloqueio", icon: "circle-alert", color: "#c2474d" },
+  { id: "deliverable", label: "Entrega", icon: "package-check", color: "#2679a5" },
+  { id: "milestone", label: "Marco", icon: "flag", color: "#ca6e32" },
+  { id: "document", label: "Documento", icon: "file-text", color: "#687780" },
 ];
+
+const availableItemIcons = ["folder-kanban","workflow","layers-2","list-tree","square-check","stamp","circle-alert","package-check","flag","file-text","network","table-2","plus","link-2","users","building-2","circle-help","pencil","paperclip"];
 
 const relationTypes = [
   { id: "contains", label: "Contém" },
@@ -57,12 +44,19 @@ const permissionOperationLabels = {
   edit_item: "Editar item",
   delete_item: "Excluir item",
   create_relation: "Criar relação",
+  edit_relation: "Alterar relação",
   delete_relation: "Excluir relação",
   change_owner: "Alterar responsável",
-  change_due: "Alterar prazo",
+  change_weight: "Alterar peso",
+  change_duration: "Alterar duração",
+  change_hierarchy: "Alterar hierarquia visual",
+  add_attachment: "Incluir anexo",
+  delete_attachment: "Excluir anexo",
   create_approval: "Configurar aprovação",
   decide_approval: "Decidir aprovação",
   manage_users: "Gerenciar usuários",
+  manage_gpo: "Configurar GPO",
+  manage_organization: "Administrar cadastros organizacionais",
 };
 
 const app = document.querySelector("#app");
@@ -154,6 +148,52 @@ function getItem(id) {
   return state.items.find((item) => item.id === id);
 }
 
+function itemTypeConfig(typeId, organizationId = currentUser()?.organizationId) {
+  const base = itemTypes.find((type) => type.id === typeId) || { id: typeId, label: typeId, icon: "circle", color: "#687780" };
+  const configured = { ...base, ...(state.typeSettings?.[typeId] || {}), ...(state.typeSettings?.[organizationId]?.[typeId] || {}) };
+  if (!availableItemIcons.includes(configured.icon)) configured.icon = base.icon;
+  return configured;
+}
+
+function completeStatus(status) {
+  return status === "done";
+}
+
+function legacyGpoRules(user) {
+  const level = Number(user.legacyPermissionLevel ?? user.permissionLevel);
+  const scopes = {
+    1: ["creator", user.id, false], 2: ["state", user.state, false], 3: ["state", user.state, true],
+    4: ["sector", user.sectorId, false], 5: ["sector", user.sectorId, true],
+    6: ["organization", user.organizationId, false], 7: ["organization", user.organizationId, true],
+    8: ["global", "", false], 9: ["global", "", true], 10: ["global", "", true],
+  };
+  const selected = scopes[level];
+  if (!selected) return [];
+  const [scopeType, scopeId, editable] = selected;
+  const operations = ["view_item"];
+  if (editable) operations.push("create_item", "edit_item", "create_relation", "edit_relation", "delete_relation", "change_owner", "change_weight", "change_duration", "change_hierarchy", "add_attachment", "delete_attachment", "create_approval", "decide_approval");
+  if (level === 1) operations.push("edit_item");
+  if (level === 10) operations.push("delete_item", "manage_users", "manage_gpo", "manage_organization");
+  return operations.map((operation) => ({ id: uid("gpo"), subjectType: "user", subjectId: user.id, operation, scopeType, scopeId: scopeId || "", effect: "allow", createdBy: "migration", createdAt: nowIso() }));
+}
+
+function defaultGpoRules(user) {
+  const profiles = {
+    u_luis: { scopeType:"global", scopeId:"", editable:true, administrator:true },
+    u_virginia: { scopeType:"organization", scopeId:"org_castro", editable:true },
+    u_eduardo: { scopeType:"global", scopeId:"", editable:false },
+    u_enrique: { scopeType:"sector", scopeId:"sec_obra", editable:true },
+    u_mateus: { scopeType:"state", scopeId:"PE", editable:true },
+    u_dmk: { scopeType:"state", scopeId:"PE", editable:false },
+  };
+  const profile = profiles[user.id];
+  if (!profile) return [];
+  const operations = ["view_item"];
+  if (profile.editable) operations.push("create_item","edit_item","create_relation","edit_relation","delete_relation","change_owner","change_weight","change_duration","change_hierarchy","add_attachment","delete_attachment","create_approval","decide_approval");
+  if (profile.administrator) operations.push("delete_item","manage_users","manage_gpo","manage_organization");
+  return operations.map((operation) => ({id:uid("gpo"),subjectType:"user",subjectId:user.id,operation,scopeType:profile.scopeType,scopeId:profile.scopeId,effect:"allow",createdBy:"seed",createdAt:nowIso()}));
+}
+
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -165,13 +205,39 @@ function loadState() {
       const parsed = JSON.parse(saved);
       if (parsed.version === 2) {
         parsed.permissionRules ||= [];
+        parsed.permissionRules = parsed.permissionRules.map((rule) => rule.operation === "change_due" ? {...rule,operation:"change_duration"} : rule);
         parsed.approvalDecisions ||= [];
         parsed.templates ||= [];
+        parsed.attachments ||= [];
+        parsed.archivedAttachments ||= [];
+        parsed.typeSettings ||= {};
         parsed.riskThresholdDays ??= 3;
+        parsed.filters ||= { query: "", status: "all", type: "all", owner: "all" };
+        parsed.filters.organization ??= "all";
+        parsed.filters.sector ??= "all";
+        parsed.filters.state ??= "all";
+        if (!parsed.gpoVersion) {
+          const migratedRules = parsed.permissionRules.filter((rule) => rule.subjectType === "level").flatMap((rule) =>
+            (parsed.users || []).filter((user) => Number(user.permissionLevel) === Number(rule.subjectId)).map((user) => ({ ...rule, id: uid("gpo"), subjectType: "user", subjectId: user.id }))
+          );
+          parsed.permissionRules = parsed.permissionRules.filter((rule) => rule.subjectType !== "level").concat(migratedRules);
+          for (const user of parsed.users || []) {
+            const legacyUser = {...user,legacyPermissionLevel:user.legacyPermissionLevel ?? user.permissionLevel};
+            delete user.permissionLevel;
+            delete user.legacyPermissionLevel;
+            parsed.permissionRules.push(...legacyGpoRules(legacyUser));
+          }
+          parsed.gpoVersion = 1;
+        }
         for (const item of parsed.items || []) {
           if (item.type === "approval") item.approvalRound ||= 1;
           item.weight ??= 1;
-          item.progressPercent ??= ["done","approved"].includes(item.status) ? 100 : item.status === "in_progress" ? 50 : 0;
+          if (item.status === "approved") item.status = "done";
+          if (item.status === "rejected") item.status = "correction";
+          item.progressPercent ??= completeStatus(item.status) ? 100 : item.status === "in_progress" ? 50 : 0;
+          if (completeStatus(item.status)) item.progressPercent = 100;
+          item.actualStartAt ||= "";
+          item.sortOrder ??= parsed.items.indexOf(item) * 100;
         }
         return parsed;
       }
@@ -187,9 +253,10 @@ function loadState() {
 function seedState() {
   const base = {
     version: 2,
+    gpoVersion: 1,
     currentUserId: "",
     activePage: "overview",
-    filters: { query: "", status: "all", type: "all", owner: "all" },
+    filters: { query: "", status: "all", type: "all", owner: "all", organization: "all", sector: "all", state: "all" },
     organizations: [
       { id: "org_castro", name: "Castro Industrial", state: "PE" },
       { id: "org_dmk", name: "DMK / Rocha", state: "PE" },
@@ -212,7 +279,6 @@ function seedState() {
         state: "PE",
         organizationId: "org_castro",
         sectorId: "sec_pmo",
-        permissionLevel: 10,
       },
       {
         id: "u_virginia",
@@ -221,7 +287,6 @@ function seedState() {
         state: "PE",
         organizationId: "org_castro",
         sectorId: "sec_diretoria",
-        permissionLevel: 7,
       },
       {
         id: "u_eduardo",
@@ -230,7 +295,6 @@ function seedState() {
         state: "PE",
         organizationId: "org_castro",
         sectorId: "sec_diretoria",
-        permissionLevel: 8,
       },
       {
         id: "u_enrique",
@@ -239,7 +303,6 @@ function seedState() {
         state: "PE",
         organizationId: "org_castro",
         sectorId: "sec_obra",
-        permissionLevel: 5,
       },
       {
         id: "u_mateus",
@@ -248,7 +311,6 @@ function seedState() {
         state: "PE",
         organizationId: "org_castro",
         sectorId: "sec_rh",
-        permissionLevel: 3,
       },
       {
         id: "u_dmk",
@@ -257,11 +319,12 @@ function seedState() {
         state: "PE",
         organizationId: "org_dmk",
         sectorId: "sec_fornecedor",
-        permissionLevel: 2,
       },
     ],
     items: [],
     relations: [],
+    attachments: [],
+    archivedAttachments: [],
     events: [],
     permissionRules: [],
     approvalDecisions: [],
@@ -341,6 +404,9 @@ function seedState() {
   createSeedRelation(base, doors.id, doorsRisk.id, "contains");
   createSeedRelation(base, doorsRisk.id, doorsApproval.id, "blocks");
 
+  base.permissionRules = base.users.flatMap((user) => defaultGpoRules(user));
+  base.typeSettings = {};
+
   return base;
 }
 
@@ -357,12 +423,14 @@ function createSeedItem(base, input) {
     sectorId: input.sectorId || "sec_pmo",
     state: input.state || "PE",
     parentId: input.parentId || "",
+    sortOrder: Number(input.sortOrder ?? base.items.filter((item) => item.parentId === (input.parentId || "")).length * 100),
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
     weight: Number(input.weight ?? 1),
-    progressPercent: Number(input.progressPercent ?? (["done","approved"].includes(input.status) ? 100 : 0)),
-    completedAt: ["done", "approved"].includes(input.status) ? nowIso() : "",
+    progressPercent: Number(input.progressPercent ?? (completeStatus(input.status) ? 100 : 0)),
+    completedAt: completeStatus(input.status) ? nowIso() : "",
+    actualStartAt: "",
     createdAt: nowIso(),
     updatedAt: nowIso(),
     lastChangeAt: nowIso(),
@@ -409,100 +477,82 @@ function projectRootId(item) {
 
 function gpoDecision(user, operation, item = null) {
   if (!user || user.disabled) return false;
-  const ranks = { global: 1, organization: 2, sector: 3, project: 4, item: 5 };
+  const ranks = { global: 1, state: 2, organization: 2, sector: 3, project: 4, item: 5, creator: 5 };
   const matches = (state.permissionRules || []).filter((rule) => {
-    const subjectMatches = rule.subjectType === "user"
-      ? rule.subjectId === user.id
-      : rule.subjectType === "level" && Number(rule.subjectId) === user.permissionLevel;
+    const subjectMatches = rule.subjectType === "user" && rule.subjectId === user.id;
     if (!subjectMatches || rule.operation !== operation) return false;
     if (rule.scopeType === "global") return true;
     if (!item) return false;
+    if (rule.scopeType === "state") return item.state === rule.scopeId;
     if (rule.scopeType === "organization") return item.organizationId === rule.scopeId;
     if (rule.scopeType === "sector") return item.sectorId === rule.scopeId;
     if (rule.scopeType === "item") return item.id === rule.scopeId;
+    if (rule.scopeType === "creator") return item.createdBy === rule.scopeId;
     if (rule.scopeType === "project") return projectRootId(item) === rule.scopeId;
     return false;
   });
   if (!matches.length) return null;
-  matches.sort((left, right) =>
-    (ranks[right.scopeType] || 0) - (ranks[left.scopeType] || 0) ||
-    Number(right.subjectType === "user") - Number(left.subjectType === "user") ||
-    Number(left.effect === "allow") - Number(right.effect === "allow")
-  );
+  matches.sort((left, right) => (ranks[right.scopeType] || 0) - (ranks[left.scopeType] || 0) || Number(left.effect === "allow") - Number(right.effect === "allow"));
   return matches[0].effect === "allow";
 }
 
 function canViewItem(user, item) {
   if (!user || user.disabled || !item) return false;
-  const rule = gpoDecision(user, "view_item", item);
-  if (rule !== null) return rule;
-  if (user.permissionLevel === 1) return item.createdBy === user.id;
-  if ([2, 3].includes(user.permissionLevel)) return item.state === user.state;
-  if ([4, 5].includes(user.permissionLevel)) return item.sectorId === user.sectorId;
-  if ([6, 7].includes(user.permissionLevel)) return item.organizationId === user.organizationId;
-  if ([8, 9, 10].includes(user.permissionLevel)) return true;
-  return false;
+  return gpoDecision(user, "view_item", item) === true;
 }
 
 function canEditItem(user, item) {
   if (!user || user.disabled || !item) return false;
-  const rule = gpoDecision(user, "edit_item", item);
-  if (rule !== null) return rule;
-  if (user.permissionLevel === 1) return item.createdBy === user.id;
-  if (user.permissionLevel === 3) return item.state === user.state;
-  if (user.permissionLevel === 5) return item.sectorId === user.sectorId;
-  if (user.permissionLevel === 7) return item.organizationId === user.organizationId;
-  if ([9, 10].includes(user.permissionLevel)) return true;
-  return false;
+  return gpoDecision(user, "edit_item", item) === true;
 }
 
 function canCreateItem(user, item = null) {
   if (!user || user.disabled) return false;
-  const rule = gpoDecision(user, "create_item", item);
-  if (rule !== null) return rule;
-  if (!item && (state.permissionRules || []).some((entry) =>
-    entry.operation === "create_item" && entry.effect === "allow" &&
-    (entry.subjectType === "user" ? entry.subjectId === user.id : Number(entry.subjectId) === user.permissionLevel)
-  )) return true;
-  const level = Number(user.permissionLevel);
-  if (level === 1) return !item || !item.createdBy || item.createdBy === user.id;
-  if (level === 3) return !item || item.state === user.state;
-  if (level === 5) return !item || item.sectorId === user.sectorId;
-  if (level === 7) return !item || item.organizationId === user.organizationId;
-  return [9, 10].includes(level);
+  return gpoDecision(user, "create_item", item ? { ...item, createdBy: item.createdBy || user.id } : null) === true;
 }
 
 function canRemoveItem(user, item = null) {
   if (!user || user.disabled) return false;
-  const rule = gpoDecision(user, "delete_item", item);
-  if (rule !== null) return rule;
-  return user.permissionLevel === 10;
+  return gpoDecision(user, "delete_item", item) === true;
 }
 
-function canManageUsers(user) {
+function canManageUsers(user, organizationId = user?.organizationId) {
   if (!user || user.disabled) return false;
-  if (user.permissionLevel === 10) return true;
-  const rule = gpoDecision(user,"manage_users",null);
-  return rule === true;
+  const organization = state.organizations.find((entry) => entry.id === organizationId);
+  return gpoDecision(user, "manage_users", { organizationId, state: organization?.state || user.state }) === true;
+}
+
+function canManageAnyUsers(user) {
+  return !!user && !user.disabled && state.organizations.some((organization) => canManageUsers(user,organization.id));
 }
 
 function canManageGpo(user) {
-  return !!user && !user.disabled && user.permissionLevel === 10;
+  return !!user && !user.disabled && gpoDecision(user, "manage_gpo", null) === true;
+}
+
+function canManageOrganization(user, organizationId = user?.organizationId) {
+  const organization = state.organizations.find((entry) => entry.id === organizationId);
+  return !!organization && gpoDecision(user, "manage_organization", { organizationId: organization.id, state: organization.state }) === true;
+}
+
+function canManageAnyOrganization(user) {
+  return !!user && !user.disabled && state.organizations.some((organization) => canManageOrganization(user,organization.id));
 }
 
 function createPermissionRule(input) {
   const user = currentUser();
-  if (!canManageGpo(user)) throw new Error("Somente o nível 10 pode configurar o GPO demonstrativo.");
+  if (!canManageGpo(user)) throw new Error("Sua regra GPO não permite configurar permissões.");
   if (!Object.hasOwn(permissionOperationLabels, input.operation)) throw new Error("Selecione uma operação do GPO.");
-  if (!["user", "level"].includes(input.subjectType)) throw new Error("Selecione um usuário ou nível.");
+  if (input.subjectType !== "user") throw new Error("O GPO deve ser vinculado diretamente a um usuário.");
   if (input.subjectType === "user" && !state.users.some((entry) => entry.id === input.subjectId && !entry.disabled)) throw new Error("Selecione um usuário ativo.");
-  if (input.subjectType === "level" && !Object.hasOwn(permissionLevels, input.subjectId)) throw new Error("Selecione um nível válido.");
-  if (!["global", "organization", "sector", "project", "item"].includes(input.scopeType)) throw new Error("Selecione um escopo válido.");
+  if (!["global", "state", "organization", "sector", "project", "item"].includes(input.scopeType)) throw new Error("Selecione um escopo válido.");
+  if (input.scopeType === "state" && !/^[A-Z]{2}$/.test(input.scopeId || "")) throw new Error("Selecione um estado válido.");
   if (input.scopeType === "organization" && !state.organizations.some((entry) => entry.id === input.scopeId)) throw new Error("Selecione uma empresa.");
   if (input.scopeType === "sector" && !state.sectors.some((entry) => entry.id === input.scopeId)) throw new Error("Selecione um setor.");
   if (input.scopeType === "project" && !state.items.some((entry) => entry.id === input.scopeId && entry.type === "project")) throw new Error("Selecione um projeto.");
   if (input.scopeType === "item" && !getItem(input.scopeId)) throw new Error("Selecione um item.");
-  if (input.operation === "manage_users" && input.scopeType !== "global") throw new Error("A gestão de usuários exige uma regra global nesta versão demonstrativa.");
+  if (input.operation === "manage_gpo" && input.scopeType !== "global") throw new Error("A configuração de GPO exige escopo global.");
+  if (input.operation === "manage_organization" && !["global", "organization"].includes(input.scopeType)) throw new Error("A administração organizacional exige escopo global ou de empresa.");
   if (!["allow", "deny"].includes(input.effect)) throw new Error("Selecione permitir ou negar.");
   state.permissionRules ||= [];
   const duplicate = state.permissionRules.some((rule) =>
@@ -518,7 +568,7 @@ function createPermissionRule(input) {
 }
 
 function removePermissionRule(id) {
-  if (!canManageGpo(currentUser())) throw new Error("Somente o nível 10 pode alterar o GPO demonstrativo.");
+  if (!canManageGpo(currentUser())) throw new Error("Sua regra GPO não permite alterar permissões.");
   const rule = state.permissionRules?.find((entry) => entry.id === id);
   if (!rule) throw new Error("Regra GPO não encontrada.");
   state.permissionRules = state.permissionRules.filter((entry) => entry.id !== id);
@@ -532,7 +582,7 @@ function approvalGate(itemOrId) {
   const blockers = (state.relations || [])
     .filter((relation) => relation.targetId === item.id && prerequisiteTypes.has(relation.relationType))
     .map((relation) => getItem(relation.sourceId))
-    .filter((source) => source && !["done", "approved"].includes(source.status));
+    .filter((source) => source && !completeStatus(source.status));
   return { released: blockers.length === 0, blockers };
 }
 
@@ -540,22 +590,21 @@ function canDecideApproval(user, item) {
   if (!user || user.disabled || !item || item.type !== "approval" || !canViewItem(user, item)) return false;
   const rule = gpoDecision(user, "decide_approval", item);
   if (rule !== null) return rule;
-  return canEditItem(user, item) && (item.ownerId === user.id || user.permissionLevel === 10);
+  return canEditItem(user, item) && (item.approvalReviewerId || item.ownerId) === user.id;
 }
 
 function canSubmitApproval(user, item) {
   if (!user || user.disabled || !item || item.type !== "approval" || !canEditItem(user, item)) return false;
-  const rule = gpoDecision(user, "create_approval", item);
-  return rule === null ? true : rule;
+  return gpoDecision(user, "create_approval", item) === true;
 }
 
 function setApprovalStatus(item, nextStatus, eventType, comment = "") {
   const previous = item.status;
   item.status = nextStatus;
-  if (["approved","done"].includes(nextStatus)) item.progressPercent = 100;
+  if (completeStatus(nextStatus)) item.progressPercent = 100;
   item.updatedAt = nowIso();
   item.lastChangeAt = item.updatedAt;
-  item.completedAt = ["approved", "done"].includes(nextStatus) ? item.updatedAt : "";
+  item.completedAt = completeStatus(nextStatus) ? item.updatedAt : "";
   createEvent(item.id, eventType, previous, nextStatus, comment, item.updatedAt);
 }
 
@@ -563,42 +612,85 @@ function submitApprovalForReview(id, note = "") {
   const item = getItem(id);
   const user = currentUser();
   if (!item || item.type !== "approval") throw new Error("Selecione uma etapa de aprovação.");
-  if (!canSubmitApproval(user, item)) throw new Error("Sua alçada não permite enviar esta etapa para aprovação.");
+  if (!canSubmitApproval(user, item)) throw new Error("Sua regra GPO não permite enviar esta etapa para aprovação.");
   if (!approvalGate(item).released) throw new Error("A aprovação ainda depende da conclusão de suas predecessoras.");
   if (!["backlog", "ready", "in_progress", "correction"].includes(item.status)) throw new Error("Esta etapa não está pronta para ser enviada.");
-  if (item.status === "correction" && item.correctionOwnerId !== user.id && user.permissionLevel !== 10) throw new Error("Somente o responsável pela correção pode reenviar esta etapa.");
+  if (item.status === "correction" && item.correctionOwnerId !== user.id && gpoDecision(user, "decide_approval", item) !== true) throw new Error("Somente o responsável pela correção ou usuário autorizado no GPO pode reenviar esta etapa.");
   item.approvalRound ||= 1;
   const previousDecision = item.lastDecisionId || "";
   state.approvalDecisions ||= [];
-  const submission = { id: uid("decision"), itemId: item.id, requestId: item.approvalRequestId || item.id, round: item.approvalRound, kind: "submitted", outcome: "under_review", reviewerId: item.ownerId || "", correctionOwnerId: item.correctionOwnerId || "", reason: note.trim(), previousDecisionId: previousDecision, createdBy: user.id, createdAt: nowIso() };
+  const submission = { id: uid("decision"), itemId: item.id, requestId: item.approvalRequestId || item.id, round: item.approvalRound, kind: "submitted", outcome: "under_review", reviewerId: item.approvalReviewerId || item.ownerId || "", correctionOwnerId: item.correctionOwnerId || "", reason: note.trim(), previousDecisionId: previousDecision, createdBy: user.id, createdAt: nowIso() };
   item.approvalRequestId ||= item.id;
   state.approvalDecisions.push(submission);
   setApprovalStatus(item, "under_review", "approval_submitted", note.trim() || "Etapa enviada para decisão.");
   return submission;
 }
 
-function decideApproval(id, outcome, reason = "") {
+function decideApproval(id, outcome, reason = "", correctionOwnerId = "") {
   const item = getItem(id);
   const user = currentUser();
   if (!item || item.type !== "approval") throw new Error("Selecione uma etapa de aprovação.");
-  if (!canDecideApproval(user, item)) throw new Error("Apenas o responsável pela decisão ou uma alçada autorizada pode decidir.");
+  if (!canDecideApproval(user, item)) throw new Error("Apenas o responsável pela decisão ou uma regra GPO autorizada pode decidir.");
   if (item.status !== "under_review") throw new Error("Esta etapa não está aguardando decisão.");
   if (!approvalGate(item).released) throw new Error("A aprovação ainda depende da conclusão de suas predecessoras.");
   if (!["approved", "rejected"].includes(outcome)) throw new Error("Selecione aprovar ou reprovar.");
   if (outcome === "rejected" && !reason.trim()) throw new Error("Informe o motivo da reprovação.");
+  let correctionOwner = null;
+  if (outcome === "rejected") {
+    correctionOwner = state.users.find((entry) => entry.id === correctionOwnerId && !entry.disabled && entry.organizationId === item.organizationId);
+    if (!correctionOwner) throw new Error("Selecione um responsável ativo da mesma empresa para a correção.");
+  }
   state.approvalDecisions ||= [];
-  const decision = { id: uid("decision"), itemId: item.id, requestId: item.approvalRequestId || item.id, round: item.approvalRound || 1, kind: "decision", outcome, reviewerId: user.id, correctionOwnerId: item.correctionOwnerId || "", reason: reason.trim(), previousDecisionId: item.lastDecisionId || "", createdBy: user.id, createdAt: nowIso() };
+  const decision = { id: uid("decision"), itemId: item.id, requestId: item.approvalRequestId || item.id, round: item.approvalRound || 1, kind: "decision", outcome, reviewerId: user.id, correctionOwnerId: correctionOwner?.id || item.correctionOwnerId || "", reason: reason.trim(), previousDecisionId: item.lastDecisionId || "", createdBy: user.id, createdAt: nowIso() };
   state.approvalDecisions.push(decision);
   item.lastDecisionId = decision.id;
-  setApprovalStatus(item, outcome, "approval_decided", reason.trim() || (outcome === "approved" ? "Aprovado." : "Reprovado."));
+  if (outcome === "approved") {
+    decision.revisionId = item.id;
+    setApprovalStatus(item, "done", "approval_decided", reason.trim() || "Aprovado e concluído.");
+  } else {
+    const originalParent = item.parentId || "";
+    const revisionRound = (item.approvalRound || 1) + 1;
+    item.superseded = true;
+    setApprovalStatus(item, "cancelled", "approval_decided", reason.trim());
+    const revision = createItem({
+      title: `${item.title} · Revisão ${revisionRound}`, type: "approval", status: "backlog",
+      ownerId: correctionOwner.id, organizationId: item.organizationId, sectorId: item.sectorId,
+      state: item.state, parentId: originalParent, description: item.description,
+      plannedStartAt: "", dueAt: "", weight: item.weight, progressPercent: 0,
+    });
+    revision.status = "correction";
+    revision.revisionOf = item.id;
+    revision.approvalRequestId = item.approvalRequestId || item.id;
+    revision.approvalRound = revisionRound;
+    revision.correctionOwnerId = correctionOwner.id;
+    revision.approvalReviewerId = item.ownerId;
+    revision.lastDecisionId = decision.id;
+    item.supersededBy = revision.id;
+    decision.revisionId = revision.id;
+    state.relations.forEach((relation) => {
+      if (relation.relationType === "contains") return;
+      const wasSource = relation.sourceId === item.id;
+      const wasTarget = relation.targetId === item.id;
+      if (!wasSource && !wasTarget) return;
+      relation.previousSourceId = relation.sourceId;
+      relation.previousTargetId = relation.targetId;
+      if (wasSource) relation.sourceId = revision.id;
+      if (wasTarget) relation.targetId = revision.id;
+      relation.updatedAt = nowIso();
+      relation.updatedBy = user.id;
+      createEvent(revision.id, "relation_retargeted", item.id, relation.id, "Relação transferida para a nova rodada de revisão.");
+    });
+    createEvent(revision.id, "approval_revision_started", item.id, revision.id, reason.trim());
+    syncParentSummary(originalParent);
+  }
   return decision;
 }
 
 function startApprovalRevision(id, correctionOwnerId, note = "") {
   const item = getItem(id);
   const user = currentUser();
-  if (!item || item.type !== "approval" || item.status !== "rejected") throw new Error("Somente uma etapa reprovada pode iniciar correção.");
-  if (!canDecideApproval(user, item)) throw new Error("Sua alçada não permite iniciar este ciclo de correção.");
+  if (!item || item.type !== "approval" || item.status !== "cancelled" || !item.superseded) throw new Error("A reprovação já deve ter criado uma nova revisão.");
+  if (!canDecideApproval(user, item)) throw new Error("Sua regra GPO não permite iniciar este ciclo de correção.");
   const owner = state.users.find((entry) => entry.id === correctionOwnerId && !entry.disabled && entry.organizationId === item.organizationId);
   if (!owner) throw new Error("Selecione um responsável ativo da mesma empresa.");
   if (!note.trim()) throw new Error("Descreva a correção solicitada.");
@@ -607,7 +699,6 @@ function startApprovalRevision(id, correctionOwnerId, note = "") {
   state.approvalDecisions ||= [];
   const revision = { id: uid("decision"), itemId: item.id, requestId: item.approvalRequestId || item.id, round: item.approvalRound, kind: "correction_started", outcome: "correction", reviewerId: item.ownerId || "", correctionOwnerId: owner.id, reason: note.trim(), previousDecisionId: item.lastDecisionId || "", createdBy: user.id, createdAt: nowIso() };
   state.approvalDecisions.push(revision);
-  setApprovalStatus(item, "correction", "approval_revision_started", note.trim());
   return revision;
 }
 
@@ -619,6 +710,9 @@ function visibleItems() {
     .filter((item) => state.filters.status === "all" || item.status === state.filters.status)
     .filter((item) => state.filters.type === "all" || item.type === state.filters.type)
     .filter((item) => state.filters.owner === "all" || item.ownerId === state.filters.owner)
+    .filter((item) => state.filters.organization === "all" || item.organizationId === state.filters.organization)
+    .filter((item) => state.filters.sector === "all" || item.sectorId === state.filters.sector)
+    .filter((item) => state.filters.state === "all" || item.state === state.filters.state)
     .filter((item) => {
       if (!query) return true;
       return [
@@ -641,6 +735,33 @@ function visibleRelations() {
   return state.relations.filter((relation) => ids.has(relation.sourceId) && ids.has(relation.targetId));
 }
 
+function activityStartAt(item) {
+  const temporal = new Set(["TI", "II", "TT", "IF"]);
+  const dependencies = state.relations.filter((relation) => relation.targetId === item.id && temporal.has(relation.relationType));
+  if (!dependencies.length) return item.createdAt || "";
+  const durationDays = item.plannedStartAt && item.dueAt ? Math.max(0,(new Date(`${item.dueAt}T12:00:00`) - new Date(`${item.plannedStartAt}T12:00:00`)) / 86400000) : 0;
+  const candidates = [];
+  for (const relation of dependencies) {
+    const predecessor = getItem(relation.sourceId);
+    if (!predecessor) return "";
+    let release = "";
+    if (relation.relationType === "TI") release = predecessor.completedAt;
+    else if (relation.relationType === "II") release = predecessor.actualStartAt;
+    else if (relation.relationType === "TT" && predecessor.completedAt) release = new Date(new Date(predecessor.completedAt).getTime() - durationDays * 86400000 + Number(relation.lagDays || 0) * 86400000).toISOString();
+    else if (relation.relationType === "IF" && predecessor.actualStartAt) release = new Date(new Date(predecessor.actualStartAt).getTime() - durationDays * 86400000 + Number(relation.lagDays || 0) * 86400000).toISOString();
+    if (!release) return "";
+    candidates.push(new Date(release).getTime());
+  }
+  const timestamp = Math.max(...candidates);
+  return Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp).toISOString() : "";
+}
+
+function activityDurationMinutes(item, at = nowIso()) {
+  const start = activityStartAt(item);
+  if (!start) return null;
+  return Math.max(0,Math.floor((new Date(item.completedAt || at) - new Date(start)) / 60000));
+}
+
 function visibleEvents() {
   const ids = new Set(visibleItems().map((item) => item.id));
   return state.events
@@ -649,19 +770,24 @@ function visibleEvents() {
 }
 
 function isOverdue(item) {
-  if (!item.dueAt || ["done", "approved", "cancelled"].includes(item.status)) return false;
+  if (!item.dueAt || ["done", "cancelled"].includes(item.status)) return false;
   return new Date(`${item.dueAt}T00:00:00`) < new Date(`${today()}T00:00:00`);
 }
 
+function dueDeltaDays(item) {
+  if (!item.dueAt) return null;
+  return Math.floor((new Date(item.dueAt + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000);
+}
+
 function isAtRisk(item) {
-  if (!item.dueAt || ["done", "approved", "cancelled", "blocked"].includes(item.status) || isOverdue(item)) return false;
-  const daysLeft = Math.floor((new Date(item.dueAt + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000);
+  if (!item.dueAt || ["done", "cancelled", "blocked"].includes(item.status) || isOverdue(item)) return false;
+  const daysLeft = dueDeltaDays(item);
   return daysLeft <= (Number(state.riskThresholdDays) || 3) && Number(item.progressPercent || 0) < 75;
 }
 
 function signalOf(item) {
   if (item.status === "blocked" || isOverdue(item)) return "red";
-  if (["done", "approved"].includes(item.status)) return "green";
+  if (completeStatus(item.status)) return "green";
   if (["in_progress"].includes(item.status)) return "blue";
   if (["waiting", "under_review", "ready", "correction"].includes(item.status) || isAtRisk(item)) return "yellow";
   return "gray";
@@ -669,9 +795,9 @@ function signalOf(item) {
 
 function createItem(input) {
   const user = currentUser();
-  if (!canCreateItem(user, input)) throw new Error("Sua alçada não permite criar itens neste escopo.");
+  if (!canCreateItem(user, input)) throw new Error("Sua regra GPO não permite criar itens neste escopo.");
   validateItemInput(input);
-  if (input.type === "approval" && ["approved", "rejected", "correction", "under_review"].includes(input.status)) throw new Error("A etapa deve entrar no fluxo antes de receber uma decisão.");
+  if (input.type === "approval" && ["correction", "under_review"].includes(input.status) && !input.templateInstance) throw new Error("A etapa deve entrar no fluxo antes de receber uma decisão.");
   if (input.parentId && !canEditItem(user, getItem(input.parentId))) throw new Error("Sem permissao para alterar o item pai.");
   if (!canCreateItem(user, { ...input, createdBy: user.id })) throw new Error("O escopo do novo item não está autorizado.");
   const item = {
@@ -686,12 +812,14 @@ function createItem(input) {
     sectorId: input.sectorId,
     state: input.state,
     parentId: input.parentId || "",
+    sortOrder: Number(input.sortOrder ?? state.items.filter((entry) => entry.parentId === (input.parentId || "")).length * 100),
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
     weight: Number(input.weight ?? 1),
-    progressPercent: Number(input.progressPercent ?? (["done","approved"].includes(input.status) ? 100 : 0)),
-    completedAt: ["done", "approved"].includes(input.status) ? nowIso() : "",
+    progressPercent: Number(input.progressPercent ?? (completeStatus(input.status) ? 100 : 0)),
+    completedAt: completeStatus(input.status) ? nowIso() : "",
+    actualStartAt: "",
     createdAt: nowIso(),
     updatedAt: nowIso(),
     lastChangeAt: nowIso(),
@@ -699,18 +827,18 @@ function createItem(input) {
   state.items.push(item);
   createEvent(item.id, "created", "", item.status, "Item criado.", item.createdAt);
   if (item.parentId) createRelation(item.parentId, item.id, "contains", 0);
+  if (item.parentId) syncParentSummary(item.parentId);
   return item;
 }
 
-function createRelation(sourceId, targetId, relationType, lagDays = 0) {
+function createRelation(sourceId, targetId, relationType, lagDays = 0, description = "") {
   const source = getItem(sourceId);
   const target = getItem(targetId);
   if (!source || !target || sourceId === targetId) throw new Error("Escolha dois itens diferentes.");
   if (!relationTypes.some((type) => type.id === relationType)) throw new Error("Tipo de relacao invalido.");
   const user = currentUser();
   const targetIsNewlyOwned = target.createdBy === user?.id && canCreateItem(user,target);
-  if (!canEditItem(user, source) || (!canEditItem(user, target) && !targetIsNewlyOwned)) throw new Error("Sua alçada deve permitir editar os dois itens.");
-  if (gpoDecision(currentUser(), "create_relation", target) === false) throw new Error("O GPO nega a criação de relações neste escopo.");
+  if (!canEditItem(user, source) || (!canEditItem(user, target) && !targetIsNewlyOwned) || gpoDecision(user, "create_relation", target) !== true) throw new Error("O GPO não permite criar uma relação entre estes itens.");
   if (!Number.isFinite(Number(lagDays))) throw new Error("Informe uma defasagem numerica.");
   if (relationType === "contains") {
     const ancestors = new Set();
@@ -735,12 +863,100 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0) {
     targetId,
     relationType,
     lagDays: Number(lagDays) || 0,
+    description: String(description || "").trim(),
     createdBy: currentUser()?.id || "system",
     createdAt: nowIso(),
   };
   state.relations.push(relation);
   if (relationType === "contains") target.parentId = sourceId;
-  createEvent(targetId, "relation_created", "", relationType, `Relacao criada a partir de ${getItem(sourceId)?.title}.`);
+  createEvent(targetId, "relation_created", "", relationType, relation.description || `Relação criada a partir de ${getItem(sourceId)?.title}.`);
+  return relation;
+}
+
+function canChangeHierarchy(user, item) {
+  return !!item && canEditItem(user,item) && gpoDecision(user,"change_hierarchy",item) === true;
+}
+
+function moveItemHierarchy(id, nextParentId = "") {
+  const item = getItem(id);
+  const nextParent = nextParentId ? getItem(nextParentId) : null;
+  if (!item) throw new Error("Item não encontrado.");
+  if (nextParentId && !nextParent) throw new Error("Novo item pai não encontrado.");
+  if (!canChangeHierarchy(currentUser(),item) || (nextParent && !canEditItem(currentUser(),nextParent))) throw new Error("O GPO não permite alterar esta hierarquia.");
+  if (item.parentId === nextParentId) return false;
+  if (nextParent) {
+    let cursor = nextParent; const visited = new Set();
+    while (cursor && !visited.has(cursor.id)) {
+      if (cursor.id === item.id) throw new Error("A hierarquia não pode conter ciclos.");
+      visited.add(cursor.id); cursor = getItem(cursor.parentId);
+    }
+  }
+  const previousParentId = item.parentId || "";
+  const relation = state.relations.find((entry) => entry.relationType === "contains" && entry.targetId === item.id);
+  if (nextParent) {
+    if (relation) {
+      relation.previousSourceId = relation.sourceId; relation.previousTargetId = relation.targetId;
+      relation.sourceId = nextParent.id; relation.updatedAt = nowIso(); relation.updatedBy = currentUser().id;
+    } else state.relations.push({id:uid("rel"),sourceId:nextParent.id,targetId:item.id,relationType:"contains",lagDays:0,createdBy:currentUser().id,createdAt:nowIso(),description:"Hierarquia visual"});
+    item.parentId = nextParent.id;
+  } else {
+    if (relation) { archiveRecord("archivedRelations",relation); state.relations = state.relations.filter((entry) => entry.id !== relation.id); }
+    item.parentId = "";
+  }
+  const newSiblings = state.items.filter((entry) => entry.id !== item.id && entry.parentId === item.parentId);
+  item.sortOrder = newSiblings.length ? Math.max(...newSiblings.map((entry) => Number(entry.sortOrder ?? state.items.indexOf(entry)))) + 100 : 0;
+  createEvent(item.id,"parent_changed",previousParentId,nextParentId,"Hierarquia visual alterada.");
+  if (previousParentId) syncParentSummary(previousParentId);
+  if (nextParentId) syncParentSummary(nextParentId);
+  return true;
+}
+
+function reorderItem(id, targetId, after = false) {
+  const item = getItem(id); const target = getItem(targetId);
+  if (!item || !target || item.id === target.id) return false;
+  if (item.parentId !== target.parentId) throw new Error("A ordenação mantém os itens no mesmo nível hierárquico.");
+  if (!canChangeHierarchy(currentUser(),item) || !canChangeHierarchy(currentUser(),target)) throw new Error("O GPO não permite reordenar estes itens.");
+  const siblings = state.items.filter((entry) => entry.parentId === item.parentId).sort((left,right) => Number(left.sortOrder ?? state.items.indexOf(left)) - Number(right.sortOrder ?? state.items.indexOf(right)));
+  const from = siblings.findIndex((entry) => entry.id === id); const to = siblings.findIndex((entry) => entry.id === targetId);
+  siblings.splice(from,1); siblings.splice(Math.max(0,to + (after ? 1 : 0) - (from < to ? 1 : 0)),0,item);
+  siblings.forEach((entry,index) => { const next = index * 100; if (entry.sortOrder !== next) { createEvent(entry.id,"order_changed",entry.sortOrder ?? "",next,"Ordem visual atualizada."); entry.sortOrder = next; } });
+  return true;
+}
+
+function updateRelation(id, input) {
+  const relation = state.relations.find((entry) => entry.id === id);
+  if (!relation) throw new Error("Relação não encontrada.");
+  const source = getItem(input.sourceId);
+  const target = getItem(input.targetId);
+  const user = currentUser();
+  if (!source || !target || source.id === target.id) throw new Error("Escolha dois itens diferentes.");
+  if (!relationTypes.some((type) => type.id === input.relationType)) throw new Error("Tipo de relação inválido.");
+  if (!canEditItem(user, getItem(relation.sourceId)) || !canEditItem(user, getItem(relation.targetId)) || !canEditItem(user, source) || !canEditItem(user, target)) throw new Error("O GPO não permite alterar esta relação ou seus itens.");
+  if (gpoDecision(user, "edit_relation", target) !== true) throw new Error("O GPO não permite alterar relações neste escopo.");
+  if (!Number.isFinite(Number(input.lagDays))) throw new Error("Informe uma defasagem numérica.");
+  if (input.relationType === "contains") {
+    let cursor = source; const seen = new Set();
+    while (cursor && !seen.has(cursor.id)) {
+      if (cursor.id === target.id) throw new Error("A hierarquia não pode conter ciclos.");
+      seen.add(cursor.id); cursor = getItem(cursor.parentId);
+    }
+    const existingParent = relation.relationType === "contains" && relation.targetId === target.id ? relation.sourceId : "";
+    if (target.parentId && target.parentId !== source.id && target.parentId !== existingParent) throw new Error("O item de destino já possui outro pai.");
+  }
+  const duplicate = state.relations.some((entry) => entry.id !== id && entry.sourceId === source.id && entry.targetId === target.id && entry.relationType === input.relationType);
+  if (duplicate) throw new Error("Esta relação já existe.");
+  const previous = { sourceId: relation.sourceId, targetId: relation.targetId, relationType: relation.relationType, lagDays: relation.lagDays, description: relation.description || "" };
+  const affectedParents = new Set();
+  if (relation.relationType === "contains" && (relation.sourceId !== source.id || relation.targetId !== target.id || input.relationType !== "contains")) {
+    const priorTarget = getItem(relation.targetId);
+    if (priorTarget?.parentId === relation.sourceId) { priorTarget.parentId = ""; affectedParents.add(relation.sourceId); }
+  }
+  Object.assign(relation, { sourceId: source.id, targetId: target.id, relationType: input.relationType, lagDays: Number(input.lagDays) || 0, description: String(input.description || "").trim(), updatedAt: nowIso(), updatedBy: user.id, previousSourceId: previous.sourceId, previousTargetId: previous.targetId, previousRelationType: previous.relationType });
+  if (input.relationType === "contains") { target.parentId = source.id; affectedParents.add(source.id); }
+  createEvent(previous.targetId, "relation_updated", previous.relationType, input.relationType, `Relação atualizada: ${getItem(previous.sourceId)?.title} → ${source.title}.`);
+  if (target.id !== previous.targetId) createEvent(target.id, "relation_updated", previous.targetId, relation.id, relation.description || "Relação transferida para este item.");
+  if (previous.relationType === "contains") affectedParents.add(previous.sourceId);
+  for (const parentId of affectedParents) syncParentSummary(parentId);
   return relation;
 }
 
@@ -758,10 +974,106 @@ function createEvent(itemId, eventType, fromValue, toValue, comment, effectiveAt
   });
 }
 
+const MAX_ATTACHMENT_BYTES = 262144;
+const MAX_ATTACHMENT_TOTAL_BYTES = 1048576;
+
+function readAttachment(file) {
+  return new Promise((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Não foi possível ler o anexo ${file.name}.`));
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return reject(new Error(`O anexo ${file.name} não pôde ser preparado.`));
+      const safeType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(file.type || "") ? file.type : "application/octet-stream";
+      resolve(reader.result.replace(/^data:[^;,]*;base64,/,`data:${safeType};base64,`));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addAttachments(itemId, files, effectiveAt = nowIso()) {
+  const item = getItem(itemId);
+  const selected = [...(files || [])].filter((file) => file && typeof file.size === "number" && file.size > 0);
+  if (!selected.length) return [];
+  if (!item || !canEditItem(currentUser(),item) || gpoDecision(currentUser(),"add_attachment",item) !== true) throw new Error("O GPO não permite anexar arquivos a este item.");
+  state.attachments ||= [];
+  const storedBytes = [...state.attachments,...(state.archivedAttachments || [])].reduce((sum,attachment) => sum + Number(attachment.size || 0),0);
+  const incomingBytes = selected.reduce((sum,file) => sum + Number(file.size || 0),0);
+  if (selected.some((file) => file.size > MAX_ATTACHMENT_BYTES)) throw new Error("Limite demonstrativo de 256 KB por anexo.");
+  if (storedBytes + incomingBytes > MAX_ATTACHMENT_TOTAL_BYTES) throw new Error("Os anexos locais atingiriam o limite demonstrativo de 1 MB.");
+  const result = [];
+  for (const file of selected) {
+    const attachment = {id:uid("attachment"),itemId:item.id,name:String(file.name || "anexo").slice(0,180),type:file.type || "application/octet-stream",size:file.size,dataUrl:await readAttachment(file),createdBy:currentUser().id,createdAt:effectiveAt};
+    state.attachments.push(attachment);
+    createEvent(item.id,"attachment_added","",attachment.id,`Anexo adicionado: ${attachment.name} (${attachment.size} bytes).`,effectiveAt);
+    result.push(attachment);
+  }
+  return result;
+}
+
+function removeAttachment(id) {
+  const attachment = state.attachments?.find((entry) => entry.id === id);
+  const item = attachment && getItem(attachment.itemId);
+  if (!attachment || !item) throw new Error("Anexo não encontrado.");
+  if (!canEditItem(currentUser(),item) || gpoDecision(currentUser(),"delete_attachment",item) !== true) throw new Error("O GPO não permite excluir este anexo.");
+  attachment.deletedAt = nowIso(); attachment.deletedBy = currentUser().id;
+  createEvent(item.id,"attachment_removed",attachment.id,"",`Anexo removido: ${attachment.name}.`,attachment.deletedAt);
+  state.archivedAttachments ||= [];
+  state.archivedAttachments.push(attachment);
+  state.attachments = state.attachments.filter((entry) => entry.id !== id);
+  return attachment;
+}
+
+function syncParentSummary(parentId, effectiveAt = nowIso()) {
+  const parent = getItem(parentId);
+  if (!parent) return;
+  const children = state.items.filter((item) => item.parentId === parentId && item.status !== "cancelled");
+  if (!children.length) return;
+  const wasComplete = completeStatus(parent.status);
+  const rank = { blocked: 0, backlog: 0, waiting: 1, correction: 1, ready: 1, in_progress: 2, under_review: 3, done: 4 };
+  const leastAdvanced = [...children].sort((left, right) => (rank[left.status] ?? 0) - (rank[right.status] ?? 0) || Number(left.progressPercent || 0) - Number(right.progressPercent || 0))[0];
+  const descendants = [];
+  const visited = new Set();
+  function collectLeaves(itemId) {
+    if (visited.has(itemId)) return;
+    visited.add(itemId);
+    const nested = state.items.filter((item) => item.parentId === itemId && item.status !== "cancelled");
+    if (!nested.length) { const item = getItem(itemId); if (item && !["project", "process"].includes(item.type)) descendants.push(item); }
+    else nested.forEach((item) => collectLeaves(item.id));
+  }
+  children.forEach((item) => collectLeaves(item.id));
+  const weighted = descendants.reduce((total, item) => {
+    const weight = Number(item.weight || 1);
+    if (!Number.isFinite(weight) || weight <= 0) return total;
+    const percent = completeStatus(item.status) ? 100 : Math.max(0, Math.min(100, Number(item.progressPercent || 0)));
+    total.weighted += weight * percent; total.weight += weight; return total;
+  }, { weighted: 0, weight: 0 });
+  const next = {
+    status: leastAdvanced.status,
+    progressPercent: weighted.weight ? Math.round(weighted.weighted / weighted.weight) : null,
+    plannedStartAt: children.map((item) => item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "",
+    dueAt: children.map((item) => item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "",
+  };
+  let changed = false;
+  for (const field of Object.keys(next)) {
+    if (parent[field] === next[field]) continue;
+    const eventType = field === "status" ? "status_changed" : field === "progressPercent" ? "progress_changed" : field === "plannedStartAt" ? "start_changed" : "due_changed";
+    createEvent(parent.id, eventType, parent[field] || "", next[field] ?? "", "Resumo herdado dos subitens.", effectiveAt);
+    parent[field] = next[field];
+    changed = true;
+  }
+  if (completeStatus(next.status)) parent.completedAt = children.map((item) => item.completedAt).filter(Boolean).sort().at(-1) || parent.completedAt || effectiveAt;
+  else if (wasComplete) parent.completedAt = "";
+  if (changed) {
+    parent.updatedAt = nowIso();
+    parent.lastChangeAt = effectiveAt;
+    if (parent.parentId) syncParentSummary(parent.parentId, effectiveAt);
+  }
+}
+
 function validateItemInput(input, existing = null) {
   if (!input.title?.trim()) throw new Error("Informe o nome do item.");
   if (!itemTypes.some((type) => type.id === input.type)) throw new Error("Tipo de item inválido.");
-  if (!statusCatalog.some((status) => status.id === input.status)) throw new Error("Status inválido.");
+  if (input.status !== undefined && !statusCatalog.some((status) => status.id === input.status)) throw new Error("Status inválido.");
   if (!state.organizations.some((org) => org.id === input.organizationId)) throw new Error("Selecione uma empresa.");
   if (!state.sectors.some((sector) => sector.id === input.sectorId && sector.organizationId === input.organizationId)) throw new Error("Cadastre ou selecione um setor desta empresa.");
   if (!/^[A-Z]{2}$/.test(input.state || "")) throw new Error("Informe a UF com duas letras.");
@@ -778,44 +1090,52 @@ function validateItemInput(input, existing = null) {
 function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   const item = getItem(id);
   const user = currentUser();
-  if (!canEditItem(user,item)) throw new Error("Sua alçada não permite editar este item.");
+  if (!canEditItem(user,item)) throw new Error("Sua regra GPO não permite editar este item.");
   validateItemInput(input,item);
-  if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro da sua alçada.");
+  if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro das regras GPO.");
+  const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && entry.status !== "cancelled");
+  if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","weight"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
   if ((item.type === "approval") !== (input.type === "approval")) throw new Error("Crie um novo item para alterar o tipo de uma etapa de aprovação.");
-  if (["done","approved"].includes(input.status) && Number(input.progressPercent) < 100) input = {...input,progressPercent:100};
+  const wasComplete = completeStatus(item.status);
+  const complete = completeStatus(input.status);
+  if (wasComplete && !complete && (input.progressPercent === undefined || Number(input.progressPercent) === Number(item.progressPercent))) throw new Error("Informe um novo percentual ao reabrir uma atividade concluída.");
+  if (complete) input = { ...input, progressPercent: 100 };
+  if (wasComplete && complete && ((input.plannedStartAt ?? item.plannedStartAt) !== item.plannedStartAt || (input.dueAt ?? item.dueAt) !== item.dueAt)) throw new Error("As datas previstas ficam bloqueadas após a conclusão.");
   const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
   let changed = false;
-  const wasComplete = ["done","approved"].includes(item.status);
   for (const [field,eventType] of Object.entries(fields)) {
     const rawNext = input[field] ?? item[field];
-    const next = ["weight","progressPercent"].includes(field) ? Number(rawNext) : rawNext;
+    const next = field === "weight" || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
     if (next === item[field]) continue;
-    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt"].includes(field) ? "change_due" : "";
-    if (operation && gpoDecision(user, operation, item) === false) throw new Error("O GPO nega esta alteração neste escopo.");
+    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
+    if (operation && gpoDecision(user, operation, item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
     createEvent(id,eventType,item[field],next,"",effectiveAt);
     item[field] = next; changed = true;
   }
-  const complete = ["done","approved"].includes(item.status);
   if (complete && !wasComplete) { item.completedAt = effectiveAt; createEvent(id,"completed","",item.status,"",effectiveAt); }
   if (wasComplete && !complete) { item.completedAt = ""; createEvent(id,"reopened","","","Item reaberto.",effectiveAt); }
+  if (item.status === "in_progress" && !item.actualStartAt) { item.actualStartAt = effectiveAt; createEvent(id,"started","",effectiveAt,"Atividade iniciada.",effectiveAt); changed = true; }
   if (comment.trim()) { createEvent(id,"comment","","",comment.trim(),effectiveAt); changed = true; }
-  if (changed) { item.updatedAt = nowIso(); item.lastChangeAt = effectiveAt; }
+  if (changed) { item.updatedAt = nowIso(); item.lastChangeAt = effectiveAt; if (item.parentId) syncParentSummary(item.parentId,effectiveAt); }
   return changed;
 }
 
-function reopenApproval(id, note = "") {
+function reopenApproval(id, note = "", progressPercent) {
   const item = getItem(id);
   const user = currentUser();
-  if (!item || item.type !== "approval" || item.status !== "approved") throw new Error("Somente uma aprovação concluída pode ser reaberta.");
-  if (!canDecideApproval(user, item)) throw new Error("Sua alçada não permite reabrir esta aprovação.");
+  if (!item || item.type !== "approval" || item.status !== "done") throw new Error("Somente uma aprovação concluída pode ser reaberta.");
+  if (!canDecideApproval(user, item)) throw new Error("Sua regra GPO não permite reabrir esta aprovação.");
   if (!note.trim()) throw new Error("Descreva o motivo da reabertura.");
+  if (!Number.isFinite(Number(progressPercent)) || Number(progressPercent) < 0 || Number(progressPercent) >= 100 || Number(progressPercent) === Number(item.progressPercent)) throw new Error("Informe um novo percentual entre 0% e 99% ao reabrir a aprovação.");
   item.approvalRound = (item.approvalRound || 1) + 1;
   state.approvalDecisions ||= [];
   const reopened = { id: uid("decision"), itemId: item.id, requestId: item.approvalRequestId || item.id, round: item.approvalRound, kind: "reopened", outcome: "backlog", reviewerId: item.ownerId || "", correctionOwnerId: item.ownerId || "", reason: note.trim(), previousDecisionId: item.lastDecisionId || "", createdBy: user.id, createdAt: nowIso() };
   state.approvalDecisions.push(reopened);
   setApprovalStatus(item, "backlog", "approval_reopened", note.trim());
+  createEvent(item.id, "progress_changed", 100, Number(progressPercent), "Percentual informado ao reabrir a aprovação.");
+  item.progressPercent = Number(progressPercent);
   return reopened;
 }
 
@@ -828,7 +1148,7 @@ function shiftedDate(value, offset = 0) {
 function saveFlowTemplate(rootId, name) {
   const root = getItem(rootId);
   const user = currentUser();
-  if (!root || !canEditItem(user,root)) throw new Error("Sua alçada não permite salvar este fluxo como modelo.");
+  if (!root || !canEditItem(user,root)) throw new Error("Sua regra GPO não permite salvar este fluxo como modelo.");
   const ids = itemTreeIds(new Set([rootId]));
   const sourceItems = state.items.filter((item) => ids.has(item.id) && canViewItem(user,item));
   if (sourceItems.length !== ids.size || sourceItems.some((item) => !canEditItem(user,item))) throw new Error("Edite todos os itens do fluxo antes de criar um modelo.");
@@ -838,6 +1158,8 @@ function saveFlowTemplate(rootId, name) {
     parentKey:ids.has(item.parentId) ? item.parentId : "",
     title:item.title,
     type:item.type,
+    status:item.status,
+    ownerId:item.ownerId || "",
     description:item.description || "",
     startOffset:Math.round((new Date((item.plannedStartAt || baseDate) + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000),
     dueOffset:item.dueAt ? Math.round((new Date(item.dueAt + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000) : null,
@@ -855,9 +1177,9 @@ function applyFlowTemplate(templateId, input) {
   const user = currentUser();
   const template = state.templates?.find((entry) => entry.id === templateId);
   if (!template) throw new Error("Modelo não encontrado.");
-  if (template.organizationId !== user?.organizationId && user?.permissionLevel !== 10) throw new Error("Este modelo pertence a outra empresa.");
+  if (template.organizationId !== user?.organizationId && !canManageGpo(user)) throw new Error("Este modelo pertence a outra empresa.");
   const parent = {type:"project",organizationId:input.organizationId,sectorId:input.sectorId,state:input.state,createdBy:user?.id};
-  if (!canCreateItem(user,parent)) throw new Error("Sua alçada não permite criar itens neste contexto.");
+  if (!canCreateItem(user,parent)) throw new Error("Sua regra GPO não permite criar itens neste contexto.");
   if (!template.items?.length) throw new Error("O modelo não contém itens.");
   const snapshot = JSON.stringify(state);
   try {
@@ -866,11 +1188,15 @@ function applyFlowTemplate(templateId, input) {
     for (const source of template.items) {
       const parentId = source.parentKey ? ids.get(source.parentKey) : "";
       if (source.parentKey && !parentId) throw new Error("A estrutura do modelo está inconsistente.");
+      const eligibleOwners = state.users.filter((entry) => !entry.disabled && entry.organizationId === input.organizationId);
+      const requestedOwner = input.ownerSelections?.[source.key] || source.ownerId;
+      const ownerId = eligibleOwners.some((entry) => entry.id === requestedOwner) ? requestedOwner : eligibleOwners.some((entry) => entry.id === user.id) ? user.id : eligibleOwners[0]?.id || "";
+      const status = input.statusSelections?.[source.key] || source.status || "backlog";
       const item = createItem({
         title:source.key === template.items[0].key ? input.title.trim() : source.title,
         type:source.type,
-        status:"backlog",
-        ownerId:user.id,
+        status,
+        ownerId,
         organizationId:input.organizationId,
         sectorId:input.sectorId,
         state:input.state,
@@ -879,7 +1205,8 @@ function applyFlowTemplate(templateId, input) {
         plannedStartAt:shiftedDate(input.startDate || today(),source.startOffset),
         dueAt:source.dueOffset === null ? "" : shiftedDate(input.startDate || today(),source.dueOffset),
         weight:source.weight || 1,
-        progressPercent:0,
+        progressPercent:completeStatus(status) ? 100 : 0,
+        templateInstance:true,
       });
       ids.set(source.key,item.id);
       created.push(item);
@@ -902,7 +1229,7 @@ function applyFlowTemplate(templateId, input) {
 function removeFlowTemplate(id) {
   const template = state.templates?.find((entry) => entry.id === id);
   if (!template) throw new Error("Modelo não encontrado.");
-  if (template.createdBy !== currentUser()?.id && currentUser()?.permissionLevel !== 10) throw new Error("Somente quem criou o modelo ou o nível 10 pode removê-lo.");
+  if (template.createdBy !== currentUser()?.id && !canManageGpo(currentUser())) throw new Error("Somente quem criou o modelo ou alguém autorizado no GPO pode removê-lo.");
   state.templates = state.templates.filter((entry) => entry.id !== id);
   registryEvent("template",template,"Modelo removido.","removed");
 }
@@ -910,8 +1237,8 @@ function removeFlowTemplate(id) {
 function removeRelation(id) {
   const relation = state.relations.find((entry) => entry.id === id);
   const target = relation && getItem(relation.targetId);
-  const rule = target ? gpoDecision(currentUser(), "delete_relation", target) : null;
-  if (rule === false || (rule === null && !canRemoveItem(currentUser()))) throw new Error("Sua alçada não permite remover relações neste escopo.");
+  const rule = target ? gpoDecision(currentUser(), "delete_relation", target) : false;
+  if (rule !== true) throw new Error("Sua regra GPO não permite remover relações neste escopo.");
   if (!relation) throw new Error("Relação não encontrada.");
   if (!canEditItem(currentUser(),getItem(relation.sourceId)) || !canEditItem(currentUser(),getItem(relation.targetId))) throw new Error("Sem permissão para remover esta relação.");
   if (relation.relationType === "contains") getItem(relation.targetId).parentId = "";
@@ -921,7 +1248,7 @@ function removeRelation(id) {
 }
 
 function requireDeletionPermission(item = null) {
-  if (!canRemoveItem(currentUser(), item)) throw new Error(item ? "Sua alçada não permite excluir este item." : "Apenas o nível 10 pode excluir cadastros.");
+  if (!canRemoveItem(currentUser(), item)) throw new Error(item ? "Sua regra GPO não permite excluir este item." : "Sua regra GPO não permite excluir este cadastro.");
 }
 
 function archiveRecord(collection,record) {
@@ -978,6 +1305,10 @@ function removeItemsByIds(ids,reason) {
     createEvent(item.id,"item_removed",item.title,"",reason,effectiveAt);
     archiveRecord("archivedItems",item);
   }
+  state.archivedAttachments ||= [];
+  const removedAttachments = (state.attachments || []).filter((attachment) => ids.has(attachment.itemId));
+  removedAttachments.forEach((attachment) => state.archivedAttachments.push({...attachment,deletedAt:effectiveAt,deletedBy:currentUser()?.id || "system"}));
+  state.attachments = (state.attachments || []).filter((attachment) => !ids.has(attachment.itemId));
   state.items = state.items.filter((item) => !ids.has(item.id));
   state.relations = state.relations.filter((rel) => !ids.has(rel.sourceId) && !ids.has(rel.targetId));
   for (const positions of Object.values(state.graphPositions || {})) for (const id of ids) delete positions[id];
@@ -991,9 +1322,9 @@ function removeItem(id,{cascade = false,keepChildren = false} = {}) {
 }
 
 function removeUser(id,{replacementId = ""} = {}) {
-  requireDeletionPermission();
   const user = state.users.find((entry) => entry.id === id);
   if (!user) throw new Error("Usuário não encontrado.");
+  if (!canManageUsers(currentUser(),user.organizationId)) throw new Error("O GPO não permite gerenciar usuários nesta empresa.");
   if (user.id === currentUser().id) throw new Error("Entre com outro administrador para excluir o usuário conectado.");
   const replacement = replacementId && state.users.find((entry) => entry.id === replacementId && entry.id !== id && !entry.disabled);
   if (replacementId && !replacement) throw new Error("Selecione um responsável substituto ativo.");
@@ -1011,9 +1342,9 @@ function removeUser(id,{replacementId = ""} = {}) {
 }
 
 function removeSector(id,{replacementId = ""} = {}) {
-  requireDeletionPermission();
   const sector = state.sectors.find((entry) => entry.id === id);
   if (!sector) throw new Error("Setor não encontrado.");
+  if (!canManageOrganization(currentUser(), sector.organizationId)) throw new Error("O GPO não permite administrar esta empresa.");
   const users = state.users.filter((user) => user.sectorId === id);
   const items = state.items.filter((item) => item.sectorId === id);
   const replacement = replacementId && state.sectors.find((entry) => entry.id === replacementId && entry.id !== id && entry.organizationId === sector.organizationId);
@@ -1031,9 +1362,9 @@ function removeSector(id,{replacementId = ""} = {}) {
 }
 
 function organizationRemovalPlan(id) {
-  requireDeletionPermission();
   const organization = state.organizations.find((entry) => entry.id === id);
   if (!organization) throw new Error("Empresa não encontrada.");
+  if (!canManageOrganization(currentUser(), id)) throw new Error("O GPO não permite administrar esta empresa.");
   const sectors = state.sectors.filter((sector) => sector.organizationId === id);
   const sectorIds = new Set(sectors.map((sector) => sector.id));
   const users = state.users.filter((user) => user.organizationId === id || sectorIds.has(user.sectorId));

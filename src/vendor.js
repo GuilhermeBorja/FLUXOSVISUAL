@@ -32,12 +32,29 @@ import {
   Users,
   Building2,
   CircleHelp,
+  FolderKanban,
+  Layers2,
+  ListTree,
+  SquareCheck,
+  Stamp,
+  CircleAlert,
+  PackageCheck,
+  Flag,
+  FileText,
+  Pencil,
+  ArrowUp,
+  ArrowDown,
+  CornerDownRight,
+  CornerUpLeft,
+  Paperclip,
 } from "lucide";
 
 const icons = {
   Network, Workflow, Table2, Plus, X, ChevronDown, ChevronRight, Search,
   SlidersHorizontal, Settings2, LogOut, Download, RotateCcw, Maximize,
   ZoomIn, ZoomOut, Link2, Trash2, Check, MoreHorizontal, Users, Building2, CircleHelp,
+  FolderKanban, Layers2, ListTree, SquareCheck, Stamp, CircleAlert, PackageCheck,
+  Flag, FileText, Pencil, ArrowUp, ArrowDown, CornerDownRight, CornerUpLeft, Paperclip,
 };
 
 export function mountIcons() {

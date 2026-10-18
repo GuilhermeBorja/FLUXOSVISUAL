@@ -37,10 +37,10 @@ test("excluir só o pai mantém a estrutura dos subitens sem pais inexistentes",
   assert.equal(run('state.items.every((item)=>!item.parentId || !!getItem(item.parentId))'),true);
 });
 
-test("todos os comandos de exclusão negam níveis inferiores a 10 antes de alterar dados",()=>{
+test("todos os comandos de exclusão sem autorização GPO são negados antes de alterar dados",()=>{
   const run=context();
   run('state.currentUserId="u_virginia";before=JSON.stringify(state);');
-  for(const command of ['removeItem("item_adm",{cascade:true})','removeUser("u_mateus")','removeSector("sec_rh",{replacementId:"sec_obra"})','removeOrganization("org_dmk")']) assert.throws(()=>run(command),/nível 10/);
+  for(const command of ['removeItem("item_adm",{cascade:true})','removeUser("u_mateus")','removeSector("sec_rh",{replacementId:"sec_obra"})','removeOrganization("org_dmk")']) assert.throws(()=>run(command),/GPO/);
   assert.equal(run('JSON.stringify(state)===before'),true);
 });
 
