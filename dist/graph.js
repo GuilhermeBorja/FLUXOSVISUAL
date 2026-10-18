@@ -144,17 +144,18 @@ const FluxosGraph = (() => {
           <g class="graph-nodes">${model.nodes.map((node) => {
             const color = colors[options.labels.signal(node.item)] || colors.gray;
             const typeColor = options.labels.typeColor ? options.labels.typeColor(node.item) : color.stroke;
+            const statusColor = options.labels.statusColor ? options.labels.statusColor(node.item) : color.stroke;
             const lines = wrapLabel(node.item.title);
             const number = node.isRoot ? options.labels.type(node.item).slice(0, 1) : String(model.groups.find((group) => group.id === node.groupId).nodes.filter((candidate) => !candidate.isRoot).indexOf(node) + 1).padStart(2, "0");
             return `<g class="graph-node ${node.isRoot ? "root-node" : ""}" data-node="${esc(node.id)}" role="button" tabindex="0" aria-label="${esc(node.item.title)}, ${esc(options.labels.owner(node.item.ownerId))}, ${esc(options.labels.status(node.item))}, ${esc(options.labels.duration(node.item))}">
               <title>${esc(node.item.title)}\n${esc(options.labels.owner(node.item.ownerId))}\n${esc(options.labels.status(node.item))}\nTempo total: ${esc(options.labels.duration(node.item))}\nDuração prevista: ${esc(options.labels.planned(node.item))}\nProgresso: ${esc(options.labels.progress(node.item))}%\nTérmino esperado: ${esc(options.labels.expected(node.item))}\nDesvio: ${esc(options.labels.deviation(node.item))}\nBloqueios: ${esc(options.labels.blockers(node.item))}\nDependências: ${esc(options.labels.dependencies(node.item))}</title>
               <circle class="node-selection" r="${node.radius + 6}"/>
-              <circle class="node-circle" r="${node.radius}" fill="${color.fill}" stroke="${esc(typeColor)}"/>
+              <circle class="node-circle" r="${node.radius}" fill="${color.fill}" stroke="${esc(statusColor)}"/>
               <text class="node-number" text-anchor="middle" y="5" fill="${esc(typeColor)}">${esc(number)}</text>
               <text class="node-title" text-anchor="middle">${lines.map((line, index) => `<tspan x="0" y="${node.radius + 23 + index * 19}">${esc(line)}</tspan>`).join("")}</text>
               <text class="node-owner" text-anchor="middle" y="${node.radius + 64}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
               <text class="node-duration" text-anchor="middle" y="${node.radius + 84}">Total ${esc(options.labels.duration(node.item))}</text>
-              <text class="node-status" text-anchor="middle" y="${node.radius + 103}" fill="${color.stroke}">${esc(options.labels.status(node.item))}</text>
+              <text class="node-status" text-anchor="middle" y="${node.radius + 103}" fill="${esc(statusColor)}">${esc(options.labels.status(node.item))}</text>
               <text class="node-ideal-start" text-anchor="middle" y="${node.radius + 123}">Início ideal ${esc(options.labels.idealStart ? options.labels.idealStart(node.item) : "—")}</text>
               <text class="node-ideal-end" text-anchor="middle" y="${node.radius + 143}">Término ideal ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
               <text class="node-baseline" text-anchor="middle" y="${node.radius + 163}">Baseline ${esc(options.labels.baseline ? options.labels.baseline(node.item) : "—")}</text>
