@@ -72,3 +72,8 @@
 - Execução integral bem-sucedida consultada: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39167615310
 - O workflow executa `npm ci`, `npm run check`, `npm test`, `npm run build` e smoke test de navegador Playwright em Chromium (navegação, Gantt, grafo, cor de linha, subitem, ocultação/redimensionamento de coluna e viewport móvel).
 - CI verde não equivale a aprovação funcional final. Não foi realizado deploy de produção nesta branch.
+
+
+### CI após correção do smoke test
+
+A falha verificada no workflow `Validate PRD3` (run 39168227194) foi o teste de responsividade que usava `.drawer.count() === 0`, embora o painel fechado permaneça como elemento oculto no DOM. O teste passou a exigir `.drawer:visible`. A nova execução automática 39168432112 foi iniciada; não registrar como validada até que seu resultado terminal esteja disponível.
