@@ -284,6 +284,14 @@ function renderColumnSettings() {
   return `<div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-column-toggle="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}<button type="button" class="button quiet" data-action="auto-fit-columns">Ajustar colunas automaticamente</button></div>`;
 }
 
+function syncTableWidth(table) {
+  if (!table) return;
+  const headers = [...table.querySelectorAll("thead th")];
+  const widths = state.tableColumnWidths || {};
+  const requested = headers.reduce((sum,header,index) => { const key = tableColumnOptions[index]?.[0]; return sum + Math.max(60,Number(widths[key]) || header.getBoundingClientRect().width || 0); },0);
+  table.style.width = Math.max(table.parentElement?.clientWidth || 0,requested) + "px";
+}
+
 function applyTableColumnLayout() {
   const hidden = new Set(state.hiddenTableColumns || []), widths = state.tableColumnWidths || {};
   const table = document.querySelector(".synth-table"); if (!table) return;
@@ -296,13 +304,14 @@ function applyTableColumnLayout() {
     handle=document.createElement("span"); handle.className="column-resize-handle"; handle.setAttribute("role","separator"); handle.setAttribute("aria-orientation","vertical"); handle.setAttribute("aria-label","Redimensionar coluna "+key); handle.tabIndex=0; header.append(handle);
     handle.addEventListener("pointerdown",(event)=>{
       if(event.button!==0)return; event.preventDefault(); const startX=event.clientX,startWidth=header.getBoundingClientRect().width; handle.setPointerCapture?.(event.pointerId);
-      const move=(nextEvent)=>{ const width=Math.max(60,Math.round(startWidth+nextEvent.clientX-startX)); header.style.width=width+"px"; };
-      const finish=()=>{ const width=Math.round(header.getBoundingClientRect().width); state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; saveState(); handle.removeEventListener("pointermove",move); handle.removeEventListener("pointerup",finish); handle.removeEventListener("pointercancel",finish); };
+      const move=(nextEvent)=>{ const width=Math.max(60,Math.round(startWidth+nextEvent.clientX-startX)); header.style.width=width+"px"; syncTableWidth(table); };
+      const finish=()=>{ const width=Math.round(header.getBoundingClientRect().width); state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; syncTableWidth(table); saveState(); handle.removeEventListener("pointermove",move); handle.removeEventListener("pointerup",finish); handle.removeEventListener("pointercancel",finish); };
       handle.addEventListener("pointermove",move); handle.addEventListener("pointerup",finish); handle.addEventListener("pointercancel",finish);
     });
-    handle.addEventListener("keydown",(event)=>{ if(!["ArrowLeft","ArrowRight"].includes(event.key))return; event.preventDefault(); const width=Math.max(60,Math.round(header.getBoundingClientRect().width)+(event.key==="ArrowRight"?12:-12)); header.style.width=width+"px"; state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; saveState(); });
+    handle.addEventListener("keydown",(event)=>{ if(!["ArrowLeft","ArrowRight"].includes(event.key))return; event.preventDefault(); const width=Math.max(60,Math.round(header.getBoundingClientRect().width)+(event.key==="ArrowRight"?12:-12)); header.style.width=width+"px"; state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; syncTableWidth(table); saveState(); });
   }
 });
+  syncTableWidth(table);
   table.querySelectorAll("tbody tr").forEach((row)=>[...row.children].forEach((cell,index)=>{const [key]=tableColumnOptions[index]||[]; if(key) cell.classList.toggle("column-hidden",hidden.has(key));}));
 }
 
