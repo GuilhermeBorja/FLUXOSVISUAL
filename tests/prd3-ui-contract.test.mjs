@@ -204,3 +204,23 @@ test("criação em lote não presume a duração de etapas sem valor explícito"
   assert.match(workspace, /if \(!durationRaw\) throw new Error\(`Informe a duração da etapa/);
   assert.doesNotMatch(workspace, /duration === null \? Number\(input\.plannedDurationDays \|\| 0\)/);
 });
+
+
+test("histórico do pai agrega eventos descendentes sem expor itens não autorizados", () => {
+  const start = workspace.indexOf("function historyEventsFor(rootItem) {");
+  const end = workspace.indexOf("function renderItemPanel(item) {", start);
+  const source = workspace.slice(start, end);
+  const items = [
+    {id:"p",parentId:"",allowed:true},
+    {id:"c",parentId:"p",allowed:true},
+    {id:"g",parentId:"c",allowed:true},
+    {id:"secret",parentId:"p",allowed:false},
+  ];
+  const sandbox = {
+    state:{items,events:[{itemId:"p",id:"ep"},{itemId:"c",id:"ec"},{itemId:"g",id:"eg"},{itemId:"secret",id:"es"}]},
+    currentUser:()=>({id:"u"}),
+    canViewItem:(_user,item)=>item.allowed,
+  };
+  const events = vm.runInNewContext(source + "\nhistoryEventsFor",sandbox)({id:"p"});
+  assert.deepEqual(events.map((event)=>event.id).sort(),["ec","eg","ep"]);
+});
