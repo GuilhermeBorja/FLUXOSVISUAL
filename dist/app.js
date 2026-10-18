@@ -205,6 +205,7 @@ function loadState() {
       const parsed = JSON.parse(saved);
       if (parsed.version === 2) {
         parsed.permissionRules ||= [];
+        parsed.setupComplete ??= (parsed.users || []).length > 0;
         parsed.permissionRules = parsed.permissionRules.map((rule) => rule.operation === "change_due" ? {...rule,operation:"change_duration"} : rule);
         parsed.approvalDecisions ||= [];
         parsed.templates ||= [];
