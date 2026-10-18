@@ -649,3 +649,5 @@ body.panel-open { overflow: hidden; }
 .schedule-summary strong{font-size:14px;color:var(--text,#1d2b32);font-weight:600}
 .synth-table th{resize:horizontal;overflow:auto;min-width:64px;max-width:480px}
 @media(max-width:720px){.schedule-summary{grid-template-columns:1fr}}
+
+.event-origin{display:block;font-size:11px;color:var(--muted,#62717a);font-weight:500}.column-hidden{display:none!important}
