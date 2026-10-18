@@ -186,7 +186,22 @@ try {
   assert.notEqual(await page.locator("#zoomLabel").textContent(), zoomBefore, "graph zoom did not respond to wheel input");
   const svgBox = await page.locator(".graph-svg").boundingBox();
   assert.ok(svgBox);
-  const panStart = { x: svgBox.x + 12, y: svgBox.y + 12 };
+  const panStart = await page.evaluate(() => {
+    const svg = document.querySelector(".graph-svg");
+    const box = svg.getBoundingClientRect();
+    const points = [
+      { x: box.left + 4, y: box.top + 4 },
+      { x: box.right - 4, y: box.top + 4 },
+      { x: box.left + 4, y: box.bottom - 4 },
+      { x: box.right - 4, y: box.bottom - 4 },
+      { x: box.left + box.width / 2, y: box.top + 4 },
+    ];
+    return points.find((point) => {
+      const target = document.elementFromPoint(point.x, point.y);
+      return target?.closest(".graph-svg") && !target.closest("[data-node]") && !target.closest("[data-group]") && !target.closest("[data-edge]");
+    });
+  });
+  assert.ok(panStart, "no blank graph area was available for the pan test");
   const panBefore = await linkedNode.boundingBox();
   await page.mouse.move(panStart.x, panStart.y);
   await page.mouse.down();
