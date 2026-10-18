@@ -31,6 +31,17 @@ try {
   assert.ok((await page.locator(".node-duration").first().textContent()).includes("Resp."));
 
   await page.getByRole("button", { name: /Configurações/ }).click();
+  const drawer = page.locator(".drawer");
+  const drawerWidthBefore = await drawer.evaluate((element) => element.getBoundingClientRect().width);
+  const drawerHandle = page.locator(".drawer-resize-handle");
+  const drawerHandleBox = await drawerHandle.boundingBox();
+  assert.ok(drawerHandleBox);
+  await page.mouse.move(drawerHandleBox.x + 4, drawerHandleBox.y + drawerHandleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(drawerHandleBox.x - 36, drawerHandleBox.y + drawerHandleBox.height / 2);
+  await page.mouse.up();
+  const drawerWidthAfter = await drawer.evaluate((element) => element.getBoundingClientRect().width);
+  assert.ok(drawerWidthAfter >= drawerWidthBefore + 20, `drawer width did not increase: ${drawerWidthBefore} -> ${drawerWidthAfter}`);
   await page.locator('[data-row-fill-level="1"]').waitFor();
   await page.locator('[data-row-fill-level="1"]').evaluate((input) => {
     input.value = "#123456";
