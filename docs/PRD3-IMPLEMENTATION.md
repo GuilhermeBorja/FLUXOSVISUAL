@@ -83,3 +83,5 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 - **Documentação do grafo:** README agora descreve a sequência real da propagação (subárvore, retorno pelos ancestrais e demais ramos sem repetir nós).
 
 - **Smoke test real de navegador:** CI agora instala Chromium e executa Playwright contra a aplicação estática. A última execução validou navegação Sintética/Analítica/Gantt, datas e timer no grafo, aplicação de cor de linha, criação de subitem sem data inicial própria e viewport móvel: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166897202.
+
+- **Redimensionamento de coluna verificado em Chromium:** o teste revelou que o cabeçalho não posicionava corretamente o handle e a tabela não expandia junto da coluna. O handle agora é ancorado no `th`, o arraste é acompanhado no documento e a largura total da tabela é recalculada durante o movimento. A execução de navegador passou com ocultação, reexibição e arraste da coluna: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39167615310.
