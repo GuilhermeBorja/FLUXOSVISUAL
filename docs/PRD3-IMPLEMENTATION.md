@@ -58,3 +58,9 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 - **Integridade transacional:** se a edição de um item provocar um ciclo temporal, a operação é revertida, incluindo alterações nos itens e eventos gerados. Teste de regressão incluído.
 - **Grafo Analítico:** os nós exibem início e término idealizados, além da baseline; o texto de interação foi ajustado ao comportamento real de arraste individual.
 - **Validação adicional:** testes dinâmicos de cronograma cobrem paralelismo, caminho crítico, duração ausente e ciclos: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39165465303.
+
+- **Cores de linhas:** a Sintética agora permite definir preenchimento por nível hierárquico e substituir por cor específica de projeto; a preferência é local, persistida no navegador e possui restauração padrão.
+- **Cores de estado no Gantt:** o rótulo do item na linha do Gantt usa a cor configurada para o estado. O grafo também aplica a cor de estado ao contorno e ao rótulo de status do nó.
+- **Identidade textual:** README atualizado para “Fluxo Visual” e para descrever o arraste individual real do grafo.
+- **Auditoria rastreável:** matriz de 33 requisitos PRD2 e 13 transversais criada em `docs/PRD3-AUDIT.md`; os requisitos ainda não têm conformidade integral estão explicitamente marcados como parciais, com pendências registradas.
+- **CI:** testes, verificação de sintaxe e build passaram em https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39165896828.
