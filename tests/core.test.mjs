@@ -222,3 +222,23 @@ test("perfil GPO é herdado e regra individual prevalece como exceção", () => 
   run('createPermissionRule({subjectType:"user",subjectId:"u_virginia",operation:"view_item",scopeType:"global",scopeId:"",effect:"allow"});');
   assert.equal(run('gpoDecision(state.users.find((user)=>user.id==="u_virginia"),"view_item",getItem("item_doors"))'),true);
 });
+test("status Liberado para execução é calculado pela liberação das predecessoras", () => {
+  const run=context(); run('state.currentUserId="u_luis";');
+  run('a=createItem({...' + defaults + ',title:"Predecessora"}); b=createItem({...' + defaults + ',title:"Sucessora"}); createRelation(a.id,b.id,"TI");');
+  assert.equal(run("a.status"),"ready");
+  assert.equal(run("b.status"),"backlog");
+  run('updateItem(a.id,{...a,status:"done",progressPercent:100});');
+  assert.equal(run("b.status"),"ready");
+});
+
+test("arquivar e restaurar um pai preserva e alterna a visibilidade dos descendentes", () => {
+  const run=context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...' + defaults + ',title:"Raiz"}); child=createItem({...' + defaults + ',title:"Filho",parentId:root.id});');
+  run('archiveItem(root.id);');
+  assert.equal(run("getItem(root.id).archivedAt !== \"\""),true);
+  assert.equal(run("getItem(child.id).archivedAt !== \"\""),true);
+  assert.equal(run('visibleItems().some((item)=>item.id===root.id || item.id===child.id)'),false);
+  run('restoreArchivedItem(root.id);');
+  assert.equal(run("getItem(root.id).archivedAt || \"\""),"");
+  assert.equal(run("getItem(child.id).archivedAt || \"\""),"");
+});
