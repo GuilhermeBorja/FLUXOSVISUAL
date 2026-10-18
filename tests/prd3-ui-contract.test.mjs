@@ -193,3 +193,8 @@ test("cronograma sem atividades ativas não apresenta data fictícia de término
   assert.equal(analysis.finishDate,"");
   assert.match(analysis.message,/Não há atividades ativas/);
 });
+
+test("atividades canceladas têm barra neutra no Gantt e não são caminho crítico", () => {
+  assert.match(workspace, /row\.item\.status === "cancelled" \? "cancelled"/);
+  assert.match(css, /\.gantt-bar\.cancelled/);
+});
