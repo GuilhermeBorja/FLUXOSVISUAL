@@ -58,6 +58,7 @@ test("cadastro exige duração explícita e subitens herdam o início de referê
   assert.match(workspace, /Informe a duração planejada para calcular a previsão/);
   assert.match(workspace, /item\.parentId \? `<div class="schedule-summary">/);
   assert.match(workspace, /parentId:parent\.id/);
+  assert.match(workspace, /parent\?\.baselineStartAt \|\| parent\?\.plannedStartAt/);
 });
 
 test("nós do grafo exibem início e término idealizados e instrução de arraste coerente", () => {
