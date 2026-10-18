@@ -1004,6 +1004,7 @@ function bindWorkspace() {
     else if (action === "view-settings") { returnFocus = button; ui.panel = "settings"; renderPanel(); }
     else if (action === "settings-auto-fit") { state.tableColumnWidths = {}; saveState(); renderPanel(false); notify("Ajuste automático habilitado."); }
     else if (action === "settings-reset-columns") { state.hiddenTableColumns = []; state.tableColumnWidths = {}; saveState(); renderPanel(false); notify("Preferências de coluna restauradas."); }
+    else if (action === "settings-reset-row-colors") { delete state.rowFillSettings; saveState(); render(); notify("Cores das linhas restauradas."); }
     else if (action === "settings-reset-graph") { ui.positions = {}; state.graphPositions = {}; ui.graphTransform = null; saveState(); notify("Posições do grafo restauradas."); render(); }
     else if (action === "settings-open-statuses") { ui.adminTab = "statuses"; ui.panel = "admin"; renderPanel(); }
     else if (action === "admin") { returnFocus = button; ui.panel = "admin"; renderPanel(); }
@@ -1194,6 +1195,7 @@ function bindPanel() {
   document.querySelector("#editUserOrganization")?.addEventListener("change",(event)=>{ const sector=document.querySelector("#editUserSector"); if(!sector)return; sector.innerHTML=state.sectors.filter((entry)=>entry.organizationId===event.target.value).map((entry)=>option(entry.id,entry.name)).join(""); });
   root.querySelectorAll('#createItemForm [name="plannedStartAt"],#createItemForm [name="plannedDurationDays"],#createItemForm [name="sequence"]').forEach((input)=>input.addEventListener("input",updateSchedulePreview));
   root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) updateSchedulePreview(); });
+  root.addEventListener("change",(event)=>{ const input=event.target; if(input.matches("[data-row-fill-level]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.levels[input.dataset.rowFillLevel]=input.value; saveState(); render(); } else if(input.matches("[data-row-fill-project]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.projects[input.dataset.rowFillProject]=input.value; saveState(); render(); } });
   document.querySelector("#deleteCascade")?.addEventListener("change", (event) => { ui.deletion.cascade = event.target.checked; renderPanel(false); });
   submitHandler("deleteForm", (form) => {
     const {kind,id,cascade} = ui.deletion;
