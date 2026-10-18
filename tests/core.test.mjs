@@ -292,3 +292,15 @@ test("transformar um item em aprovação preserva identidade, relações e hist�
   assert.equal(run("state.relations.some((r)=>r.id===rel.id && r.sourceId===a.id && r.targetId===b.id)"),true);
   assert.equal(run('state.events.some((e)=>e.itemId===a.id && e.eventType==="type_changed" && e.toValue==="approval")'),true);
 });
+
+
+test("liberação automática considera todas as predecessoras e bloqueios", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`doneA=createItem({...${defaults},title:"Predecessora concluída",status:"done",progressPercent:100});pendingB=createItem({...${defaults},title:"Predecessora pendente",status:"backlog"});target=createItem({...${defaults},title:"Destino",status:"backlog"});blocker=createItem({...${defaults},title:"Bloqueio",status:"blocked"});state.relations.push({id:uid("rel"),sourceId:doneA.id,targetId:target.id,relationType:"TI",lagDays:0},{id:uid("rel"),sourceId:pendingB.id,targetId:target.id,relationType:"TI",lagDays:0},{id:uid("rel"),sourceId:blocker.id,targetId:target.id,relationType:"blocks",lagDays:0});recalculatePlannedDates();`);
+  assert.equal(run('getItem(target.id).status'),"backlog");
+  run('pendingB.status="done";pendingB.progressPercent=100;recalculatePlannedDates();');
+  assert.equal(run('getItem(target.id).status'),"backlog");
+  run('blocker.status="done";blocker.progressPercent=100;recalculatePlannedDates();');
+  assert.equal(run('getItem(target.id).status'),"ready");
+});
