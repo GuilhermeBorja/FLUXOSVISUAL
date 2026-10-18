@@ -62,6 +62,7 @@ const permissionOperationLabels = {
   change_due: "Alterar prazo",
   create_approval: "Configurar aprovação",
   decide_approval: "Decidir aprovação",
+  manage_users: "Gerenciar usuários",
 };
 
 const app = document.querySelector("#app");
@@ -464,7 +465,10 @@ function canRemoveItem(user, item = null) {
 }
 
 function canManageUsers(user) {
-  return !!user && !user.disabled && user.permissionLevel === 10;
+  if (!user || user.disabled) return false;
+  if (user.permissionLevel === 10) return true;
+  const rule = gpoDecision(user,"manage_users",null);
+  return rule === true;
 }
 
 function canManageGpo(user) {
@@ -483,6 +487,7 @@ function createPermissionRule(input) {
   if (input.scopeType === "sector" && !state.sectors.some((entry) => entry.id === input.scopeId)) throw new Error("Selecione um setor.");
   if (input.scopeType === "project" && !state.items.some((entry) => entry.id === input.scopeId && entry.type === "project")) throw new Error("Selecione um projeto.");
   if (input.scopeType === "item" && !getItem(input.scopeId)) throw new Error("Selecione um item.");
+  if (input.operation === "manage_users" && input.scopeType !== "global") throw new Error("A gestão de usuários exige uma regra global nesta versão demonstrativa.");
   if (!["allow", "deny"].includes(input.effect)) throw new Error("Selecione permitir ou negar.");
   state.permissionRules ||= [];
   const duplicate = state.permissionRules.some((rule) =>
@@ -493,7 +498,7 @@ function createPermissionRule(input) {
   if (duplicate) throw new Error("Esta regra GPO já existe.");
   const rule = { id: uid("gpo"), ...input, scopeId: input.scopeId || "", createdBy: user.id, createdAt: nowIso() };
   state.permissionRules.push(rule);
-  registryEvent("permission", rule, "Regra GPO demonstrativa criada.");
+  registryEvent("permission", rule, "Regra GPO demonstrativa criada.", "created");
   return rule;
 }
 
@@ -502,7 +507,7 @@ function removePermissionRule(id) {
   const rule = state.permissionRules?.find((entry) => entry.id === id);
   if (!rule) throw new Error("Regra GPO não encontrada.");
   state.permissionRules = state.permissionRules.filter((entry) => entry.id !== id);
-  registryEvent("permission", rule, "Regra GPO demonstrativa removida.");
+  registryEvent("permission", rule, "Regra GPO demonstrativa removida.", "removed");
 }
 
 function approvalGate(itemOrId) {
@@ -646,7 +651,7 @@ function createItem(input) {
   validateItemInput(input);
   if (input.type === "approval" && ["approved", "rejected", "correction", "under_review"].includes(input.status)) throw new Error("A etapa deve entrar no fluxo antes de receber uma decisão.");
   if (input.parentId && !canEditItem(user, getItem(input.parentId))) throw new Error("Sem permissao para alterar o item pai.");
-  if (!canEditItem(user, { ...input, createdBy: user.id })) throw new Error("O escopo do novo item deve estar dentro da sua alcada.");
+  if (!canCreateItem(user, { ...input, createdBy: user.id })) throw new Error("O escopo do novo item não está autorizado.");
   const item = {
     id: uid("item"),
     title: input.title,
@@ -678,7 +683,9 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0) {
   const target = getItem(targetId);
   if (!source || !target || sourceId === targetId) throw new Error("Escolha dois itens diferentes.");
   if (!relationTypes.some((type) => type.id === relationType)) throw new Error("Tipo de relacao invalido.");
-  if (!canEditItem(currentUser(), source) || !canEditItem(currentUser(), target)) throw new Error("Sua alçada deve permitir editar os dois itens.");
+  const user = currentUser();
+  const targetIsNewlyOwned = target.createdBy === user?.id && canCreateItem(user,target);
+  if (!canEditItem(user, source) || (!canEditItem(user, target) && !targetIsNewlyOwned)) throw new Error("Sua alçada deve permitir editar os dois itens.");
   if (gpoDecision(currentUser(), "create_relation", target) === false) throw new Error("O GPO nega a criação de relações neste escopo.");
   if (!Number.isFinite(Number(lagDays))) throw new Error("Informe uma defasagem numerica.");
   if (relationType === "contains") {
@@ -806,9 +813,9 @@ function archiveRecord(collection,record) {
   state[collection].push({...record,removedAt:nowIso(),removedBy:currentUser().id});
 }
 
-function registryEvent(entityType,record,comment = "") {
+function registryEvent(entityType,record,comment = "",eventType = "removed") {
   state.registryEvents ||= [];
-  state.registryEvents.push({id:uid("registry_event"),entityType,entityId:record.id,eventType:"removed",name:record.name,userId:currentUser().id,createdAt:nowIso(),comment});
+  state.registryEvents.push({id:uid("registry_event"),entityType,entityId:record.id,eventType,name:record.name || record.operation || record.id,userId:currentUser().id,createdAt:nowIso(),comment});
 }
 
 function itemTreeIds(initialIds) {
@@ -868,7 +875,7 @@ function removeItem(id,{cascade = false,keepChildren = false} = {}) {
 }
 
 function removeUser(id,{replacementId = ""} = {}) {
-  requireDeletionPermission();
+  if (!canManageUsers(currentUser())) throw new Error("Sua alçada não permite gerenciar usuários.");
   const user = state.users.find((entry) => entry.id === id);
   if (!user) throw new Error("Usuário não encontrado.");
   if (user.id === currentUser().id) throw new Error("Entre com outro administrador para excluir o usuário conectado.");
