@@ -90,6 +90,9 @@ h1 { margin: 0; font-size: 1.625rem; line-height: 1.2; font-weight: 650; letter-
 .synth-table tbody tr:last-child td { border-bottom: 0; }
 .synth-table tbody tr:hover { background: #f7fafb; }
 .synth-table tbody tr.selected { background: #eef7f7; }
+.synth-table tbody tr td { background: var(--row-fill, transparent); }
+.synth-table tbody tr:hover td { background: #f7fafb; }
+.synth-table tbody tr.selected td { background: #eef7f7; }
 .synth-table .title-cell { min-width: 280px; max-width: 380px; padding-left: 0; }
 .id-cell { color: #86939d; font-size: .8125rem; font-variant-numeric: tabular-nums; }
 .date-cell { white-space: nowrap; color: #657581; font-variant-numeric: tabular-nums; font-size: .875rem; }
@@ -103,7 +106,7 @@ h1 { margin: 0; font-size: 1.625rem; line-height: 1.2; font-weight: 650; letter-
 .item-title:hover { color: var(--accent); }
 .item-title span { display: block; font-size: .75rem; color: #7b8994; font-weight: 400; margin-top: 2px; }
 .child-row .item-title { font-weight: 450; }
-.child-row td { background: #fcfdfe; }
+.child-row td { background: var(--row-fill, #fcfdfe); }
 .status-badge { display: inline-flex; align-items: center; gap: 7px; border-radius: 4px; padding: 6px 8px; font-size: .8125rem; white-space: nowrap; background: #f2f4f6; color: var(--gray); }
 .status-badge.red { background: #fff0f1; color: var(--red); }
 .status-badge.green { background: #eaf7ef; color: var(--green); }
