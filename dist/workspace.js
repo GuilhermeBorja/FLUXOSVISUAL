@@ -572,6 +572,39 @@ function renderViewSettingsPanel() {
     </div>`;
 }
 
+function bindDrawerResize(drawer) {
+  const handle = drawer.querySelector(".drawer-resize-handle");
+  if (!handle) return;
+  const clampWidth = (value) => Math.max(320,Math.min(900,Math.round(value)));
+  const applyWidth = (value,persist = false) => {
+    const width = clampWidth(value);
+    drawer.style.setProperty("--drawer-width",width+"px");
+    if (persist) { state.drawerWidth = width; saveState(); }
+    return width;
+  };
+  handle.addEventListener("pointerdown",(event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX, startWidth = drawer.getBoundingClientRect().width;
+    const move = (nextEvent) => applyWidth(startWidth + startX - nextEvent.clientX);
+    const finish = () => {
+      applyWidth(drawer.getBoundingClientRect().width,true);
+      document.removeEventListener("pointermove",move);
+      document.removeEventListener("pointerup",finish);
+      document.removeEventListener("pointercancel",finish);
+    };
+    document.addEventListener("pointermove",move);
+    document.addEventListener("pointerup",finish);
+    document.addEventListener("pointercancel",finish);
+  });
+  handle.addEventListener("keydown",(event) => {
+    if (!["ArrowLeft","ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    const width = drawer.getBoundingClientRect().width + (event.key === "ArrowLeft" ? 16 : -16);
+    applyWidth(width,true);
+  });
+}
+
 function renderPanel(focus = true) {
   const root = document.querySelector("#panelRoot");
   if (!root) return;
@@ -584,9 +617,10 @@ function renderPanel(focus = true) {
   else if (ui.panel === "delete") content = renderDeletionPanel();
   else if (ui.panel === "item" && canViewItem(currentUser(), getItem(ui.selectedItemId))) content = renderItemPanel(getItem(ui.selectedItemId));
   if (!content) { closePanel(); return; }
-  root.innerHTML = `<div class="panel-shade" data-action="close-panel"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1">${content}</aside>`;
+  const drawerWidth = Math.max(320,Math.min(900,Number(state.drawerWidth) || 510));
+  root.innerHTML = `<div class="panel-shade" data-action="close-panel"></div><aside class="drawer" style="--drawer-width:${drawerWidth}px" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1"><span class="drawer-resize-handle" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel" tabindex="0"></span>${content}</aside>`;
   document.body.classList.add("panel-open");
-  bindPanel(); mountIcons();
+  bindPanel(); bindDrawerResize(root.querySelector(".drawer")); mountIcons();
   if (focus) root.querySelector(".drawer").focus();
 }
 
