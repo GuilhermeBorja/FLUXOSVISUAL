@@ -167,7 +167,12 @@ function loadState() {
         parsed.permissionRules ||= [];
         parsed.approvalDecisions ||= [];
         parsed.templates ||= [];
-        for (const item of parsed.items || []) if (item.type === "approval") item.approvalRound ||= 1;
+        parsed.riskThresholdDays ??= 3;
+        for (const item of parsed.items || []) {
+          if (item.type === "approval") item.approvalRound ||= 1;
+          item.weight ??= 1;
+          item.progressPercent ??= ["done","approved"].includes(item.status) ? 100 : item.status === "in_progress" ? 50 : 0;
+        }
         return parsed;
       }
     } catch (error) {
@@ -261,6 +266,7 @@ function seedState() {
     permissionRules: [],
     approvalDecisions: [],
     templates: [],
+    riskThresholdDays: 3,
   };
 
   const adm = createSeedItem(base, {
@@ -354,6 +360,8 @@ function createSeedItem(base, input) {
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
+    weight: Number(input.weight ?? 1),
+    progressPercent: Number(input.progressPercent ?? (["done","approved"].includes(input.status) ? 100 : 0)),
     completedAt: ["done", "approved"].includes(input.status) ? nowIso() : "",
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -539,6 +547,7 @@ function canSubmitApproval(user, item) {
 function setApprovalStatus(item, nextStatus, eventType, comment = "") {
   const previous = item.status;
   item.status = nextStatus;
+  if (["approved","done"].includes(nextStatus)) item.progressPercent = 100;
   item.updatedAt = nowIso();
   item.lastChangeAt = item.updatedAt;
   item.completedAt = ["approved", "done"].includes(nextStatus) ? item.updatedAt : "";
@@ -639,11 +648,17 @@ function isOverdue(item) {
   return new Date(`${item.dueAt}T00:00:00`) < new Date(`${today()}T00:00:00`);
 }
 
+function isAtRisk(item) {
+  if (!item.dueAt || ["done", "approved", "cancelled", "blocked"].includes(item.status) || isOverdue(item)) return false;
+  const daysLeft = Math.floor((new Date(item.dueAt + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000);
+  return daysLeft <= (Number(state.riskThresholdDays) || 3) && Number(item.progressPercent || 0) < 75;
+}
+
 function signalOf(item) {
   if (item.status === "blocked" || isOverdue(item)) return "red";
   if (["done", "approved"].includes(item.status)) return "green";
   if (["in_progress"].includes(item.status)) return "blue";
-  if (["waiting", "under_review", "ready", "correction"].includes(item.status)) return "yellow";
+  if (["waiting", "under_review", "ready", "correction"].includes(item.status) || isAtRisk(item)) return "yellow";
   return "gray";
 }
 
@@ -669,6 +684,8 @@ function createItem(input) {
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
+    weight: Number(input.weight ?? 1),
+    progressPercent: Number(input.progressPercent ?? (["done","approved"].includes(input.status) ? 100 : 0)),
     completedAt: ["done", "approved"].includes(input.status) ? nowIso() : "",
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -744,6 +761,8 @@ function validateItemInput(input, existing = null) {
   if (!state.sectors.some((sector) => sector.id === input.sectorId && sector.organizationId === input.organizationId)) throw new Error("Cadastre ou selecione um setor desta empresa.");
   if (!/^[A-Z]{2}$/.test(input.state || "")) throw new Error("Informe a UF com duas letras.");
   if (input.ownerId && !state.users.some((user) => user.id === input.ownerId && (!user.disabled || existing?.ownerId === user.id))) throw new Error("Selecione um responsável ativo.");
+  if (input.weight !== undefined && (!Number.isFinite(Number(input.weight)) || Number(input.weight) <= 0)) throw new Error("O peso deve ser maior que zero.");
+  if (input.progressPercent !== undefined && (!Number.isFinite(Number(input.progressPercent)) || Number(input.progressPercent) < 0 || Number(input.progressPercent) > 100)) throw new Error("O percentual deve ficar entre 0 e 100.");
   for (const field of ["plannedStartAt", "dueAt"]) {
     if (input[field] && (!/^\d{4}-\d{2}-\d{2}$/.test(input[field]) || !Number.isFinite(new Date(`${input[field]}T12:00:00`).getTime()))) throw new Error("Informe uma data válida.");
   }
@@ -760,11 +779,13 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
   if ((item.type === "approval") !== (input.type === "approval")) throw new Error("Crie um novo item para alterar o tipo de uma etapa de aprovação.");
-  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
+  if (["done","approved"].includes(input.status) && Number(input.progressPercent) < 100) input = {...input,progressPercent:100};
+  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
   let changed = false;
   const wasComplete = ["done","approved"].includes(item.status);
   for (const [field,eventType] of Object.entries(fields)) {
-    const next = input[field] ?? item[field];
+    const rawNext = input[field] ?? item[field];
+    const next = ["weight","progressPercent"].includes(field) ? Number(rawNext) : rawNext;
     if (next === item[field]) continue;
     const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt"].includes(field) ? "change_due" : "";
     if (operation && gpoDecision(user, operation, item) === false) throw new Error("O GPO nega esta alteração neste escopo.");
@@ -815,6 +836,7 @@ function saveFlowTemplate(rootId, name) {
     description:item.description || "",
     startOffset:Math.round((new Date((item.plannedStartAt || baseDate) + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000),
     dueOffset:item.dueAt ? Math.round((new Date(item.dueAt + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000) : null,
+    weight:Number(item.weight || 1),
   }));
   const relations = state.relations.filter((relation) => ids.has(relation.sourceId) && ids.has(relation.targetId) && relation.relationType !== "contains").map((relation) => ({sourceKey:relation.sourceId,targetKey:relation.targetId,relationType:relation.relationType,lagDays:relation.lagDays || 0}));
   state.templates ||= [];
@@ -851,6 +873,8 @@ function applyFlowTemplate(templateId, input) {
         description:source.description,
         plannedStartAt:shiftedDate(input.startDate || today(),source.startOffset),
         dueAt:source.dueOffset === null ? "" : shiftedDate(input.startDate || today(),source.dueOffset),
+        weight:source.weight || 1,
+        progressPercent:0,
       });
       ids.set(source.key,item.id);
       created.push(item);
