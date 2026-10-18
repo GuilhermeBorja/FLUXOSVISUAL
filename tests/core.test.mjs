@@ -475,3 +475,31 @@ test("P0: reabrir aprovação inicia nova rodada e preserva a decisão anterior"
   assert.equal(run('decision.createdBy'),"u_luis");
   assert.equal(run('state.approvalDecisions.some((d)=>d.id===decision.id && d.round===2)'),true);
 });
+
+
+test("P0 integrado: mover subárvore, editar dependência e arquivar/restaurar preserva baseline e integridade do grafo", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('rootA=createItem({...'+defaults+',title:"Projeto A",type:"project"});rootB=createItem({...'+defaults+',title:"Projeto B",type:"project"});parent=createItem({...'+defaults+',title:"Pai",parentId:rootA.id});child=createItem({...'+defaults+',title:"Filho",parentId:parent.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3});grandchild=createItem({...'+defaults+',title:"Neto",parentId:child.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-27",plannedDurationDays:2});external=createItem({...'+defaults+',title:"Dependente",plannedStartAt:"2026-10-28",dueAt:"2026-10-30",plannedDurationDays:2});temporal=createRelation(grandchild.id,external.id,"TI",1,"Dependência integrada");baseline=JSON.stringify([child.baselineStartAt,child.baselineDueAt,grandchild.baselineStartAt,grandchild.baselineDueAt]);');
+  run('moveItemHierarchy(parent.id,rootB.id);');
+  assert.equal(run('getItem(parent.id).parentId'),run('rootB.id'));
+  assert.equal(run('state.relations.some((r)=>r.sourceId===rootB.id && r.targetId===parent.id && r.relationType==="contains")'),true);
+  assert.equal(run('state.relations.some((r)=>r.sourceId===rootA.id && r.targetId===parent.id && r.relationType==="contains")'),false);
+  assert.equal(run('state.relations.some((r)=>r.sourceId===rootB.id && r.targetId===grandchild.id && r.relationType==="contains")'),true);
+  assert.equal(run('state.relations.some((r)=>r.id===temporal.id && r.sourceId===grandchild.id && r.targetId===external.id && r.relationType==="TI")'),true);
+
+  run('updateRelation(temporal.id,{sourceId:grandchild.id,targetId:external.id,relationType:"TT",lagDays:2,description:"Dependência revisada"});');
+  assert.equal(run('state.relations.filter((r)=>r.id===temporal.id).length'),1);
+  assert.equal(run('temporal.id'),run('state.relations.find((r)=>r.id===temporal.id).id'));
+  assert.equal(run('state.relations.find((r)=>r.id===temporal.id).relationType'),"TT");
+  assert.equal(run('state.relations.find((r)=>r.id===temporal.id).lagDays'),2);
+  assert.equal(run('JSON.stringify([child.baselineStartAt,child.baselineDueAt,grandchild.baselineStartAt,grandchild.baselineDueAt])'),run('baseline'));
+
+  run('relationIds=state.relations.map((r)=>r.id).sort().join(",");archiveItem(rootB.id);');
+  assert.equal(run('getItem(rootB.id).archivedAt!=="" && getItem(parent.id).archivedAt!=="" && getItem(child.id).archivedAt!=="" && getItem(grandchild.id).archivedAt!==""'),true);
+  assert.equal(run('state.relations.map((r)=>r.id).sort().join(",")===relationIds'),true);
+  run('restoreArchivedItem(rootB.id);');
+  assert.equal(run('getItem(rootB.id).archivedAt==="" && getItem(parent.id).archivedAt==="" && getItem(child.id).archivedAt==="" && getItem(grandchild.id).archivedAt===""'),true);
+  assert.equal(run('state.relations.map((r)=>r.id).sort().join(",")===relationIds'),true);
+  assert.equal(run('state.relations.every((r)=>!!getItem(r.sourceId) && !!getItem(r.targetId))'),true);
+  assert.equal(run('JSON.stringify([child.baselineStartAt,child.baselineDueAt,grandchild.baselineStartAt,grandchild.baselineDueAt])'),run('baseline'));
+});
