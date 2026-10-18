@@ -661,3 +661,5 @@ body.panel-open { overflow: hidden; }
 .status-badge{border-color:color-mix(in srgb,var(--status-color,#687780) 30%,transparent)}.status-symbol{display:inline-flex;align-items:center;justify-content:center;color:var(--status-color,#687780)}.status-symbol svg{width:13px;height:13px;stroke:currentColor}
 
 .drawer{resize:horizontal;overflow:auto;min-width:min(320px,90vw);max-width:90vw}.drawer-body{overflow:auto}
+
+.synth-table tbody tr[data-type="project"]{background:color-mix(in srgb,var(--surface,#fff) 88%,var(--accent,#287d62))}.synth-table tbody tr[data-depth="1"]{background:color-mix(in srgb,var(--surface,#fff) 94%,var(--accent,#287d62))}.synth-table tbody tr[data-depth="2"]{background:color-mix(in srgb,var(--surface,#fff) 96%,var(--accent,#287d62))}.synth-table tbody tr[data-depth="3"],.synth-table tbody tr[data-depth="4"],.synth-table tbody tr[data-depth="5"]{background:color-mix(in srgb,var(--surface,#fff) 98%,var(--accent,#287d62))}
