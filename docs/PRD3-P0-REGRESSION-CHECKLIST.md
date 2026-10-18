@@ -3,19 +3,19 @@
 **Branch:** `PRD3`  
 **Data:** 18/10/2026  
 **Escopo:** 44 itens que estavam marcados como parciais na matriz de auditoria, priorizando os P0.  
-**CI de referência:** [run #150 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171376961): sintaxe, 77 testes automatizados e smoke browser aprovados.  
+**CI de referência:** [run #154 — sucesso](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39174762832): sintaxe, testes automatizados, build e smoke browser aprovados.  
 **Limite:** os estados descrevem a evidência atual, não certificam o produto para produção. “Preservado” significa que o comportamento coberto pelos testes não regrediu; as pendências listadas continuam abertas.
 
 ## Resumo dos 44 itens
 
 | Estado | Quantidade |
 |---|---:|
-| preservado | 13 |
+| preservado | 14 |
 | corrigido | 7 |
 | regressão encontrada | 0 |
-| não verificado | 24 |
+| não verificado | 23 |
 
-Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados. Entre os P0 parciais, 7 seguem como não verificados: R2-15 (magnetismo do grafo), R2-19 (propagação com filtros/grafos complexos), R2-25 (painel do item), M-01 (matriz completa de integridade de relações), M-02 (consistência após todas as mutações), M-09 (ciclo completo de aprovações) e M-13 (fechamento da rastreabilidade).
+Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual; isso não substitui a validação dos itens ainda não verificados. Entre os P0 parciais, 6 seguem como não verificados: R2-15 (magnetismo do grafo), R2-19 (propagação com filtros/grafos complexos), R2-25 (painel do item), M-01 (matriz completa de integridade de relações), M-09 (ciclo completo de aprovações) e M-13 (fechamento da rastreabilidade).
 
 ## 1. Checklist P0 (21 itens parciais + R2-22 já conforme)
 
@@ -36,7 +36,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 | R2-25 | Exibir início idealizado, término idealizado e duração idealizada ao abrir item | não verificado | Código e teste de contrato indicam datas idealizadas no grafo; falta inspeção visual do painel de item para todos os tipos, incluindo datas vazias e repactuação. |
 | R2-28 | Arquivar itens pais e filhos | preservado | Testes cobrem arquivamento/restauração de pai e filhos; teste P0 adicional confirma que relações CONTÉM e temporais permanecem consistentes após arquivar/restaurar (CI #136). Falta validar relações externas e permissões em todos os descendentes. |
 | M-01 | Preservar modelo amorfo e separar contenção de dependência temporal | não verificado | A separação entre CONTÉM e relações temporais tem testes básicos. Falta a matriz completa de operações e comprovação de que reordenação/hierarquia não altera dependências temporais. |
-| M-02 | Consistência entre Sintética, Analítica e Gantt após mutações | não verificado | Smoke browser #145 confirma um item recém-criado e depois renomeado nas três visões. Falta repetir após reordenação, alteração de relação, conclusão, arquivamento e restauração. |
+| M-02 | Consistência entre Sintética, Analítica e Gantt após mutações | preservado | Smoke browser #154 confirma o mesmo ID nas três visões após criação/edição, criação de relação, reordenação e conclusão; o arquivamento remove o item das três visões e a restauração o devolve. A matriz integrada de cada mutação isolada e de outros estados/filtros continua pendente. |
 | M-04 | Progresso ponderado sem dupla contagem e sem percentuais inventados | corrigido | Regressão reproduzida: peso legado explícito 0 era convertido em 1 e produzia avanço fictício (80%). Corrigido para usar `??` no cálculo e na exibição. CI #136 passou com 74 testes e smoke browser; falta ampliar cenários de hierarquia profunda/múltiplos pesos inválidos. |
 | M-06 | Caminho crítico/folgas corretos para rede temporal, paralelismo e defasagens | preservado | Testes cobrem fórmulas TI/II/TT/IF, paralelismo, ciclos, caminho crítico e folga numérica (0 dias para tarefas críticas e 4 dias para a tarefa não crítica no cenário de referência). CI #145 passou; falta rede integrada com dados reais. |
 | M-09 | Aprovações/correções preservam decisão, motivo, autor, data e rodada | não verificado | Há teste para reprovação e criação de revisão ligada. Falta validar todas as rodadas, reabertura, autor/revisor, motivo, data/hora e encadeamento da decisão anterior. |
@@ -84,7 +84,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 - **GPO e integridade transacional:** o teste [26a78c34](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/26a78c34cc42d0f4917ea9e7087ad055a429f668) reproduziu mutação parcial antes da negação GPO; corrigido no [commit 46864d31](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/46864d319ef2001d0de5052f381f13fa49258eee). O CI #140 passou com 75 testes e smoke browser.
 - **Parent editing e folgas:** os testes P0 de edição/repactuação do pai e folgas numéricas do caminho crítico passaram no [CI #145](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171144437).
 - **Prévia de subitem:** o teste browser reproduziu a data final errada quando o início do pai era diferente de hoje; corrigido no [commit 379b6335](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/379b6335f530b611258a0b88bf32c7c020aec1e3), validado no CI #150.
-- **Validação consolidada mais recente:** [CI #150](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39171376961), 77/77 testes e smoke browser aprovados.
+- **Validação consolidada mais recente:** [CI #154](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39174762832), sintaxe, testes automatizados, build e smoke browser aprovados; o novo cenário M-02 passou.
 
 ## 4. Ordem de execução pendente
 
