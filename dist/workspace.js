@@ -46,6 +46,26 @@ function plannedLabel(item) {
   return `${Math.max(0, days)}d previstos`;
 }
 
+function weightedProgress(items) {
+  const parents = new Set(items.map((item) => item.parentId).filter(Boolean));
+  const eligible = items.filter((item) => !parents.has(item.id) && !["project","process"].includes(item.type));
+  let weighted = 0; let totalWeight = 0;
+  for (const item of eligible) {
+    const weight = Number(item.weight);
+    if (!Number.isFinite(weight) || weight <= 0) continue;
+    const statusPercent = ["done","approved"].includes(item.status) ? 100 : Number(item.progressPercent || 0);
+    const percent = Math.min(100,Math.max(0,Number.isFinite(statusPercent) ? statusPercent : 0));
+    weighted += weight * percent;
+    totalWeight += weight;
+  }
+  return totalWeight ? Math.round(weighted / totalWeight) : null;
+}
+
+function weightedProgressLabel(items) {
+  const value = weightedProgress(items);
+  return value === null ? "Progresso ponderado: sem atividades elegíveis" : "Progresso ponderado: " + value + "%";
+}
+
 function signalLabel(item) {
   if (item.status === "blocked") return "Bloqueado";
   if (isOverdue(item)) return "Atrasado";
@@ -53,7 +73,8 @@ function signalLabel(item) {
 }
 
 function statusBadge(item) {
-  return `<span class="status-badge ${signalOf(item)}"><span class="signal"></span>${escapeHtml(labelOf(statusCatalog, item.status))}${isOverdue(item) ? '<span class="overdue-mark" title="Prazo vencido">· atraso</span>' : ""}</span>`;
+  const indicator = isOverdue(item) ? '<span class="overdue-mark" title="Prazo vencido">· atraso</span>' : isAtRisk(item) ? '<span class="overdue-mark" title="Risco de atraso">· risco</span>' : "";
+  return `<span class="status-badge ${signalOf(item)}"><span class="signal"></span>${escapeHtml(labelOf(statusCatalog, item.status))}${indicator}</span>`;
 }
 
 function dateCell(value, withTime = false) {
@@ -109,7 +130,7 @@ function render() {
         </div>
       </header>
       <section class="workspace-heading">
-        <div><h1>Processos e demandas</h1><p>${items.length} ${items.length === 1 ? "item visível" : "itens visíveis"}</p></div>
+        <div><h1>Processos e demandas</h1><p>${items.length} ${items.length === 1 ? "item visível" : "itens visíveis"}</p><p class="progress-summary">${weightedProgressLabel(items)}</p></div>
         <button class="button quiet" data-action="templates">${icon("workflow")}Modelos</button>
         ${canCreateItem(user) ? `<button class="button primary" data-action="create">${icon("plus")}Novo item</button>` : ""}
       </section>
@@ -285,6 +306,7 @@ function itemFormFields(item, create = false) {
     <div class="form-row"><label>Tipo<select name="type" ${item.type === "approval" && !create ? "disabled" : ""}>${itemTypes.map((type) => option(type.id,type.label,(item.type || "task") === type.id)).join("")}</select></label><label>Status<select name="status" ${item.type === "approval" && !create ? "disabled" : ""}>${statusCatalog.map((status) => option(status.id,status.label,(item.status || "backlog") === status.id)).join("")}</select></label></div>
     <label>Responsável<select name="ownerId">${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select></label>
     <div class="form-row"><label>Início previsto<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt || today())}"/></label><label>Término ideal<input type="date" name="dueAt" value="${escapeHtml(item.dueAt)}"/></label></div>
+    <div class="form-row"><label>Peso da atividade<input type="number" name="weight" min="0.1" step="0.1" value="${escapeHtml(item.weight ?? 1)}" required/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent ?? 0)}" required/></label></div>
     <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description)}</textarea></label>
       <div class="form-row"><label>Empresa<select name="organizationId" id="itemOrganization">${organizations.filter(Boolean).map((org) => option(org.id,org.name,org.id === organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="itemSector">${sectors.map((sector) => option(sector.id,sector.name,sector.id === sectorId)).join("")}</select></label></div>
       <label>Estado (UF)<input name="state" maxlength="2" value="${escapeHtml(item.state || user.state)}" required ${[3,5,7].includes(user.permissionLevel) ? "readonly" : ""}/></label>
@@ -344,7 +366,7 @@ function renderRelations(item, relations, editable) {
     ${editable && candidates.length ? `<section class="panel-section"><h3>Nova relação</h3><form id="relationForm" class="form-stack"><label>Direção<select name="direction">${option("out","Este item se relaciona com…")}${option("in","Outro item se relaciona com este…")}</select></label><label>Outro item<select name="otherId" required>${candidates.map((candidate) => option(candidate.id,candidate.title)).join("")}</select></label><div class="form-row"><label>Relação<select name="relationType">${relationTypes.map((type) => option(type.id,type.label,type.id === "TI")).join("")}</select></label><label>Defasagem (dias)<input name="lagDays" type="number" step="0.5" value="0"/></label></div><button class="button primary" type="submit">${icon("link-2")}Conectar itens</button></form><details class="form-details relation-help"><summary>O que significa cada dependência?</summary><p><strong>TI:</strong> o término do primeiro libera o início do segundo.</p><p><strong>II:</strong> o início do primeiro libera o início do segundo.</p><p><strong>TT:</strong> o término do primeiro libera o término do segundo.</p><p><strong>IF:</strong> o início do primeiro libera o término do segundo.</p><p>A defasagem acrescenta ou antecipa dias entre os eventos.</p></details></section>` : ""}`;
 }
 
-const eventLabels = { created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início previsto", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", parent_changed:"Item pai", approval_submitted:"Enviado para aprovação", approval_decided:"Decisão de aprovação", approval_revision_started:"Correção iniciada", approval_reopened:"Aprovação reaberta" };
+const eventLabels = { created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início previsto", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", weight_changed:"Peso", progress_changed:"Progresso", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", parent_changed:"Item pai", approval_submitted:"Enviado para aprovação", approval_decided:"Decisão de aprovação", approval_revision_started:"Correção iniciada", approval_reopened:"Aprovação reaberta" };
 
 function eventValue(event, value) {
   if (!value) return "—";
@@ -734,7 +756,7 @@ function bindOrganizationSelect(orgId,sectorId) {
 
 function itemInput(form) {
   const existing = getItem(ui.selectedItemId);
-  return {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:String(form.get("ownerId") || ""),plannedStartAt:String(form.get("plannedStartAt") || ""),dueAt:String(form.get("dueAt") || ""),description:String(form.get("description") || ""),organizationId:String(form.get("organizationId") || ""),sectorId:String(form.get("sectorId") || ""),state:String(form.get("state") || "").toUpperCase(),parentId:String(form.get("parentId") || "")};
+  return {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:String(form.get("ownerId") || ""),plannedStartAt:String(form.get("plannedStartAt") || ""),dueAt:String(form.get("dueAt") || ""),weight:Number(form.get("weight") ?? existing?.weight ?? 1),progressPercent:Number(form.get("progressPercent") ?? existing?.progressPercent ?? 0),description:String(form.get("description") || ""),organizationId:String(form.get("organizationId") || ""),sectorId:String(form.get("sectorId") || ""),state:String(form.get("state") || "").toUpperCase(),parentId:String(form.get("parentId") || "")};
 }
 
 function exportVisible() {
