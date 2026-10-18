@@ -280,7 +280,7 @@ function itemFormFields(item, create = false) {
   if (!organizations.some((org) => org.id === organizationId) && !create) organizations.push(state.organizations.find((org) => org.id === organizationId));
   const sectors = state.sectors.filter((sector) => sector.organizationId === organizationId && (user.permissionLevel !== 5 || sector.id === user.sectorId));
   return `<label>Nome<input name="title" value="${escapeHtml(item.title)}" required maxlength="240" placeholder="Ex.: Contratação de novo ADM"/></label>
-    <div class="form-row"><label>Tipo<select name="type">${itemTypes.map((type) => option(type.id,type.label,(item.type || "task") === type.id)).join("")}</select></label><label>Status<select name="status">${statusCatalog.map((status) => option(status.id,status.label,(item.status || "backlog") === status.id)).join("")}</select></label></div>
+    <div class="form-row"><label>Tipo<select name="type" ${item.type === "approval" && !create ? "disabled" : ""}>${itemTypes.map((type) => option(type.id,type.label,(item.type || "task") === type.id)).join("")}</select></label><label>Status<select name="status" ${item.type === "approval" && !create ? "disabled" : ""}>${statusCatalog.map((status) => option(status.id,status.label,(item.status || "backlog") === status.id)).join("")}</select></label></div>
     <label>Responsável<select name="ownerId">${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select></label>
     <div class="form-row"><label>Início previsto<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt || today())}"/></label><label>Término ideal<input type="date" name="dueAt" value="${escapeHtml(item.dueAt)}"/></label></div>
     <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description)}</textarea></label>
@@ -306,14 +306,18 @@ function renderItemPanel(item) {
   const editable = canEditItem(currentUser(), item);
   const relations = relationsFor(accessibleItems()).filter((rel) => rel.sourceId === item.id || rel.targetId === item.id);
   const events = state.events.filter((event) => event.itemId === item.id);
-  return `${panelHeader(`${shortId(item)} · ${labelOf(itemTypes,item.type)}`, item.title, canRemoveItem(currentUser()) ? deleteButton("item",item.id,item.title) : "")}
-    <div class="item-summary">${statusBadge(item)}<span>${plannedLabel(item)} · ${elapsedLabel(item)} total</span></div>
-    <div class="panel-tabs" role="tablist" aria-label="Detalhes do item">${[{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"relations",label:`Relações (${relations.length})`},{id:"history",label:`Histórico (${events.length})`}].map((tab) => `<button role="tab" aria-selected="${ui.panelTab === tab.id}" class="${ui.panelTab === tab.id ? "active" : ""}" data-panel-tab="${tab.id}">${tab.label}</button>`).join("")}</div>
-    <div class="drawer-body">
-      ${ui.panelTab === "details" ? editable ? `<form id="updateItemForm" class="form-stack">${itemFormFields(item)}<div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="${toLocalInput()}" required/></label><label>Registro da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div><div class="drawer-actions"><button class="button primary" type="submit">${icon("check")}Salvar atualização</button><button class="button quiet" type="button" data-action="new-subitem">${icon("plus")}Subitem</button></div></form>${renderChildren(item)}` : renderReadOnly(item) + renderChildren(item) : ""}
-      ${ui.panelTab === "relations" ? renderRelations(item,relations,editable) : ""}
-      ${ui.panelTab === "history" ? renderHistory(events) : ""}
-    </div>`;
+  const tabs = [{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"relations",label:"Relações (" + relations.length + ")"},{id:"history",label:"Histórico (" + events.length + ")"}];
+  if (item.type === "approval") tabs.push({id:"approval",label:"Aprovação"});
+  let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title, canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : "");
+  html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + ' · ' + elapsedLabel(item) + ' total</span></div>';
+  html += '<div class="panel-tabs" role="tablist" aria-label="Detalhes do item">' + tabs.map((tab) => '<button role="tab" aria-selected="' + (ui.panelTab === tab.id) + '" class="' + (ui.panelTab === tab.id ? "active" : "") + '" data-panel-tab="' + tab.id + '">' + tab.label + '</button>').join("") + '</div><div class="drawer-body">';
+  if (ui.panelTab === "details") html += editable
+    ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Registro da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button><button class="button quiet" type="button" data-action="new-subitem">' + icon("plus") + 'Subitem</button></div></form>' + renderChildren(item)
+    : renderReadOnly(item) + renderChildren(item);
+  if (ui.panelTab === "relations") html += renderRelations(item,relations,editable);
+  if (ui.panelTab === "history") html += renderHistory(events);
+  if (ui.panelTab === "approval" && item.type === "approval") html += renderApprovalPanel(item);
+  return html + '</div>';
 }
 
 function renderReadOnly(item) {
@@ -336,11 +340,11 @@ function renderRelations(item, relations, editable) {
     ${editable && candidates.length ? `<section class="panel-section"><h3>Nova relação</h3><form id="relationForm" class="form-stack"><label>Direção<select name="direction">${option("out","Este item se relaciona com…")}${option("in","Outro item se relaciona com este…")}</select></label><label>Outro item<select name="otherId" required>${candidates.map((candidate) => option(candidate.id,candidate.title)).join("")}</select></label><div class="form-row"><label>Relação<select name="relationType">${relationTypes.map((type) => option(type.id,type.label,type.id === "TI")).join("")}</select></label><label>Defasagem (dias)<input name="lagDays" type="number" step="0.5" value="0"/></label></div><button class="button primary" type="submit">${icon("link-2")}Conectar itens</button></form><details class="form-details relation-help"><summary>O que significa cada dependência?</summary><p><strong>TI:</strong> o término do primeiro libera o início do segundo.</p><p><strong>II:</strong> o início do primeiro libera o início do segundo.</p><p><strong>TT:</strong> o término do primeiro libera o término do segundo.</p><p><strong>IF:</strong> o início do primeiro libera o término do segundo.</p><p>A defasagem acrescenta ou antecipa dias entre os eventos.</p></details></section>` : ""}`;
 }
 
-const eventLabels = { created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início previsto", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", parent_changed:"Item pai" };
+const eventLabels = { created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início previsto", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", parent_changed:"Item pai", approval_submitted:"Enviado para aprovação", approval_decided:"Decisão de aprovação", approval_revision_started:"Correção iniciada", approval_reopened:"Aprovação reaberta" };
 
 function eventValue(event, value) {
   if (!value) return "—";
-  if (event.eventType === "status_changed" || event.eventType === "created") return labelOf(statusCatalog,value);
+  if (["status_changed","created","approval_submitted","approval_decided","approval_revision_started","approval_reopened"].includes(event.eventType)) return labelOf(statusCatalog,value);
   if (event.eventType === "owner_changed") return userName(value);
   if (event.eventType === "type_changed") return labelOf(itemTypes,value);
   if (["due_changed","start_changed"].includes(event.eventType)) return dateCell(value);
@@ -352,12 +356,81 @@ function renderHistory(events) {
   return `<ol class="event-timeline">${sorted.map((event) => `<li><span class="event-dot"></span><div class="event-heading"><strong>${escapeHtml(eventLabels[event.eventType] || event.eventType)}</strong><time>${formatDateTime(event.effectiveAt)}</time></div>${event.fromValue || event.toValue ? `<p class="event-values">${escapeHtml(eventValue(event,event.fromValue))}<span>→</span>${escapeHtml(eventValue(event,event.toValue))}</p>` : ""}${event.comment ? `<p>${escapeHtml(event.comment)}</p>` : ""}<small>${escapeHtml(userName(event.userId))} · Registrado ${formatDateTime(event.createdAt)}</small></li>`).join("")}</ol>`;
 }
 
+function renderApprovalPanel(item) {
+  const gate = approvalGate(item);
+  const user = currentUser();
+  const canDecide = canDecideApproval(user,item);
+  const canSubmit = canSubmitApproval(user,item);
+  const decisions = (state.approvalDecisions || []).filter((entry) => entry.itemId === item.id).sort((left,right) => new Date(left.createdAt) - new Date(right.createdAt));
+  const statusText = labelOf(statusCatalog,item.status);
+  let html = '<section class="panel-section"><h3>Fluxo de aprovação</h3>';
+  html += '<p>Rodada ' + (item.approvalRound || 1) + ' · Responsável pela decisão: <strong>' + escapeHtml(userName(item.ownerId)) + '</strong></p>';
+  if (!gate.released && !["approved","rejected","correction"].includes(item.status)) {
+    html += '<div class="change-box"><strong>Aguardando predecessoras</strong><ul>' + gate.blockers.map((blocker) => '<li>' + escapeHtml(blocker.title) + ' · ' + escapeHtml(labelOf(statusCatalog,blocker.status)) + '</li>').join("") + '</ul></div>';
+  }
+  if (item.status === "under_review") {
+    if (!gate.released) html += '<p class="muted">A decisão será liberada quando todas as predecessoras forem concluídas.</p>';
+    else if (canDecide) html += '<form id="approvalDecisionForm" class="form-stack"><label>Decisão<select name="outcome" required><option value="approved">Aprovar</option><option value="rejected">Reprovar</option></select></label><label>Motivo ou observação<textarea name="reason" rows="3" placeholder="Obrigatório para reprovar"></textarea></label><button class="button primary" type="submit">' + icon("check") + 'Registrar decisão</button></form>';
+    else html += '<p class="muted">A decisão está atribuída a ' + escapeHtml(userName(item.ownerId)) + '. Sua alçada atual não permite decidir.</p>';
+  } else if (item.status === "rejected" && canDecide) {
+    const correctionUsers = state.users.filter((entry) => !entry.disabled && entry.organizationId === item.organizationId);
+    html += '<form id="approvalRevisionForm" class="form-stack"><h4>Iniciar ciclo de correção</h4><label>Responsável pela correção<select name="correctionOwnerId" required>' + correctionUsers.map((entry) => option(entry.id,entry.name)).join("") + '</select></label><label>Correção solicitada<textarea name="note" rows="3" required placeholder="Descreva o que precisa ser corrigido"></textarea></label><button class="button primary" type="submit">' + icon("rotate-ccw") + 'Iniciar nova rodada</button></form>';
+  } else if (item.status === "correction" && canSubmit && (item.correctionOwnerId === user.id || user.permissionLevel === 10)) {
+    html += '<p>Correção atribuída a <strong>' + escapeHtml(userName(item.correctionOwnerId)) + '</strong>.</p><form id="approvalSubmitForm" class="form-stack"><label>Resumo da correção<textarea name="note" rows="3" placeholder="O que foi corrigido?"></textarea></label><button class="button primary" type="submit">' + icon("check") + 'Reenviar para aprovação</button></form>';
+  } else if (item.status === "approved") {
+    if (canDecide) html += '<form id="approvalReopenForm" class="form-stack"><label>Motivo da reabertura<textarea name="note" rows="3" required placeholder="Descreva por que a decisão precisa ser revista"></textarea></label><button class="button quiet" type="submit">' + icon("rotate-ccw") + 'Reabrir aprovação</button></form>';
+    else html += '<p>Decisão concluída. Uma nova rodada pode ser aberta por uma alçada autorizada.</p>';
+  } else if (["backlog","ready","in_progress"].includes(item.status)) {
+    if (!gate.released) html += '<p class="muted">A etapa ainda não está liberada para aprovação.</p>';
+    else if (canSubmit) html += '<form id="approvalSubmitForm" class="form-stack"><label>Contexto para o aprovador<textarea name="note" rows="2" placeholder="Informação que acompanha a solicitação"></textarea></label><button class="button primary" type="submit">' + icon("check") + 'Enviar para aprovação</button></form>';
+    else html += '<p class="muted">Sua alçada não permite enviar esta etapa.</p>';
+  } else html += '<p>Status atual: <strong>' + escapeHtml(statusText) + '</strong></p>';
+  html += '</section><section class="panel-section"><h3>Decisões e rodadas</h3>';
+  if (!decisions.length) html += '<p class="muted">Nenhuma decisão registrada ainda.</p>';
+  else html += '<ol class="event-timeline">' + decisions.map((entry) => {
+    const labels = {submitted:"Enviada para decisão",decision:entry.outcome === "approved" ? "Aprovada" : "Reprovada",correction_started:"Correção iniciada",reopened:"Aprovação reaberta"};
+    return '<li><span class="event-dot"></span><div class="event-heading"><strong>Rodada ' + entry.round + ' · ' + (labels[entry.kind] || entry.kind) + '</strong><time>' + formatDateTime(entry.createdAt) + '</time></div>' +
+      (entry.reason ? '<p>' + escapeHtml(entry.reason) + '</p>' : '') +
+      (entry.reviewerId ? '<small>Decisor: ' + escapeHtml(userName(entry.reviewerId)) + '</small>' : '') +
+      (entry.correctionOwnerId ? '<small> · Correção: ' + escapeHtml(userName(entry.correctionOwnerId)) + '</small>' : '') +
+      '<small> · Registrado por ' + escapeHtml(userName(entry.createdBy)) + '</small></li>';
+  }).join("") + '</ol>';
+  return html + '</section>';
+}
+
+function renderGpo() {
+  const scopes = [{type:"global",id:"",label:"Toda a plataforma"}];
+  state.organizations.forEach((entry) => scopes.push({type:"organization",id:entry.id,label:"Empresa · " + entry.name}));
+  state.sectors.forEach((entry) => scopes.push({type:"sector",id:entry.id,label:"Setor · " + entry.name}));
+  state.items.filter((entry) => entry.type === "project").forEach((entry) => scopes.push({type:"project",id:entry.id,label:"Projeto · " + entry.title}));
+  state.items.forEach((entry) => scopes.push({type:"item",id:entry.id,label:"Item · " + entry.title}));
+  let html = '<section class="panel-section"><h3>Regras de autorização</h3><p class="muted">Regras locais de demonstração. Escopo mais específico prevalece; em empate, negar prevalece sobre permitir.</p>';
+  html += '<form id="gpoRuleForm" class="form-stack"><label>Aplicar a<select name="subject" required><optgroup label="Usuários">';
+  html += state.users.filter((entry) => !entry.disabled).map((entry) => '<option value="user:' + escapeHtml(entry.id) + '">' + escapeHtml(entry.name) + '</option>').join("");
+  html += '</optgroup><optgroup label="Níveis">';
+  html += Object.keys(permissionLevels).map((level) => '<option value="level:' + level + '">Nível ' + level + '</option>').join("");
+  html += '</optgroup></select></label><label>Operação<select name="operation" required>';
+  html += Object.entries(permissionOperationLabels).map(([id,label]) => option(id,label)).join("");
+  html += '</select></label><label>Escopo<select name="scope" required>';
+  html += scopes.map((scope) => '<option value="' + scope.type + ':' + escapeHtml(scope.id || "*") + '">' + escapeHtml(scope.label) + '</option>').join("");
+  html += '</select></label><label>Efeito<select name="effect"><option value="allow">Permitir</option><option value="deny">Negar</option></select></label><button class="button primary" type="submit">' + icon("plus") + 'Adicionar regra</button></form></section>';
+  html += '<section class="panel-section"><h3>Regras cadastradas (' + (state.permissionRules || []).length + ')</h3>';
+  if (!(state.permissionRules || []).length) html += '<p class="muted">Nenhuma regra adicional. Valem as alçadas existentes.</p>';
+  else html += '<div class="admin-list">' + state.permissionRules.map((rule) => {
+    const subject = rule.subjectType === "user" ? userName(rule.subjectId) : "Nível " + rule.subjectId;
+    const scope = scopes.find((entry) => entry.type === rule.scopeType && entry.id === (rule.scopeId || ""))?.label || "Escopo removido";
+    return '<div class="admin-entry"><span><strong>' + escapeHtml(subject) + ' · ' + escapeHtml(permissionOperationLabels[rule.operation] || rule.operation) + '</strong><small>' + escapeHtml(scope) + ' · ' + formatDateTime(rule.createdAt) + '</small></span><span class="level-tag">' + (rule.effect === "allow" ? "Permitido" : "Negado") + '</span><button type="button" class="icon-button delete-icon" data-remove-gpo-rule="' + escapeHtml(rule.id) + '" aria-label="Remover regra GPO">' + icon("trash-2") + '</button></div>';
+  }).join("") + '</div>';
+  return html + '</section>';
+}
+
 function renderAdmin() {
-  const tabs = [{id:"users",label:"Usuários"},{id:"organizations",label:"Empresas"},{id:"permissions",label:"Alçadas"}];
+  const tabs = [{id:"users",label:"Usuários"},{id:"organizations",label:"Empresas"},{id:"permissions",label:"Alçadas"},{id:"gpo",label:"GPO"}];
   return `${panelHeader("Administração","Cadastros e permissões")}<div class="panel-tabs" role="tablist">${tabs.map((tab) => `<button role="tab" aria-selected="${ui.adminTab === tab.id}" data-admin-tab="${tab.id}" class="${ui.adminTab === tab.id ? "active" : ""}">${tab.label}</button>`).join("")}</div><div class="drawer-body">
     ${ui.adminTab === "users" ? `<div class="admin-list">${state.users.map((user) => `<div class="admin-entry"><span><strong>${escapeHtml(user.name)}${user.disabled ? " (inativo)" : ""}</strong><small>${escapeHtml(orgName(user.organizationId))} · ${escapeHtml(sectorName(user.sectorId))}</small></span><span class="level-tag">Nível ${user.permissionLevel}</span>${user.disabled ? `<button class="icon-button" data-toggle-user="${escapeHtml(user.id)}" aria-label="Reativar ${escapeHtml(user.name)}" title="Reativar usuário">${icon("rotate-ccw")}</button>` : ""}${deleteButton("user",user.id,user.name,user.id === currentUser().id,"Entre com outro administrador para excluir seu usuário.")}</div>`).join("")}</div><section class="panel-section"><h3>Novo usuário</h3><form id="userForm" class="form-stack"><div class="form-row"><label>Nome<input name="name" required/></label><label>E-mail<input name="email" type="email" required/></label></div><div class="form-row"><label>Empresa<select name="organizationId" id="userOrganization">${state.organizations.map((org) => option(org.id,org.name,org.id === currentUser().organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="userSector">${state.sectors.filter((sector) => sector.organizationId === currentUser().organizationId).map((sector) => option(sector.id,sector.name)).join("")}</select></label></div><div class="form-row"><label>Estado (UF)<input name="state" value="${escapeHtml(currentUser().state)}" maxlength="2" required/></label><label>Alçada<select name="permissionLevel">${Object.entries(permissionLevels).map(([level,label]) => option(level,`${level} · ${label}`,level === "1")).join("")}</select></label></div><button class="button primary" type="submit">${icon("plus")}Cadastrar usuário</button></form></section>` : ""}
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section><section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "permissions" ? `<form id="permissionForm" class="form-stack"><label>Usuário<select name="userId" id="permissionUser">${state.users.filter((user) => !user.disabled).map((user) => option(user.id,user.name)).join("")}</select></label><label>Alçada<select name="permissionLevel" id="permissionLevel">${Object.entries(permissionLevels).map(([level,label]) => option(level,`${level} · ${label}`,Number(level) === state.users.find((user) => !user.disabled)?.permissionLevel)).join("")}</select></label><button class="button primary" type="submit">Salvar alçada</button></form><ol class="permission-list">${Object.entries(permissionLevels).map(([level,label]) => `<li value="${level}">${escapeHtml(label)}</li>`).join("")}</ol>` : ""}
+    ${ui.adminTab === "gpo" ? renderGpo() : ""}
   </div>`;
 }
 
@@ -491,6 +564,11 @@ function bindPanel() {
     if (button.dataset.removeRelation) {
       openDeletion("relation",button.dataset.removeRelation);
     }
+    if (button.dataset.removeGpoRule) {
+      try { removePermissionRule(button.dataset.removeGpoRule); saveState(); renderPanel(false); }
+      catch (error) { panelFailure(error); }
+      return;
+    }
     if (button.dataset.toggleUser) {
       try {
         if (!canManageUsers(currentUser())) throw new Error("Sem permissão para gerenciar usuários.");
@@ -567,6 +645,29 @@ function bindPanel() {
     if (user.permissionLevel === 10 && level !== 10 && state.users.filter((entry) => !entry.disabled && entry.permissionLevel === 10).length <= 1) throw new Error("Mantenha pelo menos um administrador ativo.");
     user.permissionLevel = level; saveState(); notify("Alçada atualizada."); if (!canManageUsers(currentUser())) { closePanel(); render(); } else renderPanel(false);
   });
+  submitHandler("gpoRuleForm", (form) => {
+    if (!canManageGpo(currentUser())) throw new Error("Sem permissão para configurar o GPO.");
+    const [subjectType,subjectId] = String(form.get("subject") || "").split(":");
+    const [scopeType,rawScopeId] = String(form.get("scope") || "").split(":");
+    createPermissionRule({subjectType,subjectId,operation:String(form.get("operation")),scopeType,scopeId:rawScopeId === "*" ? "" : rawScopeId,effect:String(form.get("effect"))});
+    saveState(); notify("Regra GPO adicionada."); renderPanel(false);
+  });
+  submitHandler("approvalDecisionForm", (form) => {
+    decideApproval(ui.selectedItemId,String(form.get("outcome")),String(form.get("reason") || ""));
+    saveState(); notify("Decisão registrada no histórico."); renderPanel(false);
+  });
+  submitHandler("approvalRevisionForm", (form) => {
+    startApprovalRevision(ui.selectedItemId,String(form.get("correctionOwnerId")),String(form.get("note") || ""));
+    saveState(); notify("Nova rodada de correção iniciada."); renderPanel(false);
+  });
+  submitHandler("approvalSubmitForm", (form) => {
+    submitApprovalForReview(ui.selectedItemId,String(form.get("note") || ""));
+    saveState(); notify("Etapa enviada para aprovação."); renderPanel(false);
+  });
+  submitHandler("approvalReopenForm", (form) => {
+    reopenApproval(ui.selectedItemId,String(form.get("note") || ""));
+    saveState(); notify("Aprovação reaberta em nova rodada."); renderPanel(false);
+  });
   bindOrganizationSelect("itemOrganization","itemSector");
   bindOrganizationSelect("userOrganization","userSector");
   document.querySelector("#permissionUser")?.addEventListener("change", (event) => { document.querySelector("#permissionLevel").value = state.users.find((user) => user.id === event.target.value).permissionLevel; });
@@ -590,7 +691,8 @@ function bindOrganizationSelect(orgId,sectorId) {
 }
 
 function itemInput(form) {
-  return {title:String(form.get("title") || "").trim(),type:String(form.get("type")),status:String(form.get("status")),ownerId:String(form.get("ownerId") || ""),plannedStartAt:String(form.get("plannedStartAt") || ""),dueAt:String(form.get("dueAt") || ""),description:String(form.get("description") || ""),organizationId:String(form.get("organizationId") || ""),sectorId:String(form.get("sectorId") || ""),state:String(form.get("state") || "").toUpperCase(),parentId:String(form.get("parentId") || "")};
+  const existing = getItem(ui.selectedItemId);
+  return {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:String(form.get("ownerId") || ""),plannedStartAt:String(form.get("plannedStartAt") || ""),dueAt:String(form.get("dueAt") || ""),description:String(form.get("description") || ""),organizationId:String(form.get("organizationId") || ""),sectorId:String(form.get("sectorId") || ""),state:String(form.get("state") || "").toUpperCase(),parentId:String(form.get("parentId") || "")};
 }
 
 function exportVisible() {
