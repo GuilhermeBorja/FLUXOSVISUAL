@@ -634,10 +634,11 @@ const eventLabels = { created:"Criação", status_changed:"Status", owner_change
 
 function eventValue(event, value) {
   if (!value) return "—";
-  if (["status_changed","created","approval_submitted","approval_decided","approval_revision_started","approval_reopened"].includes(event.eventType)) return labelOf(statusCatalog,value);
+  if (["status_changed","created","approval_submitted","approval_decided","approval_revision_started","approval_reopened"].includes(event.eventType)) { const item=getItem(event.itemId); if(item?.type==="approval" && value==="under_review") return "Aguardando decisão"; if(item?.type==="approval" && value==="correction") return "Correção solicitada"; return labelOf(statusCatalog,value); }
   if (event.eventType === "owner_changed") return userName(value);
   if (event.eventType === "type_changed") return labelOf(itemTypes,value);
-  if (["due_changed","start_changed"].includes(event.eventType)) return dateCell(value);
+  if (["due_changed","start_changed","replanned_due_changed"].includes(event.eventType)) return dateCell(value);
+  if (event.eventType === "duration_changed") return `${value} dias corridos`;
   return value;
 }
 
