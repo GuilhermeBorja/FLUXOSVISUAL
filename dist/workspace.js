@@ -190,7 +190,17 @@ function renderMasterSetup() {
     if (state.users.some((user)=>user.email.toLowerCase()===email)) { notify("Já existe um usuário com este e-mail.","error"); return; }
     const user={id:uid("user"),name,email,state:"",organizationId:"",sectorId:"",role:"master",disabled:false};
     state.users.push(user);
-    state.permissionRules=Object.keys(permissionOperationLabels).map((operation)=>({id:uid("gpo"),subjectType:"user",subjectId:user.id,operation,scopeType:"global",scopeId:"",effect:"allow",createdBy:user.id,createdAt:nowIso()}));
+    state.permissionProfiles=[
+      {id:"profile_admin",name:"Administrador",createdBy:user.id,createdAt:nowIso()},
+      {id:"profile_editor",name:"Editor",createdBy:user.id,createdAt:nowIso()},
+      {id:"profile_reader",name:"Leitura",createdBy:user.id,createdAt:nowIso()}
+    ];
+    const editorOperations=["view_item","create_item","edit_item","create_relation","edit_relation","delete_relation","change_owner","change_weight","change_duration","change_hierarchy","add_attachment","delete_attachment","create_approval","decide_approval"];
+    const profileRules=[];
+    for (const operation of Object.keys(permissionOperationLabels)) profileRules.push({id:uid("gpo"),subjectType:"profile",subjectId:"profile_admin",operation,scopeType:"global",scopeId:"",effect:"allow",createdBy:user.id,createdAt:nowIso()});
+    for (const operation of editorOperations) profileRules.push({id:uid("gpo"),subjectType:"profile",subjectId:"profile_editor",operation,scopeType:"global",scopeId:"",effect:"allow",createdBy:user.id,createdAt:nowIso()});
+    profileRules.push({id:uid("gpo"),subjectType:"profile",subjectId:"profile_reader",operation:"view_item",scopeType:"global",scopeId:"",effect:"allow",createdBy:user.id,createdAt:nowIso()});
+    state.permissionRules=profileRules.concat(Object.keys(permissionOperationLabels).map((operation)=>({id:uid("gpo"),subjectType:"user",subjectId:user.id,operation,scopeType:"global",scopeId:"",effect:"allow",createdBy:user.id,createdAt:nowIso()})));
     state.setupComplete=true; state.currentUserId=user.id; state.workspaceName="";
     createEvent(user.id,"created","","master","Usuário master criado.");
     saveState(); render();
