@@ -166,6 +166,7 @@ function loadState() {
       if (parsed.version === 2) {
         parsed.permissionRules ||= [];
         parsed.approvalDecisions ||= [];
+        parsed.templates ||= [];
         for (const item of parsed.items || []) if (item.type === "approval") item.approvalRound ||= 1;
         return parsed;
       }
@@ -259,6 +260,7 @@ function seedState() {
     events: [],
     permissionRules: [],
     approvalDecisions: [],
+    templates: [],
   };
 
   const adm = createSeedItem(base, {
@@ -789,6 +791,90 @@ function reopenApproval(id, note = "") {
   state.approvalDecisions.push(reopened);
   setApprovalStatus(item, "backlog", "approval_reopened", note.trim());
   return reopened;
+}
+
+function shiftedDate(value, offset = 0) {
+  const date = new Date((value || today()) + "T12:00:00");
+  date.setDate(date.getDate() + Number(offset || 0));
+  return [date.getFullYear(),String(date.getMonth() + 1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");
+}
+
+function saveFlowTemplate(rootId, name) {
+  const root = getItem(rootId);
+  const user = currentUser();
+  if (!root || !canEditItem(user,root)) throw new Error("Sua alçada não permite salvar este fluxo como modelo.");
+  const ids = itemTreeIds(new Set([rootId]));
+  const sourceItems = state.items.filter((item) => ids.has(item.id) && canViewItem(user,item));
+  if (sourceItems.length !== ids.size || sourceItems.some((item) => !canEditItem(user,item))) throw new Error("Edite todos os itens do fluxo antes de criar um modelo.");
+  const baseDate = root.plannedStartAt || today();
+  const items = sourceItems.map((item) => ({
+    key:item.id,
+    parentKey:ids.has(item.parentId) ? item.parentId : "",
+    title:item.title,
+    type:item.type,
+    description:item.description || "",
+    startOffset:Math.round((new Date((item.plannedStartAt || baseDate) + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000),
+    dueOffset:item.dueAt ? Math.round((new Date(item.dueAt + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000) : null,
+  }));
+  const relations = state.relations.filter((relation) => ids.has(relation.sourceId) && ids.has(relation.targetId) && relation.relationType !== "contains").map((relation) => ({sourceKey:relation.sourceId,targetKey:relation.targetId,relationType:relation.relationType,lagDays:relation.lagDays || 0}));
+  state.templates ||= [];
+  const template = {id:uid("template"),name:name.trim(),createdBy:user.id,createdAt:nowIso(),rootTitle:root.title,items,relations};
+  state.templates.push(template);
+  registryEvent("template",template,"Fluxo salvo como modelo.","created");
+  return template;
+}
+
+function applyFlowTemplate(templateId, input) {
+  const user = currentUser();
+  const template = state.templates?.find((entry) => entry.id === templateId);
+  if (!template) throw new Error("Modelo não encontrado.");
+  const parent = {type:"project",organizationId:input.organizationId,sectorId:input.sectorId,state:input.state,createdBy:user?.id};
+  if (!canCreateItem(user,parent)) throw new Error("Sua alçada não permite criar itens neste contexto.");
+  if (!template.items?.length) throw new Error("O modelo não contém itens.");
+  const snapshot = JSON.stringify(state);
+  try {
+    const ids = new Map();
+    const created = [];
+    for (const source of template.items) {
+      const parentId = source.parentKey ? ids.get(source.parentKey) : "";
+      if (source.parentKey && !parentId) throw new Error("A estrutura do modelo está inconsistente.");
+      const item = createItem({
+        title:source.key === template.items[0].key ? input.title.trim() : source.title,
+        type:source.type,
+        status:"backlog",
+        ownerId:user.id,
+        organizationId:input.organizationId,
+        sectorId:input.sectorId,
+        state:input.state,
+        parentId,
+        description:source.description,
+        plannedStartAt:shiftedDate(input.startDate || today(),source.startOffset),
+        dueAt:source.dueOffset === null ? "" : shiftedDate(input.startDate || today(),source.dueOffset),
+      });
+      ids.set(source.key,item.id);
+      created.push(item);
+    }
+    for (const relation of template.relations || []) {
+      const sourceId = ids.get(relation.sourceKey);
+      const targetId = ids.get(relation.targetKey);
+      if (!sourceId || !targetId) throw new Error("Uma relação do modelo perdeu sua referência.");
+      createRelation(sourceId,targetId,relation.relationType,relation.lagDays);
+    }
+    return {template,items:created};
+  } catch (error) {
+    const restored = JSON.parse(snapshot);
+    for (const key of Object.keys(state)) delete state[key];
+    Object.assign(state,restored);
+    throw error;
+  }
+}
+
+function removeFlowTemplate(id) {
+  const template = state.templates?.find((entry) => entry.id === id);
+  if (!template) throw new Error("Modelo não encontrado.");
+  if (template.createdBy !== currentUser()?.id && currentUser()?.permissionLevel !== 10) throw new Error("Somente quem criou o modelo ou o nível 10 pode removê-lo.");
+  state.templates = state.templates.filter((entry) => entry.id !== id);
+  registryEvent("template",template,"Modelo removido.","removed");
 }
 
 function removeRelation(id) {
