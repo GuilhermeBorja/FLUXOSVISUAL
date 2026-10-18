@@ -74,6 +74,10 @@ try {
   await page.mouse.up();
   const widthAfter = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
   assert.ok(widthAfter >= widthBefore + 10, `column width did not increase: ${widthBefore} -> ${widthAfter}`);
+  await visibleWeightHeader.locator(".column-resize-handle").focus();
+  await page.keyboard.press("ArrowRight");
+  const widthAfterKeyboard = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
+  assert.ok(widthAfterKeyboard > widthAfter, `keyboard column resize did not increase width: ${widthAfter} -> ${widthAfterKeyboard}`);
 
   await page.locator('button[data-select="item_adm"]').first().click();
   await page.locator('[data-action="new-subitem"]').click();
@@ -82,11 +86,18 @@ try {
   assert.equal(await page.locator('#createItemForm [name="plannedDurationDays"]').inputValue(), "");
   assert.equal(errors.length, 0, errors.join("\n"));
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(150);
-  assert.equal(await page.locator(".ops-shell").isVisible(), true);
+  for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1024, height: 768 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator(".ops-shell").isVisible(), true, `app shell not visible at ${viewport.width}px`);
+    assert.equal(await page.locator("#workspaceView").isVisible(), true, `workspace not visible at ${viewport.width}px`);
+    assert.equal(await page.locator(".drawer").count(), 0, `unexpected drawer at ${viewport.width}px`);
+    const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    const viewportWidth = await page.evaluate(() => document.documentElement.clientWidth);
+    assert.ok(documentWidth <= viewportWidth + 2, `page-level horizontal overflow at ${viewport.width}px: ${documentWidth} > ${viewportWidth}`);
+  }
   assert.equal(errors.length, 0, errors.join("\n"));
-  console.log("PRD3 browser smoke passed: navigation, Gantt, graph dates, row color setting, mobile viewport.");
+  console.log("PRD3 browser smoke passed: navigation, Gantt, graph dates, row color setting, mouse/keyboard resizing, and 1920/1366/1024/768/390px viewports.");
 } finally {
   await browser.close();
 }
