@@ -49,6 +49,7 @@ try {
   });
   await page.locator(".ops-shell").waitFor();
   await page.getByRole("button", { name: /Fechar painel/ }).click();
+  await page.locator(".drawer").waitFor({ state: "detached" });
   await page.getByRole("tab", { name: /Sintética/ }).click();
   const showSubitems = page.locator("#showSubitems");
   if (!(await showSubitems.isChecked())) await showSubitems.check();
