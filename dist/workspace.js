@@ -425,7 +425,7 @@ function renderGantt(items) {
     const start = shiftedDate(analysis.startDate,row.startOffset);
     const finish = shiftedDate(analysis.startDate,row.startOffset + row.duration);
     const incoming = relationsFor(items).filter((relation) => relation.targetId === row.item.id && ["TI","II","TT","IF"].includes(relation.relationType)).map((relation) => ({relation,item:getItem(relation.sourceId)})).filter((entry) => entry.item);
-    const barTone = row.critical && analysis.valid ? "critical" : isOverdue(row.item) ? "overdue" : isAtRisk(row.item) ? "at-risk" : "";
+    const barTone = row.item.status === "cancelled" ? "cancelled" : row.critical && analysis.valid ? "critical" : isOverdue(row.item) ? "overdue" : isAtRisk(row.item) ? "at-risk" : "";
     const slackLeft = Math.max(0,Math.min(100,(row.startOffset + row.duration) / maxDay * 100));
     const slackWidth = row.slack === null ? 0 : Math.max(0,Math.min(100 - slackLeft,row.slack / maxDay * 100));
     const childToggle = row.children?.length ? '<button class="tree-toggle" data-expand="' + escapeHtml(row.item.id) + '" aria-label="' + (ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'Recolher' : 'Expandir') + ' subitens">' + icon(ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'chevron-down' : 'chevron-right') + '</button>' : '<span class="tree-spacer"></span>';
