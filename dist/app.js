@@ -644,7 +644,7 @@ function createItem(input) {
   const user = currentUser();
   if (!canCreateItem(user, input)) throw new Error("Sua alçada não permite criar itens neste escopo.");
   validateItemInput(input);
-  if (input.type === "approval" && ["approved", "rejected", "correction"].includes(input.status)) throw new Error("A etapa deve entrar no fluxo antes de receber uma decisão.");
+  if (input.type === "approval" && ["approved", "rejected", "correction", "under_review"].includes(input.status)) throw new Error("A etapa deve entrar no fluxo antes de receber uma decisão.");
   if (input.parentId && !canEditItem(user, getItem(input.parentId))) throw new Error("Sem permissao para alterar o item pai.");
   if (!canEditItem(user, { ...input, createdBy: user.id })) throw new Error("O escopo do novo item deve estar dentro da sua alcada.");
   const item = {
