@@ -1136,6 +1136,7 @@ function bindPanel() {
     }
   };
   root.querySelector('[name="quickSteps"]')?.addEventListener("input",(event)=>{ renderQuickStepRows(event.target.value.split("\n")); updateSchedulePreview(); });
+  document.querySelector("#editUserOrganization")?.addEventListener("change",(event)=>{ const sector=document.querySelector("#editUserSector"); if(!sector)return; sector.innerHTML=state.sectors.filter((entry)=>entry.organizationId===event.target.value).map((entry)=>option(entry.id,entry.name)).join(""); });
   root.querySelectorAll('#createItemForm [name="plannedStartAt"],#createItemForm [name="plannedDurationDays"],#createItemForm [name="sequence"]').forEach((input)=>input.addEventListener("input",updateSchedulePreview));
   root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) updateSchedulePreview(); });
   document.querySelector("#deleteCascade")?.addEventListener("change", (event) => { ui.deletion.cascade = event.target.checked; renderPanel(false); });
@@ -1242,8 +1243,7 @@ function bindPanel() {
     if (!/^[A-Z]{2}$/.test(stateCode)) throw new Error("Informe a UF com duas letras.");
     const previous = {name:user.name,email:user.email,organizationId:user.organizationId,sectorId:user.sectorId,state:user.state,profileId:user.profileId || ""};
     Object.assign(user,{name,email,organizationId,sectorId,state:stateCode,profileId:String(form.get("profileId") || "")});
-    registryEvent("user",user,"Cadastro do usuário revisado.", "updated");
-    createEvent(user.id,"user_updated",previous,{name,email,organizationId,sectorId,state:stateCode,profileId:user.profileId},"Cadastro do usuário atualizado.");
+    registryEvent("user",user,"Cadastro atualizado. Anterior: " + JSON.stringify(previous) + " | Novo: " + JSON.stringify({name,email,organizationId,sectorId,state:stateCode,profileId:user.profileId}), "updated");
     saveState(); ui.editUserId = ""; notify("Cadastro do usuário atualizado."); renderPanel(false);
   });
   submitHandler("organizationForm", (form) => {
