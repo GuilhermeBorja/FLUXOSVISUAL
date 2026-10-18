@@ -53,3 +53,8 @@ Backend, banco de dados, autenticação remota, sincronização multiusuário, a
 ## Estado real
 
 Essas correções não significam que o PRD3 esteja concluído. Permanecem obrigatórias a auditoria requisito a requisito, a validação dos cálculos de cronograma para todas as relações e defasagens, os testes de consistência entre as três visões e os testes de interação/responsividade. Não realizar deploy de produção enquanto esses itens não estiverem fechados e evidenciados.
+
+- **Rede temporal:** o recálculo agora respeita a data baseline como limite mínimo para o início de uma atividade dependente; uma restrição calculada não antecipa a atividade para antes do início idealizado original. Testes cobrindo TI, II, TT, IF e ciclos foram adicionados.
+- **Integridade transacional:** se a edição de um item provocar um ciclo temporal, a operação é revertida, incluindo alterações nos itens e eventos gerados. Teste de regressão incluído.
+- **Grafo Analítico:** os nós exibem início e término idealizados, além da baseline; o texto de interação foi ajustado ao comportamento real de arraste individual.
+- **Validação adicional:** testes dinâmicos de cronograma cobrem paralelismo, caminho crítico, duração ausente e ciclos: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39165465303.
