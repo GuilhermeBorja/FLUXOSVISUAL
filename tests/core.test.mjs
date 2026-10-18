@@ -422,3 +422,10 @@ test("P0: término baseline é capturado quando calculado pela duração inicial
   run('recalculatePlannedDates();');
   assert.equal(run('item.baselineDueAt'),"2026-10-28");
 });
+
+test("P0: predecessora cancelada não desloca a previsão da atividade ativa", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('cancelled=createItem({...' + defaults + ',title:"Atividade cancelada",status:"cancelled",progressPercent:100,plannedStartAt:"2026-10-01",dueAt:"2027-01-09",plannedDurationDays:100});active=createItem({...' + defaults + ',title:"Atividade ativa",status:"backlog",plannedStartAt:"2026-10-01",dueAt:"2026-10-03",plannedDurationDays:2});createRelation(cancelled.id,active.id,"TI",0);recalculatePlannedDates();');
+  assert.equal(run('active.plannedStartAt'),"2026-10-01");
+  assert.equal(run('active.dueAt'),"2026-10-03");
+});
