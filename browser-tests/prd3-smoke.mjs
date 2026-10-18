@@ -32,6 +32,9 @@ try {
 
   await page.getByRole("button", { name: /Configurações/ }).click();
   const drawer = page.locator(".drawer");
+  await drawer.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => {})));
+  });
   const drawerWidthBefore = await drawer.evaluate((element) => element.getBoundingClientRect().width);
   const drawerHandle = page.locator(".drawer-resize-handle");
   const drawerHandleBox = await drawerHandle.boundingBox();
