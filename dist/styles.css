@@ -651,3 +651,5 @@ body.panel-open { overflow: hidden; }
 @media(max-width:720px){.schedule-summary{grid-template-columns:1fr}}
 
 .event-origin{display:block;font-size:11px;color:var(--muted,#62717a);font-weight:500}.column-hidden{display:none!important}
+
+.column-settings{display:flex;flex-wrap:wrap;gap:8px 14px;padding:12px;border:1px solid var(--line,#dce3e7);border-radius:10px;margin:8px 0 12px;background:var(--surface-subtle,#f7f9fa)}.column-settings label{display:inline-flex;align-items:center;gap:5px;font-size:12px}.column-settings input{accent-color:var(--accent,#287d62)}.table-toolbar{flex-wrap:wrap}
