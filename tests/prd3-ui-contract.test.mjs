@@ -101,6 +101,9 @@ test("análise do Gantt calcula dependências, paralelismo e caminho crítico", 
   assert.equal(analysis.rows.find((row)=>row.item.id==="a").critical,true);
   assert.equal(analysis.rows.find((row)=>row.item.id==="b").critical,true);
   assert.equal(analysis.rows.find((row)=>row.item.id==="c").critical,false);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="a").slack,0);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="b").slack,0);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="c").slack,4);
 });
 
 test("análise do Gantt sinaliza duração ausente e ciclos temporais", () => {
