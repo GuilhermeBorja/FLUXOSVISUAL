@@ -449,3 +449,16 @@ test("P0: negação GPO em repactuação reverte edição parcial e eventos", ()
   assert.equal(run('getItem(item.id).replannedDueAt'),"");
   assert.equal(run('JSON.stringify({item:getItem(item.id),events:state.events})===before'),true);
 });
+
+test("P0: editar item pai registra nome e responsável e repactua a previsão sem alterar baseline", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('root=createItem({...' + defaults + ',title:"Pai original",type:"project",plannedStartAt:"2026-10-25",dueAt:"2026-10-25",plannedDurationDays:0});child=createItem({...' + defaults + ',title:"Filho",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3});updateItem(root.id,{...root,title:"Pai repactuado",ownerId:"u_mateus",replannedDueAt:"2026-10-31"});');
+  assert.equal(run('root.title'),"Pai repactuado");
+  assert.equal(run('root.ownerId'),"u_mateus");
+  assert.equal(run('child.dueAt'),"2026-10-31");
+  assert.equal(run('child.baselineStartAt'),"2026-10-25");
+  assert.equal(run('child.baselineDueAt'),"2026-10-28");
+  assert.equal(run('state.events.some((e)=>e.itemId===root.id && e.eventType==="title_changed")'),true);
+  assert.equal(run('state.events.some((e)=>e.itemId===root.id && e.eventType==="owner_changed")'),true);
+  assert.equal(run('state.events.some((e)=>e.itemId===root.id && e.eventType==="replanned_due_changed")'),true);
+});
