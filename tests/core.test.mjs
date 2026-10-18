@@ -304,3 +304,14 @@ test("liberação automática considera todas as predecessoras e bloqueios", () 
   run('blocker.status="done";blocker.progressPercent=100;recalculatePlannedDates();');
   assert.equal(run('getItem(target.id).status'),"ready");
 });
+
+
+test("cancelamento define controle em 100% sem marcar conclusão operacional", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`item=createItem({...${defaults},title:"Cancelamento",progressPercent:25});updateItem(item.id,{...item,status:"cancelled"},nowIso(),"Escopo cancelado");`);
+  assert.equal(run('getItem(item.id).status'),"cancelled");
+  assert.equal(run('getItem(item.id).progressPercent'),100);
+  assert.equal(run('completeStatus(getItem(item.id).status)'),false);
+  assert.equal(run('getItem(item.id).completedAt'),"");
+});
