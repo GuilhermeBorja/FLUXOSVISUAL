@@ -37,7 +37,7 @@ try {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
   await page.locator(".ops-shell").waitFor();
-  await page.locator('[data-action="close-panel"]').click();
+  await page.getByRole("button", { name: /Fechar painel/ }).click();
   await page.getByRole("tab", { name: /Sintética/ }).click();
   const showSubitems = page.locator("#showSubitems");
   if (!(await showSubitems.isChecked())) await showSubitems.check();
