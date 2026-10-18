@@ -344,9 +344,29 @@ const FluxosGraph = (() => {
       const group = !target && event.target.closest("[data-group]");
       if (target) {
         const id = target.dataset.node;
-        // PRD3 fallback: move the selected node only. Connected nodes must not be magnetically dragged as a group.
-        const node = model.nodeById.get(id);
-        gesture = { kind: "nodes", id, start: point, nodes: node ? [{ id: node.id, x: node.x, y: node.y }] : [], moved: false };
+        // Controlled PRD3 magnetism attempt: the selected node follows the pointer;
+        // linked nodes respond proportionally by graph distance without force re-simulation.
+        const distanceById = new Map([[id, 0]]);
+        const queue = [id];
+        while (queue.length) {
+          const currentId = queue.shift();
+          for (const link of model.links) {
+            const neighborId = link.source.id === currentId ? link.target.id
+              : link.target.id === currentId ? link.source.id : "";
+            if (neighborId && !distanceById.has(neighborId)) {
+              distanceById.set(neighborId, distanceById.get(currentId) + 1);
+              queue.push(neighborId);
+            }
+          }
+        }
+        gesture = {
+          kind: "nodes", id, start: point,
+          nodes: [...distanceById].map(([nodeId, distance]) => {
+            const node = model.nodeById.get(nodeId);
+            return { id: nodeId, x: node.x, y: node.y, influence: distance === 0 ? 1 : Math.max(0.08, Math.pow(0.32, distance)) };
+          }),
+          moved: false,
+        };
       } else if (group) {
         const groupNodes = model.groups.find((entry) => entry.id === group.dataset.group)?.nodes || [];
         gesture = { kind: "group", id: group.dataset.group, start: point, nodes: groupNodes.map((node) => ({ id: node.id, x: node.x, y: node.y })), moved: false };
@@ -370,8 +390,9 @@ const FluxosGraph = (() => {
         if (gesture.kind === "nodes" || gesture.kind === "group") {
           for (const origin of gesture.nodes) {
             const node = model.nodeById.get(origin.id);
-            node.x = origin.x + dx / transform.scale;
-            node.y = origin.y + dy / transform.scale;
+            const influence = gesture.kind === "nodes" ? origin.influence ?? 1 : 1;
+            node.x = origin.x + dx / transform.scale * influence;
+            node.y = origin.y + dy / transform.scale * influence;
           }
         } else {
           transform.x = gesture.origin.x + dx;
