@@ -203,6 +203,8 @@ Critérios obrigatórios:
 
 **Plano de contingência:** se qualquer critério essencial falhar, remover o magnetismo e restaurar a movimentação convencional de nós, preservando drag, pan, zoom, enquadramento e posições salvas. Documentar o resultado dos testes e não insistir em outra rodada de magnetismo sem autorização.
 
+**Resultado da tentativa técnica controlada — 18/10/2026:** o arraste magnético foi implementado com resposta determinística por distância no grafo: o nó selecionado acompanha integralmente o ponteiro e nós relacionados respondem com influência decrescente, sem reexecutar a simulação de forças durante o arraste. Os smoke tests [#175](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175489588), [#176](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175508171) e [#177](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39175581995) confirmam movimento proporcional de nó relacionado, persistência das posições, estabilidade após a soltura, zoom, pan e troca de agrupamento. A tentativa passou nos critérios automatizados centrais; ainda falta inspeção visual manual em resoluções e grafos densos. Esta foi a única tentativa controlada prevista; não iniciar nova rodada de magnetismo sem autorização.
+
 ### 4.6 Progresso e estados
 
 - Avanço maior que zero deve implicar “Em execução” quando o estado atual permitir a transição.
