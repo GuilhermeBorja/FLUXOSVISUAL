@@ -198,3 +198,9 @@ test("atividades canceladas têm barra neutra no Gantt e não são caminho crít
   assert.match(workspace, /row\.item\.status === "cancelled" \? "cancelled"/);
   assert.match(css, /\.gantt-bar\.cancelled/);
 });
+
+test("criação em lote não presume a duração de etapas sem valor explícito", () => {
+  assert.match(workspace, /Informe a duração de cada etapa para calcular a previsão/);
+  assert.match(workspace, /if \(!durationRaw\) throw new Error\(`Informe a duração da etapa/);
+  assert.doesNotMatch(workspace, /duration === null \? Number\(input\.plannedDurationDays \|\| 0\)/);
+});
