@@ -85,6 +85,8 @@ try {
   await page.locator("#createItemForm").waitFor();
   assert.equal(await page.locator('#createItemForm [name="plannedStartAt"]').count(), 0);
   assert.equal(await page.locator('#createItemForm [name="plannedDurationDays"]').inputValue(), "");
+  await page.getByRole("button", { name: /Fechar painel/ }).click();
+  await page.locator(".drawer").waitFor({ state: "detached" });
   assert.equal(errors.length, 0, errors.join("\n"));
 
   for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1024, height: 768 }, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
