@@ -96,3 +96,8 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 
 
 - **Relação CONTÉM em falha:** a criação de relação agora preserva o parentId anterior se a validação do cronograma falhar. Foi adicionado teste para o caso em que o item já tem pai, mas a relação de contenção está ausente e a rede temporal está inválida.
+
+
+## Correção do CI — 18/10/2026
+
+A execução 39168227194 falhou exclusivamente no smoke test de navegador: o seletor `.drawer` contava um painel mantido no DOM, mesmo após fechar, e o teste exigia contagem zero. O teste foi ajustado para verificar `.drawer:visible`, validando a ausência de painel efetivamente visível nas larguras testadas. Nova execução automática: [run 39168432112](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168432112). Status final ainda pendente no momento desta anotação.
