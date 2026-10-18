@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { readFileSync } from "node:fs";
 
 const workspace = readFileSync(new URL("../dist/workspace.js", import.meta.url), "utf8");
@@ -67,4 +68,54 @@ test("nós do grafo exibem início e término idealizados e instrução de arras
   assert.match(workspace, /idealStart: \(item\) => item\.plannedStartAt/);
   assert.match(workspace, /idealEnd: \(item\) => item\.dueAt/);
   assert.match(workspace, /Arraste um nó individualmente/);
+});
+
+
+function analyzeSchedule(items, relations) {
+  const start = workspace.indexOf("function scheduleAnalysis(items) {");
+  const end = workspace.indexOf("function renderGantt(items) {", start);
+  const source = workspace.slice(start, end);
+  const sandbox = {
+    relationsFor: () => relations,
+    today: () => "2026-01-01",
+    shiftedDate: (date, offset) => {
+      const value = new Date(date + "T12:00:00");
+      value.setDate(value.getDate() + offset);
+      return value.toISOString().slice(0, 10);
+    },
+  };
+  return vm.runInNewContext(source + "\nscheduleAnalysis", sandbox)(items);
+}
+
+test("análise do Gantt calcula dependências, paralelismo e caminho crítico", () => {
+  const items = [
+    {id:"a",parentId:"",plannedStartAt:"2026-01-01",dueAt:"2026-01-05",plannedDurationDays:4},
+    {id:"b",parentId:"",plannedStartAt:"2026-01-01",dueAt:"2026-01-03",plannedDurationDays:2},
+    {id:"c",parentId:"",plannedStartAt:"2026-01-01",dueAt:"2026-01-04",plannedDurationDays:3},
+  ];
+  const analysis = analyzeSchedule(items,[{id:"ab",sourceId:"a",targetId:"b",relationType:"TI",lagDays:1}]);
+  assert.equal(analysis.valid,true);
+  assert.equal(analysis.reliable,true);
+  assert.equal(analysis.durationDays,7);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="b").startOffset,5);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="a").critical,true);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="b").critical,true);
+  assert.equal(analysis.rows.find((row)=>row.item.id==="c").critical,false);
+});
+
+test("análise do Gantt sinaliza duração ausente e ciclos temporais", () => {
+  const items = [
+    {id:"a",parentId:"",plannedStartAt:"2026-01-01",plannedDurationDays:2},
+    {id:"b",parentId:"",plannedStartAt:"2026-01-01",dueAt:"2026-01-03",plannedDurationDays:2},
+  ];
+  const incomplete = analyzeSchedule(items,[]);
+  assert.equal(incomplete.valid,true);
+  assert.equal(incomplete.reliable,false);
+  assert.match(incomplete.message,/nenhuma duração é presumida/);
+  const cycle = analyzeSchedule(items.map((item)=>({...item,dueAt:item.dueAt || "2026-01-03"})),[
+    {id:"ab",sourceId:"a",targetId:"b",relationType:"TI",lagDays:0},
+    {id:"ba",sourceId:"b",targetId:"a",relationType:"TI",lagDays:0},
+  ]);
+  assert.equal(cycle.valid,false);
+  assert.match(cycle.message,/ciclo/);
 });
