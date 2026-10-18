@@ -271,7 +271,7 @@ const tableColumnOptions = [
 
 function renderColumnSettings() {
   const hidden = new Set(state.hiddenTableColumns || []);
-  return `<div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-column-toggle="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}</div>`;
+  return `<div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-column-toggle="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}<button type="button" class="button quiet" data-action="auto-fit-columns">Ajustar colunas automaticamente</button></div>`;
 }
 
 function applyTableColumnLayout() {
@@ -958,6 +958,7 @@ function bindWorkspace() {
     else if (action === "templates") { returnFocus = button; ui.templateId = ""; ui.templateCreationMode = false; ui.panel = "templates"; renderPanel(); }
     else if (action === "create-from-template") { returnFocus = button; ui.templateId = ""; ui.templateCreationMode = true; ui.panel = "templates"; renderPanel(); }
     else if (action === "columns") { ui.columnsOpen = !ui.columnsOpen; render(); }
+    else if (action === "auto-fit-columns") { state.tableColumnWidths = {}; saveState(); render(); notify("Larguras manuais removidas; tabela ajustada automaticamente ao conteúdo."); }
     else if (action === "filters") { ui.filtersOpen = !ui.filtersOpen; render(); }
     else if (action === "clear-filters") { state.filters = {query:"",status:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}; saveState(); render(); }
     else if (action === "logout") { closePanel(); state.currentUserId = ""; saveState(); render(); }
