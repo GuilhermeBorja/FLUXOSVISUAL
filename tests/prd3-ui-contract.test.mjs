@@ -46,3 +46,10 @@ test("identidade e responsividade do produto estão definidas", () => {
   assert.match(css, /table-layout: auto/);
   assert.match(css, /overflow-wrap: anywhere/);
 });
+
+test("Gantt não presume duração de um dia quando a duração está ausente", () => {
+  assert.match(workspace, /const explicitDuration = Number\(item\.plannedDurationDays\)/);
+  assert.match(workspace, /if \(days === null\) durationsComplete = false/);
+  assert.match(workspace, /nenhuma duração é presumida/);
+  assert.doesNotMatch(workspace, /: 1;\s*duration\.set\(item\.id,days\)/);
+});
