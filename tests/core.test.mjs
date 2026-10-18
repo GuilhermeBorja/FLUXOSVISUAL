@@ -263,3 +263,13 @@ test("previsão temporal respeita TI, II, TT, IF e não antecipa o início basel
   assert.equal(run('getItem(pairs.find((p)=>p.type==="TT").target.id).plannedStartAt'),"2026-01-04");
   assert.equal(run('getItem(pairs.find((p)=>p.type==="IF").target.id).plannedStartAt'),"2026-01-01");
 });
+
+
+test("edição é revertida integralmente quando o cronograma detecta ciclo", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`first=createItem({...${defaults},title:"Original A"});second=createItem({...${defaults},title:"Original B"});state.relations.push({id:uid("rel"),sourceId:first.id,targetId:second.id,relationType:"TI",lagDays:0},{id:uid("rel"),sourceId:second.id,targetId:first.id,relationType:"TI",lagDays:0});oldTitle=first.title;oldEvents=state.events.length;`);
+  assert.throws(() => run('updateItem(first.id,{...first,title:"Não deve persistir"},nowIso());'),/ciclo nas dependências temporais/);
+  assert.equal(run("getItem(first.id).title"),"Original A");
+  assert.equal(run("state.events.length"),run("oldEvents"));
+});
