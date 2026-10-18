@@ -1208,6 +1208,8 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   const item = getItem(id);
   const user = currentUser();
   if (!canEditItem(user,item)) throw new Error("Sua regra GPO não permite editar este item.");
+  const rollbackItems = state.items.map((entry) => ({...entry}));
+  const rollbackEventCount = state.events.length;
   validateItemInput(input,item);
   if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro das regras GPO.");
   const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && entry.status !== "cancelled");
@@ -1242,7 +1244,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
     item.updatedAt = nowIso(); item.lastChangeAt = effectiveAt;
     if (item.parentId) syncParentSummary(item.parentId,effectiveAt);
     const schedule = recalculatePlannedDates();
-    if (!schedule.valid) throw new Error(schedule.message);
+    if (!schedule.valid) { state.items = rollbackItems; state.events.length = rollbackEventCount; throw new Error(schedule.message); }
   }
   return changed;
 }
