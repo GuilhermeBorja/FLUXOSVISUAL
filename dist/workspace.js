@@ -458,7 +458,7 @@ function renderGraph(items) {
   const legend = [{signal:"red",label:"Bloqueado / atraso"},{signal:"yellow",label:"Aguardando / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Planejado / cancelado"}];
   return `<div class="graph-layout">${renderGraphTree(items)}<div class="graph-shell"><div class="graph-toolbar">
     <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map((entry) => option(entry.id,entry.label,ui.grouping === entry.id)).join("")}</select></label>
-    <span class="graph-instruction">Arraste um nó com suas relações ou mova o agrupamento</span><button class="button quiet" data-action="propagate">${icon("workflow")}Animar propagação</button>
+    <span class="graph-instruction">Arraste um nó individualmente; use o agrupamento para organizar a visão</span><button class="button quiet" data-action="propagate">${icon("workflow")}Animar propagação</button>
     <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
     </div><div id="graphCanvas" class="graph-canvas">${items.length ? "" : emptyMarkup()}</div>
     <div class="graph-legend" aria-label="Legenda do farol">${legend.map((entry) => '<button type="button" class="' + entry.signal + (ui.graphHighlight === entry.signal ? ' active' : '') + '" data-highlight-signal="' + entry.signal + '" aria-pressed="' + (ui.graphHighlight === entry.signal) + '"><b></b>' + entry.label + '</button>').join("")}${ui.graphHighlight ? '<button type="button" class="button quiet" data-highlight-signal="all">Limpar destaque</button>' : ''}</div></div></div>`;
@@ -478,7 +478,7 @@ function mountGraph(items) {
     labels: {
       owner: userName, organization: orgName, relation: (id) => labelOf(relationTypes, id),
       type: (item) => itemTypeConfig(item.type,item.organizationId).label, typeColor: (item) => itemTypeConfig(item.type,item.organizationId).color, status: (item) => signalLabel(item),
-      signal: signalOf, duration: elapsedLabel, planned: plannedLabel, baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
+      signal: signalOf, duration: elapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
       progress: (item) => Math.round(Number(item.progressPercent || 0)),
       expected: (item) => forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
       deviation: (item) => {
