@@ -663,3 +663,5 @@ body.panel-open { overflow: hidden; }
 .drawer{resize:horizontal;overflow:auto;min-width:min(320px,90vw);max-width:90vw}.drawer-body{overflow:auto}
 
 .synth-table tbody tr[data-type="project"]{background:color-mix(in srgb,var(--surface,#fff) 88%,var(--accent,#287d62))}.synth-table tbody tr[data-depth="1"]{background:color-mix(in srgb,var(--surface,#fff) 94%,var(--accent,#287d62))}.synth-table tbody tr[data-depth="2"]{background:color-mix(in srgb,var(--surface,#fff) 96%,var(--accent,#287d62))}.synth-table tbody tr[data-depth="3"],.synth-table tbody tr[data-depth="4"],.synth-table tbody tr[data-depth="5"]{background:color-mix(in srgb,var(--surface,#fff) 98%,var(--accent,#287d62))}
+
+.schedule-preview{padding:10px 12px;border:1px solid var(--line,#dce3e7);border-radius:9px;background:var(--surface-subtle,#f7f9fa);font-weight:600;font-size:13px;color:var(--text,#1d2b32)}.profile-assignment{min-width:140px;font-size:12px}.profile-assignment select{max-width:190px}
