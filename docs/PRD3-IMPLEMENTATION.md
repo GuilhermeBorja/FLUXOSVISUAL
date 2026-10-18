@@ -68,3 +68,6 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 - **Estados no Gantt:** além da cor configurável, o Gantt agora apresenta o ícone configurado para o estado da atividade.
 - **CI após as alterações de aparência:** sintaxe, testes automatizados e build passaram: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39165953797.
 - **Matriz de auditoria:** consultar `docs/PRD3-AUDIT.md` para o estado de cada um dos 33 requisitos e dos 13 requisitos transversais. A matriz continua registrando itens parciais; portanto, a branch ainda não está liberada para produção.
+
+- **Validação de cores de linha:** teste dinâmico confirma prioridade da cor do projeto sobre a cor do nível e rejeição de valores inválidos, com fallback seguro para a cor hierárquica.
+- **CI mais recente:** https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39166024260 — sintaxe, testes e build aprovados.
