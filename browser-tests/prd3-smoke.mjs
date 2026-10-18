@@ -61,6 +61,8 @@ try {
   await page.mouse.move(handleBox.x + handleBox.width / 2 + 24, handleBox.y + handleBox.height / 2);
   await page.mouse.up();
   const widthAfter = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
+  const resizeDebug = await visibleWeightHeader.evaluate((header) => ({ inlineWidth: header.style.width, tableWidth: header.closest("table").style.width }));
+  console.log("column resize diagnostic", JSON.stringify({widthBefore,widthAfter,resizeDebug,storedWidths:await page.evaluate(()=>state.tableColumnWidths)}));
   assert.ok(widthAfter >= widthBefore + 10, `column width did not increase: ${widthBefore} -> ${widthAfter}`);
 
   await page.locator('button[data-select="item_adm"]').first().click();
