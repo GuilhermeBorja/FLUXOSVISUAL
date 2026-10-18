@@ -84,7 +84,7 @@ h1 { margin: 0; font-size: 1.625rem; line-height: 1.2; font-weight: 650; letter-
 .toggle-label { display: flex; flex-direction: row; align-items: center; gap: 9px; font-weight: 400; font-size: .875rem; }
 .table-scroll { overflow-x: auto; }
 .synth-table { border-collapse: collapse; width: 100%; text-align: left; font-size: .875rem; }
-.synth-table th { background: #f7f9fa; font-size: .8125rem; color: #697985; font-weight: 500; padding: 13px 15px; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.synth-table th { position: relative; background: #f7f9fa; font-size: .8125rem; color: #697985; font-weight: 500; padding: 13px 15px; white-space: nowrap; border-bottom: 1px solid var(--line); }
 .synth-table th:first-child, .synth-table td:first-child { padding-left: 20px; }
 .synth-table td { padding: 15px; border-bottom: 1px solid #edf0f2; vertical-align: middle; }
 .synth-table tbody tr:last-child td { border-bottom: 0; }
