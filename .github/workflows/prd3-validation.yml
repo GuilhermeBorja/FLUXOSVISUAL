@@ -31,3 +31,13 @@ jobs:
         run: npm test
       - name: Build vendor bundle
         run: npm run build
+      - name: Install browser test runner
+        run: npm install --no-save playwright@1.55.0
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start static app
+        run: |
+          nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &
+          timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
+      - name: Run browser smoke tests
+        run: node browser-tests/prd3-smoke.mjs
