@@ -19,7 +19,7 @@ Protótipo navegável para explorar a gestão de projetos, atividades, relaçõe
 - **GPO:** regras vinculadas a usuários controlam operações e escopos. Regras mais específicas prevalecem e, em caso de empate, negar prevalece. Regras legadas são convertidas para usuário durante a migração local.
 - **Configuração:** ícones e cores dos tipos de item podem ser personalizados por empresa. Modelos mantêm status e permitem rever responsáveis antes da aplicação.
 - **Criação em lote:** cada etapa criada junto ao fluxo permite escolher status, responsável, peso e duração, e toda a operação é desfeita se uma etapa falhar na validação.
-- **Grafo:** a ação **Animar propagação** percorre relações direcionadas até um bloqueio ou até o fim do caminho; é um recurso de exploração visual e não muda os registros.
+- **Grafo:** a ação **Animar propagação** começa no item selecionado, percorre seus descendentes, retorna pelos ancestrais e visita os demais ramos sem repetir nós; é um recurso de exploração visual e não altera os registros.
 - **Anexos:** a demonstração aceita arquivos locais de até 256 KB cada e 1 MB somados. Os arquivos e seus metadados ficam no armazenamento local do navegador e podem ser incluídos na exportação JSON.
 
 ## Desenvolvimento local
