@@ -64,3 +64,7 @@ Essas correções não significam que o PRD3 esteja concluído. Permanecem obrig
 - **Identidade textual:** README atualizado para “Fluxo Visual” e para descrever o arraste individual real do grafo.
 - **Auditoria rastreável:** matriz de 33 requisitos PRD2 e 13 transversais criada em `docs/PRD3-AUDIT.md`; os requisitos ainda não têm conformidade integral estão explicitamente marcados como parciais, com pendências registradas.
 - **CI:** testes, verificação de sintaxe e build passaram em https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39165896828.
+
+- **Estados no Gantt:** além da cor configurável, o Gantt agora apresenta o ícone configurado para o estado da atividade.
+- **CI após as alterações de aparência:** sintaxe, testes automatizados e build passaram: https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39165953797.
+- **Matriz de auditoria:** consultar `docs/PRD3-AUDIT.md` para o estado de cada um dos 33 requisitos e dos 13 requisitos transversais. A matriz continua registrando itens parciais; portanto, a branch ainda não está liberada para produção.
