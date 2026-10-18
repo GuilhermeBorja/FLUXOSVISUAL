@@ -341,9 +341,9 @@ const FluxosGraph = (() => {
       const group = !target && event.target.closest("[data-group]");
       if (target) {
         const id = target.dataset.node;
-        const componentId = model.connected.get(id);
-        const nodes = model.nodes.filter((node) => model.connected.get(node.id) === componentId);
-        gesture = { kind: "nodes", id, start: point, nodes: nodes.map((node) => ({ id: node.id, x: node.x, y: node.y })), moved: false };
+        // PRD3 fallback: move the selected node only. Connected nodes must not be magnetically dragged as a group.
+        const node = model.nodeById.get(id);
+        gesture = { kind: "nodes", id, start: point, nodes: node ? [{ id: node.id, x: node.x, y: node.y }] : [], moved: false };
       } else if (group) {
         const groupNodes = model.groups.find((entry) => entry.id === group.dataset.group)?.nodes || [];
         gesture = { kind: "group", id: group.dataset.group, start: point, nodes: groupNodes.map((node) => ({ id: node.id, x: node.x, y: node.y })), moved: false };
