@@ -141,6 +141,7 @@ function render() {
         <div class="header-actions">
           <span class="user-identity"><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(orgName(user.organizationId))} · GPO</span></span>
           <button class="icon-button" data-action="export" title="Exportar dados visíveis" aria-label="Exportar dados visíveis">${icon("download")}</button>
+          <button class="button quiet" data-action="view-settings">${icon("sliders-horizontal")}<span>Configurações</span></button>
           ${(canManageAnyUsers(user) || canManageGpo(user) || canManageAnyOrganization(user)) ? `<button class="button quiet" data-action="admin">${icon("settings-2")}<span>Cadastros</span></button>` : ""}
           <button class="icon-button" data-action="logout" title="Sair" aria-label="Sair">${icon("log-out")}</button>
         </div>
@@ -507,11 +508,33 @@ function closePanel() {
   if (returnFocus?.isConnected) returnFocus.focus();
 }
 
+function renderViewSettingsPanel() {
+  const hidden = new Set(state.hiddenTableColumns || []);
+  const canConfigureStatuses = canManageGpo(currentUser());
+  return `${panelHeader("Preferências locais","Configurações de visualização")}
+    <div class="drawer-body">
+      <section class="panel-section">
+        <h3>Tabela Sintética</h3>
+        <p class="muted">As preferências são salvas neste navegador. O ajuste automático remove larguras manuais e permite que o conteúdo determine a largura das colunas.</p>
+        <div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-setting-column="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}</div>
+        <div class="row-actions"><button type="button" class="button primary" data-action="settings-auto-fit">Ajustar colunas automaticamente</button><button type="button" class="button quiet" data-action="settings-reset-columns">Restaurar colunas padrão</button></div>
+      </section>
+      <section class="panel-section">
+        <h3>Preferências do grafo</h3>
+        <p class="muted">A posição dos nós é preservada localmente. Use “Redefinir layout” na visão Analítica para descartar as posições salvas.</p>
+        <button type="button" class="button quiet" data-action="settings-reset-graph">Restaurar layout do grafo</button>
+      </section>
+      ${canConfigureStatuses ? '<section class="panel-section"><h3>Estados e aparência</h3><p class="muted">As cores e os ícones dos estados são administrados na área Cadastros, aba Status.</p><button type="button" class="button quiet" data-action="settings-open-statuses">Abrir configurações de status</button></section>' : ""}
+      <p class="muted">As configurações são locais e não sincronizam entre dispositivos. Não há backend neste escopo.</p>
+    </div>`;
+}
+
 function renderPanel(focus = true) {
   const root = document.querySelector("#panelRoot");
   if (!root) return;
   if (!ui.panel) { root.innerHTML = ""; document.body.classList.remove("panel-open"); return; }
   let content = "";
+  if (ui.panel === "settings") content = renderViewSettingsPanel();
   if (ui.panel === "create") content = renderCreatePanel();
   else if (ui.panel === "templates") content = renderTemplatesPanel();
   else if (ui.panel === "admin" && (canManageAnyUsers(currentUser()) || canManageGpo(currentUser()) || canManageAnyOrganization(currentUser()))) content = renderAdmin();
@@ -953,6 +976,11 @@ function bindWorkspace() {
     }
     const action = button.dataset.action;
     if (action === "create") { returnFocus = button; ui.panel = "create"; ui.createParentId = ""; renderPanel(); }
+    else if (action === "view-settings") { returnFocus = button; ui.panel = "settings"; renderPanel(); }
+    else if (action === "settings-auto-fit") { state.tableColumnWidths = {}; saveState(); renderPanel(false); notify("Ajuste automático habilitado."); }
+    else if (action === "settings-reset-columns") { state.hiddenTableColumns = []; state.tableColumnWidths = {}; saveState(); renderPanel(false); notify("Preferências de coluna restauradas."); }
+    else if (action === "settings-reset-graph") { ui.positions = {}; state.graphPositions = {}; ui.graphTransform = null; saveState(); notify("Posições do grafo restauradas."); render(); }
+    else if (action === "settings-open-statuses") { ui.adminTab = "statuses"; ui.panel = "admin"; renderPanel(); }
     else if (action === "admin") { returnFocus = button; ui.panel = "admin"; renderPanel(); }
     else if (action === "configure-workspace") { returnFocus = button; ui.adminTab = "organizations"; ui.panel = "admin"; renderPanel(); }
     else if (action === "templates") { returnFocus = button; ui.templateId = ""; ui.templateCreationMode = false; ui.panel = "templates"; renderPanel(); }
@@ -1035,6 +1063,7 @@ function bindWorkspace() {
   }));
   submitHandler("bulkEditForm", applyBulkEdit);
   document.querySelectorAll("[data-status-setting]").forEach((form)=>form.addEventListener("submit",(event)=>{ event.preventDefault(); const data=new FormData(form); state.statusSettings ||= {}; state.statusSettings[form.dataset.statusSetting]={icon:String(data.get("icon")||"circle-help"),color:String(data.get("color")||"#687780")}; saveState(); renderPanel(false); notify("Apresentação do status atualizada."); }));
+  document.querySelectorAll("[data-setting-column]").forEach((input)=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked?state.hiddenTableColumns.filter((entry)=>entry!==key):[...new Set([...state.hiddenTableColumns,key])]; saveState(); renderPanel(false); }));
   document.querySelectorAll("[data-column-toggle]").forEach((input)=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.columnToggle; state.hiddenTableColumns= input.checked ? state.hiddenTableColumns.filter((entry)=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
   applyTableColumnLayout();
 }
