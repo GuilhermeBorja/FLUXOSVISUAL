@@ -70,10 +70,19 @@ function signalLabel(item) {
   return labelOf(statusCatalog, item.status);
 }
 
+const statusDefaults = {
+  backlog:{icon:"list-todo",color:"#687780"}, ready:{icon:"circle-play",color:"#287d62"},
+  in_progress:{icon:"loader-circle",color:"#2679a5"}, waiting:{icon:"clock-3",color:"#b58a2a"},
+  blocked:{icon:"circle-alert",color:"#c2474d"}, under_review:{icon:"stamp",color:"#7561a8"},
+  correction:{icon:"wrench",color:"#b56c2a"}, done:{icon:"check-circle-2",color:"#287d62"},
+  cancelled:{icon:"circle-x",color:"#687780"}
+};
+function statusConfig(id) { return {...(statusDefaults[id] || {icon:"circle-help",color:"#687780"}),...(state.statusSettings?.[id] || {})}; }
+
 function statusBadge(item) {
-  const delta = dueDeltaDays(item);
+  const delta = dueDeltaDays(item), config=statusConfig(item.status);
   const indicator = isOverdue(item) ? `<span class="overdue-mark" title="Prazo vencido há ${Math.abs(delta)} dias">· ${Math.abs(delta)}d atraso</span>` : isAtRisk(item) ? `<span class="overdue-mark" title="Prazo a ${delta} dias; limite de risco ${Number(state.riskThresholdDays) || 3} dias">· risco ${delta}d</span>` : "";
-  return `<span class="status-badge ${signalOf(item)}"><span class="signal"></span>${escapeHtml(labelOf(statusCatalog, item.status))}${indicator}</span>`;
+  return `<span class="status-badge ${signalOf(item)}" style="--status-color:${escapeHtml(config.color)}"><span class="status-symbol">${icon(config.icon)}</span>${escapeHtml(labelOf(statusCatalog, item.status))}${indicator}</span>`;
 }
 
 function dateCell(value, withTime = false) {
@@ -678,6 +687,11 @@ function renderTemplatesPanel() {
   return html + '</div>';
 }
 
+function renderStatusSettings() {
+  state.statusSettings ||= {};
+  return `<section class="panel-section"><h3>Status operacionais</h3><p class="muted">Personalize o ícone e a cor exibidos para cada status. A mudança afeta a apresentação, não as regras de transição.</p><div class="type-settings-list">${statusCatalog.map((status)=>{ const config=statusConfig(status.id); return `<form class="type-setting form-row" data-status-setting="${escapeHtml(status.id)}"><strong>${icon(config.icon)}${escapeHtml(status.label)}</strong><label>Ícone<select name="icon">${availableItemIcons.map((name)=>option(name,name,name===config.icon)).join("")}</select></label><label>Cor<input name="color" type="color" value="${escapeHtml(config.color)}" required/></label><button class="button quiet" type="submit">Salvar</button></form>`; }).join("")}</div></section>`;
+}
+
 function renderGpo() {
   const scopes = [{type:"global",id:"",label:"Toda a plataforma"}];
   [...new Set(state.organizations.map((entry) => entry.state).filter(Boolean))].forEach((stateCode) => scopes.push({type:"state",id:stateCode,label:"Estado · " + stateCode}));
@@ -707,13 +721,14 @@ function renderAdmin() {
   const tabs = [];
   if (canManageAnyUsers(currentUser())) tabs.push({id:"users",label:"Usuários"});
   if (canManageAnyOrganization(currentUser()) || gpoDecision(currentUser(),"manage_organization",null) === true) tabs.push({id:"organizations",label:"Empresas e setores"});
-  if (canManageGpo(currentUser())) tabs.push({id:"gpo",label:"GPO"});
+  if (canManageGpo(currentUser())) { tabs.push({id:"gpo",label:"GPO"}); tabs.push({id:"statuses",label:"Status"}); }
   if (canManageAnyOrganization(currentUser()) || canManageGpo(currentUser())) tabs.push({id:"types",label:"Tipos de item"});
   if (!tabs.some((tab) => tab.id === ui.adminTab)) ui.adminTab = tabs[0]?.id || "users";
   return `${panelHeader("Administração","Cadastros e permissões")}<div class="panel-tabs" role="tablist">${tabs.map((tab) => `<button role="tab" aria-selected="${ui.adminTab === tab.id}" data-admin-tab="${tab.id}" class="${ui.adminTab === tab.id ? "active" : ""}">${tab.label}</button>`).join("")}</div><div class="drawer-body">
     ${ui.adminTab === "users" ? `<div class="admin-list">${state.users.filter((user) => canManageUsers(currentUser(),user.organizationId)).map((user) => `<div class="admin-entry"><span><strong>${escapeHtml(user.name)}${user.disabled ? " (inativo)" : ""}</strong><small>${escapeHtml(orgName(user.organizationId))} · ${escapeHtml(sectorName(user.sectorId))} · ${(state.permissionRules || []).filter((rule) => rule.subjectType === "user" && rule.subjectId === user.id).length} regras GPO</small></span>${user.disabled ? `<button class="icon-button" data-toggle-user="${escapeHtml(user.id)}" aria-label="Reativar ${escapeHtml(user.name)}" title="Reativar usuário">${icon("rotate-ccw")}</button>` : ""}${deleteButton("user",user.id,user.name,user.id === currentUser().id,"Entre com outro administrador para excluir seu usuário.")}</div>`).join("")}</div><section class="panel-section"><h3>Novo usuário</h3><form id="userForm" class="form-stack"><div class="form-row"><label>Nome<input name="name" required/></label><label>E-mail<input name="email" type="email" required/></label></div><div class="form-row"><label>Empresa<select name="organizationId" id="userOrganization">${state.organizations.filter((org) => canManageUsers(currentUser(),org.id)).map((org) => option(org.id,org.name,org.id === currentUser().organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="userSector">${state.sectors.filter((sector) => sector.organizationId === currentUser().organizationId).map((sector) => option(sector.id,sector.name)).join("")}</select></label></div><label>Estado (UF)<input name="state" value="${escapeHtml(currentUser().state)}" maxlength="2" required/></label><p class="muted">Novos usuários começam com acesso de leitura e criação no workspace selecionado. Ajuste permissões na aba GPO.</p><button class="button primary" type="submit">${icon("plus")}Cadastrar usuário</button></form></section>` : ""}
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}${gpoDecision(currentUser(),"manage_organization",null) === true ? `<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section>` : ""}<section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.filter((org) => canManageOrganization(currentUser(),org.id)).map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "gpo" && canManageGpo(currentUser()) ? renderGpo() : ""}
+    ${ui.adminTab === "statuses" && canManageGpo(currentUser()) ? renderStatusSettings() : ""}
     ${ui.adminTab === "types" ? renderTypeSettings() : ""}
   </div>`;
 }
@@ -958,6 +973,7 @@ function bindWorkspace() {
     graphInstance?.selectMany([...ui.graphTreeSelectedIds]);
   }));
   submitHandler("bulkEditForm", applyBulkEdit);
+  document.querySelectorAll("[data-status-setting]").forEach((form)=>form.addEventListener("submit",(event)=>{ event.preventDefault(); const data=new FormData(form); state.statusSettings ||= {}; state.statusSettings[form.dataset.statusSetting]={icon:String(data.get("icon")||"circle-help"),color:String(data.get("color")||"#687780")}; saveState(); renderPanel(false); notify("Apresentação do status atualizada."); }));
   document.querySelectorAll("[data-column-toggle]").forEach((input)=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.columnToggle; state.hiddenTableColumns= input.checked ? state.hiddenTableColumns.filter((entry)=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
   applyTableColumnLayout();
 }
