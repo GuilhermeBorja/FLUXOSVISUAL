@@ -462,3 +462,16 @@ test("P0: editar item pai registra nome e responsável e repactua a previsão se
   assert.equal(run('state.events.some((e)=>e.itemId===root.id && e.eventType==="owner_changed")'),true);
   assert.equal(run('state.events.some((e)=>e.itemId===root.id && e.eventType==="replanned_due_changed")'),true);
 });
+
+test("P0: reabrir aprovação inicia nova rodada e preserva a decisão anterior", () => {
+  const run = context(); run('state.currentUserId="u_luis";');
+  run('approval=createItem({...' + defaults + ',title:"Aprovação",type:"approval",status:"done",ownerId:"u_luis",progressPercent:100});approval.approvalReviewerId="u_luis";approval.approvalRound=1;approval.lastDecisionId="decision_previous";decision=reopenApproval(approval.id,"Revisar evidência",50);');
+  assert.equal(run('approval.status'),"backlog");
+  assert.equal(run('approval.progressPercent'),50);
+  assert.equal(run('approval.approvalRound'),2);
+  assert.equal(run('decision.kind'),"reopened");
+  assert.equal(run('decision.reason'),"Revisar evidência");
+  assert.equal(run('decision.previousDecisionId'),"decision_previous");
+  assert.equal(run('decision.createdBy'),"u_luis");
+  assert.equal(run('state.approvalDecisions.some((d)=>d.id===decision.id && d.round===2)'),true);
+});
