@@ -146,7 +146,7 @@ const FluxosGraph = (() => {
             const lines = wrapLabel(node.item.title);
             const number = node.isRoot ? options.labels.type(node.item).slice(0, 1) : String(model.groups.find((group) => group.id === node.groupId).nodes.filter((candidate) => !candidate.isRoot).indexOf(node) + 1).padStart(2, "0");
             return `<g class="graph-node ${node.isRoot ? "root-node" : ""}" data-node="${esc(node.id)}" role="button" tabindex="0" aria-label="${esc(node.item.title)}, ${esc(options.labels.owner(node.item.ownerId))}, ${esc(options.labels.status(node.item))}, ${esc(options.labels.duration(node.item))}">
-              <title>${esc(node.item.title)}\n${esc(options.labels.owner(node.item.ownerId))}\n${esc(options.labels.status(node.item))}\nTempo total: ${esc(options.labels.duration(node.item))}\nDuração prevista: ${esc(options.labels.planned(node.item))}</title>
+              <title>${esc(node.item.title)}\n${esc(options.labels.owner(node.item.ownerId))}\n${esc(options.labels.status(node.item))}\nTempo total: ${esc(options.labels.duration(node.item))}\nDuração prevista: ${esc(options.labels.planned(node.item))}\nProgresso: ${esc(options.labels.progress(node.item))}%\nTérmino esperado: ${esc(options.labels.expected(node.item))}\nDesvio: ${esc(options.labels.deviation(node.item))}\nBloqueios: ${esc(options.labels.blockers(node.item))}\nDependências: ${esc(options.labels.dependencies(node.item))}</title>
               <circle class="node-selection" r="${node.radius + 6}"/>
               <circle class="node-circle" r="${node.radius}" fill="${color.fill}" stroke="${color.stroke}"/>
               <text class="node-number" text-anchor="middle" y="5" fill="${color.stroke}">${esc(number)}</text>
