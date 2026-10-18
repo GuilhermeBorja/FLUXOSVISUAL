@@ -1124,7 +1124,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   let changed = false;
   for (const field of Object.keys(next)) {
     if (parent[field] === next[field]) continue;
-    const eventType = field === "status" ? "status_changed" : field === "progressPercent" ? "progress_changed" : field === "plannedStartAt" ? "start_changed" : "due_changed";
+    const eventType = field === "status" ? "status_changed" : field === "progressPercent" ? "progress_changed" : field === "plannedStartAt" ? "start_changed" : field === "plannedDurationDays" ? "duration_changed" : "due_changed";
     createEvent(parent.id, eventType, parent[field] || "", next[field] ?? "", "Resumo herdado dos subitens.", effectiveAt);
     parent[field] = next[field];
     changed = true;
