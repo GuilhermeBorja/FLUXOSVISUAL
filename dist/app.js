@@ -1448,11 +1448,14 @@ function removeItemsByIds(ids,reason) {
   if (!removed.length && !canRemoveItem(currentUser())) requireDeletionPermission();
   for (const item of removed) requireDeletionPermission(item);
   const relations = state.relations.filter((rel) => ids.has(rel.sourceId) || ids.has(rel.targetId));
+  const archivedRelationCountBefore = (state.archivedRelations || []).length;
+  const detachedRoots = [];
   const effectiveAt = nowIso();
   for (const item of state.items) {
     if (!ids.has(item.id) && ids.has(item.parentId)) {
       createEvent(item.id,"parent_changed",getItem(item.parentId)?.title || item.parentId,"", "Item pai excluído; subitem mantido como item independente.",effectiveAt);
       item.parentId = ""; item.updatedAt = effectiveAt; item.lastChangeAt = effectiveAt;
+      detachedRoots.push(item.id);
     }
   }
   for (const relation of relations) {
@@ -1473,8 +1476,18 @@ function removeItemsByIds(ids,reason) {
   state.attachments = (state.attachments || []).filter((attachment) => !ids.has(attachment.itemId));
   state.items = state.items.filter((item) => !ids.has(item.id));
   state.relations = state.relations.filter((rel) => !ids.has(rel.sourceId) && !ids.has(rel.targetId));
+  // Detaching surviving children changes their ancestor set. Rebuild CONTÉM
+  // links throughout each surviving subtree to prevent stale ancestor links.
+  const pending = [...detachedRoots], visited = new Set();
+  while (pending.length) {
+    const itemId = pending.shift();
+    if (visited.has(itemId)) continue;
+    visited.add(itemId);
+    syncContainsRelations(itemId);
+    state.items.filter((item) => item.parentId === itemId).forEach((child) => pending.push(child.id));
+  }
   for (const positions of Object.values(state.graphPositions || {})) for (const id of ids) delete positions[id];
-  return {items:removed.length,relations:relations.length};
+  return {items:removed.length,relations:(state.archivedRelations || []).length - archivedRelationCountBefore};
 }
 
 function removeItem(id,{cascade = false,keepChildren = false} = {}) {
