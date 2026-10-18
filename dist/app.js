@@ -1261,6 +1261,15 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (input.status === "cancelled") input = { ...input, progressPercent: 100 };
   if (wasComplete && complete && ((input.plannedStartAt ?? item.plannedStartAt) !== item.plannedStartAt || (input.dueAt ?? item.dueAt) !== item.dueAt)) throw new Error("As datas previstas ficam bloqueadas após a conclusão.");
   const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",replannedDueAt:"replanned_due_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
+  // Preflight operation-specific permissions before mutating any field. Without
+  // this pass, a denied date/weight change could leave earlier fields updated.
+  for (const field of Object.keys(fields)) {
+    const rawNext = input[field] ?? item[field];
+    const next = ["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
+    if (next === item[field]) continue;
+    const operation = field === "ownerId" ? "change_owner" : ["dueAt","plannedStartAt","plannedDurationDays","replannedDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
+    if (operation && gpoDecision(user,operation,item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
+  }
   let changed = false;
   for (const [field,eventType] of Object.entries(fields)) {
     const rawNext = input[field] ?? item[field];
