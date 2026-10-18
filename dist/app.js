@@ -205,6 +205,10 @@ function loadState() {
       const parsed = JSON.parse(saved);
       if (parsed.version === 2) {
         parsed.permissionRules ||= [];
+        parsed.permissionProfiles ||= [];
+        parsed.statusSettings ||= {};
+        parsed.hiddenTableColumns ||= [];
+        parsed.tableColumnWidths ||= {};
         parsed.setupComplete ??= (parsed.users || []).length > 0;
         parsed.permissionRules = parsed.permissionRules.map((rule) => rule.operation === "change_due" ? {...rule,operation:"change_duration"} : rule);
         parsed.approvalDecisions ||= [];
@@ -260,8 +264,8 @@ function emptyState() {
     version:2, gpoVersion:1, setupComplete:false, currentUserId:"", activePage:"overview",
     workspaceName:"", organizations:[], sectors:[], users:[], items:[], relations:[], events:[],
     attachments:[], archivedAttachments:[], archivedItems:[], archivedRelations:[], archivedUsers:[],
-    archivedOrganizations:[], archivedSectors:[], permissionRules:[], approvalDecisions:[], templates:[],
-    registryEvents:[], typeSettings:{}, graphPositions:{}, riskThresholdDays:3,
+    archivedOrganizations:[], archivedSectors:[], permissionRules:[], permissionProfiles:[], approvalDecisions:[], templates:[],
+    registryEvents:[], typeSettings:{}, statusSettings:{}, graphPositions:{}, hiddenTableColumns:[], tableColumnWidths:{}, riskThresholdDays:3,
     filters:{query:"",status:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}
   };
 }
@@ -499,7 +503,8 @@ function gpoDecision(user, operation, item = null) {
   if (!user || user.disabled) return false;
   const ranks = { global: 1, state: 2, organization: 2, sector: 3, project: 4, item: 5, creator: 5 };
   const matches = (state.permissionRules || []).filter((rule) => {
-    const subjectMatches = rule.subjectType === "user" && rule.subjectId === user.id;
+    const subjectMatches = (rule.subjectType === "user" && rule.subjectId === user.id)
+      || (rule.subjectType === "profile" && !!user.profileId && rule.subjectId === user.profileId);
     if (!subjectMatches || rule.operation !== operation) return false;
     if (rule.scopeType === "global") return true;
     if (!item) return false;
@@ -512,7 +517,7 @@ function gpoDecision(user, operation, item = null) {
     return false;
   });
   if (!matches.length) return null;
-  matches.sort((left, right) => (ranks[right.scopeType] || 0) - (ranks[left.scopeType] || 0) || Number(left.effect === "allow") - Number(right.effect === "allow"));
+  matches.sort((left, right) => ((ranks[right.scopeType] || 0) * 10 + (right.subjectType === "user" ? 1 : 0)) - ((ranks[left.scopeType] || 0) * 10 + (left.subjectType === "user" ? 1 : 0)) || Number(left.effect === "allow") - Number(right.effect === "allow"));
   return matches[0].effect === "allow";
 }
 
@@ -563,8 +568,9 @@ function createPermissionRule(input) {
   const user = currentUser();
   if (!canManageGpo(user)) throw new Error("Sua regra GPO não permite configurar permissões.");
   if (!Object.hasOwn(permissionOperationLabels, input.operation)) throw new Error("Selecione uma operação do GPO.");
-  if (input.subjectType !== "user") throw new Error("O GPO deve ser vinculado diretamente a um usuário.");
+  if (!["user","profile"].includes(input.subjectType)) throw new Error("Selecione um usuário ou perfil GPO.");
   if (input.subjectType === "user" && !state.users.some((entry) => entry.id === input.subjectId && !entry.disabled)) throw new Error("Selecione um usuário ativo.");
+  if (input.subjectType === "profile" && !(state.permissionProfiles || []).some((entry) => entry.id === input.subjectId)) throw new Error("Selecione um perfil GPO existente.");
   if (!["global", "state", "organization", "sector", "project", "item"].includes(input.scopeType)) throw new Error("Selecione um escopo válido.");
   if (input.scopeType === "state" && !/^[A-Z]{2}$/.test(input.scopeId || "")) throw new Error("Selecione um estado válido.");
   if (input.scopeType === "organization" && !state.organizations.some((entry) => entry.id === input.scopeId)) throw new Error("Selecione uma empresa.");
