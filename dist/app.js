@@ -1029,6 +1029,7 @@ function updateRelation(id, input) {
   const duplicate = state.relations.some((entry) => entry.id !== id && entry.sourceId === source.id && entry.targetId === target.id && entry.relationType === input.relationType);
   if (duplicate) throw new Error("Esta relação já existe.");
   const previous = { sourceId: relation.sourceId, targetId: relation.targetId, relationType: relation.relationType, lagDays: relation.lagDays, description: relation.description || "" };
+  const previousTargetParentId = target.parentId, previousOldTargetParentId = getItem(previous.targetId)?.parentId || "";
   const affectedParents = new Set();
   if (relation.relationType === "contains" && (relation.sourceId !== source.id || relation.targetId !== target.id || input.relationType !== "contains")) {
     const priorTarget = getItem(relation.targetId);
@@ -1036,14 +1037,21 @@ function updateRelation(id, input) {
   }
   Object.assign(relation, { sourceId: source.id, targetId: target.id, relationType: input.relationType, lagDays: Number(input.lagDays) || 0, description: String(input.description || "").trim(), updatedAt: nowIso(), updatedBy: user.id, previousSourceId: previous.sourceId, previousTargetId: previous.targetId, previousRelationType: previous.relationType });
   if (input.relationType === "contains") { if (!target.parentId || target.parentId === source.id) target.parentId = source.id; affectedParents.add(source.id); }
-  createEvent(previous.targetId, "relation_updated", previous.relationType, input.relationType, `Relação atualizada: ${getItem(previous.sourceId)?.title} → ${source.title}.`);
-  if (target.id !== previous.targetId) createEvent(target.id, "relation_updated", previous.targetId, relation.id, relation.description || "Relação transferida para este item.");
   if (previous.relationType === "contains") syncContainsRelations(previous.targetId);
   if (relation.relationType === "contains") syncContainsRelations(target.id);
   if (previous.relationType === "contains") affectedParents.add(previous.sourceId);
-  for (const parentId of affectedParents) syncParentSummary(parentId);
   const schedule = recalculatePlannedDates();
-  if (!schedule.valid) throw new Error(schedule.message);
+  if (!schedule.valid) {
+    Object.assign(relation,{sourceId:previous.sourceId,targetId:previous.targetId,relationType:previous.relationType,lagDays:previous.lagDays,description:previous.description});
+    target.parentId=previousTargetParentId;
+    const oldTarget=getItem(previous.targetId); if(oldTarget) oldTarget.parentId=previousOldTargetParentId;
+    syncContainsRelations(previous.targetId); if(target.id!==previous.targetId) syncContainsRelations(target.id);
+    recalculatePlannedDates();
+    throw new Error(schedule.message);
+  }
+  createEvent(previous.targetId,"relation_updated",previous.relationType,input.relationType,`Relação atualizada: ${getItem(previous.sourceId)?.title} → ${source.title}.`);
+  if (target.id !== previous.targetId) createEvent(target.id,"relation_updated",previous.targetId,relation.id,relation.description || "Relação transferida para este item.");
+  for (const parentId of affectedParents) syncParentSummary(parentId);
   return relation;
 }
 
