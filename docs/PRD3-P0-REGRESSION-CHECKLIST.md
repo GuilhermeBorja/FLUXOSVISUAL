@@ -97,3 +97,8 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 7. **Aprovações e interface:** fechar rodadas de aprovação, fluxos de correção, inspeção visual e navegação/filtros.
 
 **Gate de release:** não publicar em produção enquanto qualquer P0 permanecer como `não verificado` ou enquanto os cenários integrados acima não tiverem evidência reproduzível.
+
+
+## 5. Evidência adicional — integração de rede e baseline
+
+No [CI #191](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39178756937), o teste integrado “P0 integrado: rede temporal e repactuação preservam baseline e identidade da relação” passou. O cenário cria uma rede TI entre atividades do mesmo grupo, altera a defasagem sem recriar a relação, repactua o término do grupo e verifica que a identidade da relação e as baselines originais permanecem intactas enquanto a previsão é recalculada. Sintaxe, suíte automatizada, build e smoke browser passaram.
