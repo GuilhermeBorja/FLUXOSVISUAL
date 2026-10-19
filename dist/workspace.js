@@ -75,7 +75,7 @@ function plannedLabel(item) {
 function statusDisplayLabel(item) { if (item?.type === "approval" && item.status === "under_review") return "Aguardando decisão"; if (item?.type === "approval" && item.status === "correction") return "Correção solicitada"; return labelOf(statusCatalog,item?.status); }
 
 function signalLabel(item) {
-  if (item.status === "blocked") return "Bloqueado";
+  if (isBlocked(item)) return "Bloqueado";
   if (isOverdue(item)) return "Atrasado";
   return statusDisplayLabel(item);
 }
@@ -83,7 +83,7 @@ function signalLabel(item) {
 const statusDefaults = {
   backlog:{icon:"list-todo",color:"#687780"}, ready:{icon:"circle-play",color:"#287d62"},
   in_progress:{icon:"loader-circle",color:"#2679a5"}, waiting:{icon:"clock-3",color:"#b58a2a"},
-  blocked:{icon:"circle-alert",color:"#c2474d"}, under_review:{icon:"stamp",color:"#7561a8"},
+  under_review:{icon:"stamp",color:"#7561a8"},
   correction:{icon:"wrench",color:"#b56c2a"}, done:{icon:"check-circle-2",color:"#287d62"},
   cancelled:{icon:"circle-x",color:"#687780"}
 };
@@ -96,8 +96,9 @@ function statusOption(status, selected = false) { return `<option value="${escap
 
 function statusBadge(item) {
   const delta = dueDeltaDays(item), config=statusConfig(item.status);
+  const blockedMark = isBlocked(item) ? `<span class="overdue-mark blocked-mark" title="${escapeHtml(item.blockedReason || "Bloqueado")}">· bloqueado</span>` : "";
   const indicator = isOverdue(item) ? `<span class="overdue-mark" title="Prazo vencido há ${Math.abs(delta)} dias">· ${Math.abs(delta)}d atraso</span>` : isAtRisk(item) ? `<span class="overdue-mark" title="Prazo a ${delta} dias; limite de risco ${Number(state.riskThresholdDays) || 3} dias">· risco ${delta}d</span>` : "";
-  return `<span class="status-badge ${signalOf(item)}" style="--status-color:${escapeHtml(config.color)}"><span class="status-symbol">${icon(config.icon)}</span>${escapeHtml(statusDisplayLabel(item))}${indicator}</span>`;
+  return `<span class="status-badge ${signalOf(item)}" style="--status-color:${escapeHtml(config.color)}"><span class="status-symbol">${icon(config.icon)}</span>${escapeHtml(statusDisplayLabel(item))}${blockedMark}${indicator}</span>`;
 }
 
 function dateCell(value, withTime = false) {
@@ -106,7 +107,7 @@ function dateCell(value, withTime = false) {
 }
 
 function filterCount() {
-  return [state.filters.status, state.filters.type, state.filters.owner, state.filters.organization, state.filters.sector, state.filters.state].filter((value) => value && value !== "all").length;
+  return [state.filters.status, state.filters.indicator, state.filters.type, state.filters.owner, state.filters.organization, state.filters.sector, state.filters.state].filter((value) => value && value !== "all").length;
 }
 
 function projectOptions() {
@@ -253,6 +254,7 @@ function renderFilters() {
   const states = new Set(items.map((item) => item.state).filter(Boolean));
   return `<div class="filters-bar">
     <label>Status<select data-filter="status">${option("all", "Todos", state.filters.status === "all")}${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status, state.filters.status === status.id)).join("")}</select></label>
+    <label>Indicador<select data-filter="indicator">${option("all", "Todos", (state.filters.indicator || "all") === "all")}${option("blocked", "Bloqueados", state.filters.indicator === "blocked")}${option("overdue", "Atrasados", state.filters.indicator === "overdue")}${option("risk", "Em risco", state.filters.indicator === "risk")}</select></label>
     <label>Tipo<select data-filter="type">${option("all", "Todos", state.filters.type === "all")}${itemTypes.map((type) => option(type.id, type.label, state.filters.type === type.id)).join("")}</select></label>
     <label>Responsável<select data-filter="owner">${option("all", "Todos", state.filters.owner === "all")}${[...owners].map((id) => option(id, userName(id), state.filters.owner === id)).join("")}</select></label>
     <label>Empresa<select data-filter="organization">${option("all", "Todas", state.filters.organization === "all")}${[...organizations].map((id) => option(id, orgName(id), state.filters.organization === id)).join("")}</select></label>
@@ -657,6 +659,7 @@ function itemFormFields(item, create = false) {
     <label>Duração planejada (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="${escapeHtml(create && item.plannedDurationDays === undefined ? "" : item.plannedDurationDays ?? 0)}" ${summaryGroup || completed ? "disabled" : ""} required/></label>
     ${!create && summaryGroup ? `<label>Repactuar término do grupo<input type="date" name="replannedDueAt" value="${escapeHtml(item.replannedDueAt || "")}" min="${escapeHtml(item.baselineStartAt || item.plannedStartAt || today())}"/><small>A baseline original é preservada; a repactuação será registrada separadamente.</small></label>` : ""}
     <div class="form-row"><label>Peso da atividade<input type="number" name="weight" min="0.1" step="0.1" value="${escapeHtml(item.weight ?? 1)}" ${summaryGroup ? "disabled title=\"O peso é aplicado às atividades finais\"" : ""} required/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent ?? 0)}" placeholder="0" ${summaryGroup ? "disabled title=\"Progresso herdado dos subitens ativos\"" : ""}/><small>${summaryGroup ? "Resumo calculado a partir das atividades finais." : ""}</small></label></div>
+    ${create ? "" : `<div class="form-row blocked-row"><label class="checkbox-row"><input type="checkbox" name="blocked" ${item.blocked ? "checked" : ""}/> Bloqueado</label><label>Motivo do bloqueio<input type="text" name="blockedReason" maxlength="240" value="${escapeHtml(item.blockedReason || "")}"/><small>Indicador: o status operacional do item não muda.</small></label></div>`}
     <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description)}</textarea></label>
      </details>
     ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state || user.state,createdBy:item.createdBy || user.id}) === true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Demonstração: até 256 KB por arquivo e 1 MB no total. Os arquivos ficam apenas neste navegador, sem armazenamento no servidor.</small></label>' : ""}`;
@@ -754,7 +757,7 @@ function renderRelations(item, relations, editable) {
     ${editable && candidates.length && gpoDecision(currentUser(),"create_relation",item) === true ? `<section class="panel-section"><h3>Nova relação</h3><form id="relationForm" class="form-stack"><label>Direção<select name="direction">${option("out","Este item se relaciona com…")}${option("in","Outro item se relaciona com este…")}</select></label><label>Outro item<select name="otherId" required>${candidates.map((candidate) => option(candidate.id,itemContextLabel(candidate))).join("")}</select></label><div class="form-row"><label>Relação<select name="relationType">${relationTypes.map((type) => option(type.id,type.label,type.id === "TI")).join("")}</select></label><label>Defasagem (dias)<input name="lagDays" type="number" step="0.5" value="0"/></label></div><label>Descrição ou justificativa<textarea name="description" rows="2" placeholder="Opcional"></textarea></label><button class="button primary" type="submit">${icon("link-2")}Conectar itens</button></form><details class="form-details relation-help"><summary>O que significa cada dependência?</summary><p><strong>TI:</strong> o término do primeiro libera o início do segundo.</p><p><strong>II:</strong> o início do primeiro libera o início do segundo.</p><p><strong>TT:</strong> o término do primeiro libera o término do segundo.</p><p><strong>IF:</strong> o início do primeiro libera o término do segundo.</p><p>A defasagem acrescenta ou antecipa dias entre os eventos.</p></details></section>` : ""}`;
 }
 
-const eventLabels = { created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início ideal original", duration_changed:"Duração planejada", replanned_due_changed:"Repactuação de término", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", weight_changed:"Peso", progress_changed:"Progresso", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", archived:"Arquivamento", restored:"Restauração", parent_changed:"Item pai", approval_submitted:"Enviado para aprovação", approval_decided:"Decisão de aprovação", approval_revision_started:"Correção iniciada", approval_reopened:"Aprovação reaberta" };
+const eventLabels = { created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início ideal original", duration_changed:"Duração planejada", replanned_due_changed:"Repactuação de término", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", weight_changed:"Peso", progress_changed:"Progresso", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", archived:"Arquivamento", restored:"Restauração", parent_changed:"Item pai", approval_submitted:"Enviado para aprovação", approval_decided:"Decisão de aprovação", approval_revision_started:"Correção iniciada", approval_reopened:"Aprovação reaberta", blocked_set:"Bloqueio sinalizado", blocked_cleared:"Bloqueio removido", blocked_reason_changed:"Motivo do bloqueio" };
 
 function eventValue(event, value) {
   if (!value) return "—";
@@ -1461,6 +1464,7 @@ function itemInput(form) {
   const owner = state.users.find((entry) => entry.id === ownerValue);
   const parent = getItem(String(form.get("parentId") || ui.createParentId || existing?.parentId || ""));
   const result = {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:ownerValue,plannedStartAt:String(form.get("plannedStartAt") ?? existing?.plannedStartAt ?? (parent?.baselineStartAt || parent?.plannedStartAt || "")),dueAt:String(form.get("dueAt") ?? existing?.dueAt ?? ""),plannedDurationDays:Number(form.get("plannedDurationDays") ?? existing?.plannedDurationDays ?? 0),replannedDueAt:String(form.get("replannedDueAt") ?? existing?.replannedDueAt ?? ""),weight:Number(form.get("weight") ?? existing?.weight ?? 1),description:String(form.get("description") || existing?.description || ""),organizationId:owner?.organizationId || parent?.organizationId || existing?.organizationId || currentUser().organizationId,sectorId:owner?.sectorId || parent?.sectorId || existing?.sectorId || currentUser().sectorId,state:owner?.state || parent?.state || existing?.state || currentUser().state,parentId:String(form.get("parentId") || existing?.parentId || "")};
+  if (form.id === "updateItemForm") { result.blocked = form.get("blocked") === "on"; result.blockedReason = String(form.get("blockedReason") || "").trim(); }
   const progress = form.get("progressPercent");
   if (progress !== null && String(progress).trim() !== "") result.progressPercent = Number(progress);
   else if (!existing) result.progressPercent = 0;

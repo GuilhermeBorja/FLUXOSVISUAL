@@ -535,3 +535,82 @@ test("R2-26: trocar o responsável (inclusive em lote) rederiva empresa, setor e
   run('updateItem("item_doors",{...getItem("item_doors"),title:"Portas revisadas"});');
   assert.equal(run('getItem("item_doors").organizationId'), "org_dmk");
 });
+
+test("M-05: Bloqueado é indicador independente do status; atraso e risco continuam derivados", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  // O catálogo operacional não oferece mais "blocked"; o id legado segue legível no histórico.
+  assert.equal(run('statusCatalog.some((status)=>status.id==="blocked")'), false);
+  assert.equal(run('labelOf(statusCatalog,"blocked")'), "Bloqueado");
+  const id = run('state.items.find((entry)=>entry.id==="item_adm_interview" && !state.items.some((child)=>child.parentId===entry.id)).id');
+  const statusBefore = run(`getItem("${id}").status`);
+  // Sinalizar exige motivo e preserva o status operacional.
+  assert.throws(() => run(`updateItem("${id}",{...getItem("${id}"),blocked:true,blockedReason:" "})`), /motivo do bloqueio/);
+  run(`updateItem("${id}",{...getItem("${id}"),blocked:true,blockedReason:"Aguardando laudo"})`);
+  assert.equal(run(`getItem("${id}").status`), statusBefore);
+  assert.equal(run(`isBlocked(getItem("${id}"))`), true);
+  assert.equal(run(`signalOf(getItem("${id}"))`), "red");
+  assert.equal(run(`isAtRisk(getItem("${id}"))`), false);
+  assert.equal(run(`state.events.filter((entry)=>entry.itemId==="${id}" && entry.eventType==="blocked_set").length`), 1);
+  // Reenviar o mesmo item (como faz a edição em lote) não gera evento novo.
+  run(`updateItem("${id}",{...getItem("${id}")})`);
+  assert.equal(run(`state.events.filter((entry)=>entry.itemId==="${id}" && entry.eventType==="blocked_set").length`), 1);
+  // Trocar o motivo é registrado à parte; remover o bloqueio não muda o status.
+  run(`updateItem("${id}",{...getItem("${id}"),blockedReason:"Laudo entregue, falta ART"})`);
+  assert.equal(run(`state.events.some((entry)=>entry.itemId==="${id}" && entry.eventType==="blocked_reason_changed")`), true);
+  run(`updateItem("${id}",{...getItem("${id}"),blocked:false})`);
+  assert.equal(run(`isBlocked(getItem("${id}"))`), false);
+  assert.equal(run(`getItem("${id}").status`), statusBefore);
+  assert.equal(run(`state.events.some((entry)=>entry.itemId==="${id}" && entry.eventType==="blocked_cleared")`), true);
+  // Concluir um item bloqueado encerra o indicador, com evento.
+  run(`updateItem("${id}",{...getItem("${id}"),blocked:true,blockedReason:"Motivo"})`);
+  run(`updateItem("${id}",{...getItem("${id}"),status:"done",progressPercent:100})`);
+  assert.equal(run(`getItem("${id}").blocked`), false);
+  assert.equal(run(`state.events.filter((entry)=>entry.itemId==="${id}" && entry.eventType==="blocked_cleared").length`), 2);
+});
+
+test("M-05: entrada legada com status blocked vira indicador sem inventar progresso", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`legacyBlocked=createItem({...${defaults},title:"Legado bloqueado",status:"blocked"});`);
+  assert.equal(run("legacyBlocked.status"), "waiting");
+  assert.equal(run("legacyBlocked.blocked"), true);
+  assert.equal(run("legacyBlocked.blockedReason"), "Migrado do status Bloqueado");
+  assert.equal(run('state.events.some((entry)=>entry.itemId===legacyBlocked.id && entry.eventType==="blocked_set")'), true);
+  run(`legacyProgress=createItem({...${defaults},title:"Legado com avanço",status:"blocked",progressPercent:40});`);
+  assert.equal(run("legacyProgress.status"), "in_progress");
+  assert.equal(run("legacyProgress.progressPercent"), 40);
+});
+
+test("M-05: dados salvos com status blocked migram usando o histórico e o filtro antigo é convertido", () => {
+  const seed = context();
+  const saved = JSON.parse(seed("JSON.stringify(state)"));
+  const [a, b, c] = saved.items.filter((item) => item.status !== "done").slice(0, 3);
+  for (const item of [a, b, c]) { item.status = "blocked"; delete item.blocked; delete item.blockedReason; }
+  b.progressPercent = 0; c.progressPercent = 40;
+  saved.events.push({ id: "ev_legacy_block", itemId: a.id, eventType: "status_changed", fromValue: "in_progress", toValue: "blocked", createdAt: "2026-10-01T10:00:00.000Z", effectiveAt: "2026-10-01T10:00:00.000Z" });
+  saved.filters.status = "blocked";
+  const run = context(saved);
+  const get = (id) => JSON.parse(run(`JSON.stringify((({status,blocked,blockedReason,progressPercent})=>({status,blocked,blockedReason,progressPercent}))(getItem("${id}")))`));
+  assert.equal(get(a.id).status, "in_progress");   // status anterior vindo do histórico
+  assert.equal(get(b.id).status, "waiting");       // sem histórico e sem avanço
+  assert.equal(get(c.id).status, "in_progress");   // sem histórico, com avanço
+  for (const id of [a.id, b.id, c.id]) { assert.equal(get(id).blocked, true); assert.equal(get(id).blockedReason, "Migrado do status Bloqueado"); }
+  assert.equal(run('state.items.some((entry)=>entry.status==="blocked")'), false);
+  assert.equal(run('state.filters.status'), "all");
+  assert.equal(run('state.filters.indicator'), "blocked");
+  assert.equal(run(`state.events.filter((entry)=>[${JSON.stringify(a.id)},${JSON.stringify(b.id)},${JSON.stringify(c.id)}].includes(entry.itemId) && entry.eventType==="blocked_set").length`), 3);
+});
+
+test("M-05: filtro por indicador separa bloqueados, atrasados e em risco do status", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run('state.filters.indicator="blocked";');
+  const blocked = JSON.parse(run('JSON.stringify(visibleItems().map((entry)=>entry.id))'));
+  assert.ok(blocked.includes("item_doors_risk"), "o item do seed sinalizado como bloqueio deve aparecer");
+  assert.ok(blocked.every((id) => run(`isBlocked(getItem("${id}"))`)));
+  run('state.filters.indicator="overdue";');
+  assert.ok(JSON.parse(run('JSON.stringify(visibleItems().map((entry)=>entry.id))')).every((id) => run(`isOverdue(getItem("${id}"))`)));
+  run('state.filters.indicator="all";');
+  assert.ok(run('visibleItems().length') >= blocked.length);
+});

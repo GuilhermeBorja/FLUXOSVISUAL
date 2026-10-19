@@ -5,12 +5,23 @@ const statusCatalog = [
   { id: "ready", label: "Liberado para execução" },
   { id: "in_progress", label: "Em execução" },
   { id: "waiting", label: "Aguardando" },
-  { id: "blocked", label: "Bloqueado" },
   { id: "under_review", label: "Em análise" },
   { id: "correction", label: "Em correção" },
   { id: "done", label: "Concluído" },
   { id: "cancelled", label: "Cancelado" },
 ];
+
+// M-05: "Bloqueado" deixou de ser status operacional e passou a ser indicador (item.blocked).
+// O id legado continua rotulado para que eventos antigos sigam legíveis no histórico.
+const legacyStatusLabels = { blocked: "Bloqueado" };
+function isBlocked(item) { return item?.blocked === true && !["done","cancelled"].includes(item.status); }
+// Entradas antigas (modelos, importações, dados salvos) que ainda tragam status "blocked" viram
+// o indicador, sem inventar progresso: com avanço > 0 o item segue em execução; senão, aguardando.
+function normalizeLegacyBlocked(input, fallbackStatus = "waiting") {
+  if (input?.status !== "blocked") return input;
+  const resumed = Number(input.progressPercent ?? 0) > 0 ? "in_progress" : fallbackStatus;
+  return { ...input, status: resumed, blocked: true, blockedReason: String(input.blockedReason || "").trim() || "Migrado do status Bloqueado" };
+}
 
 const itemTypes = [
   { id: "project", label: "Projeto", icon: "folder-kanban", color: "#256b76" },
@@ -121,7 +132,7 @@ function escapeHtml(value) {
 }
 
 function labelOf(collection, id) {
-  return collection.find((item) => item.id === id)?.label || id || "-";
+  return collection.find((item) => item.id === id)?.label || (collection === statusCatalog ? legacyStatusLabels[id] : "") || id || "-";
 }
 
 function option(value, label, selected = false) {
@@ -198,6 +209,20 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+// M-05: itens salvos com status "blocked" passam a ter o indicador. O status anterior vem do
+// histórico quando existe; sem histórico, avanço > 0 vira "Em execução" e o restante "Aguardando".
+function migrateBlockedStatus(parsed) {
+  for (const item of parsed.items || []) {
+    if (item.status !== "blocked") continue;
+    const previous = [...(parsed.events || [])].reverse().find((event) => event.itemId === item.id && event.eventType === "status_changed" && event.toValue === "blocked" && statusCatalog.some((status) => status.id === event.fromValue))?.fromValue;
+    item.status = previous || (Number(item.progressPercent || 0) > 0 ? "in_progress" : "waiting");
+    item.blocked = true;
+    item.blockedReason = item.blockedReason || "Migrado do status Bloqueado";
+    item.blockedAt = item.blockedAt || item.lastChangeAt || item.updatedAt || "";
+    (parsed.events ||= []).push({ id: uid("event"), itemId: item.id, eventType: "blocked_set", fromValue: "blocked", toValue: item.blockedReason, userId: "system", actorNameSnapshot: "Sistema", comment: "Status Bloqueado convertido em indicador de bloqueio.", createdAt: nowIso(), effectiveAt: nowIso() });
+  }
+}
+
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
@@ -219,6 +244,9 @@ function loadState() {
         parsed.riskThresholdDays ??= 3;
         parsed.filters ||= { query: "", status: "all", type: "all", owner: "all" };
         parsed.filters.organization ??= "all";
+        parsed.filters.indicator ??= "all";
+        if (parsed.filters.status === "blocked") { parsed.filters.status = "all"; parsed.filters.indicator = "blocked"; }
+        migrateBlockedStatus(parsed);
         parsed.filters.sector ??= "all";
         parsed.filters.state ??= "all";
         if (!parsed.gpoVersion) {
@@ -266,7 +294,7 @@ function emptyState() {
     attachments:[], archivedAttachments:[], archivedItems:[], archivedRelations:[], archivedUsers:[],
     archivedOrganizations:[], archivedSectors:[], permissionRules:[], permissionProfiles:[], approvalDecisions:[], templates:[],
     registryEvents:[], typeSettings:{}, statusSettings:{}, graphPositions:{}, hiddenTableColumns:[], tableColumnWidths:{}, riskThresholdDays:3,
-    filters:{query:"",status:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}
+    filters:{query:"",status:"all",indicator:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}
   };
 }
 
@@ -276,7 +304,7 @@ function seedState() {
     gpoVersion: 1,
     currentUserId: "",
     activePage: "overview",
-    filters: { query: "", status: "all", type: "all", owner: "all", organization: "all", sector: "all", state: "all" },
+    filters: { query: "", status: "all", indicator: "all", type: "all", owner: "all", organization: "all", sector: "all", state: "all" },
     organizations: [
       { id: "org_castro", name: "Castro Industrial", state: "PE" },
       { id: "org_dmk", name: "DMK / Rocha", state: "PE" },
@@ -417,7 +445,9 @@ function seedState() {
     id: "item_doors_risk",
     title: "Clausulas leoninas DMK",
     type: "blocker",
-    status: "blocked",
+    status: "waiting",
+    blocked: true,
+    blockedReason: "Cláusulas contratuais aguardam ciência ou ajuste.",
     ownerId: "u_virginia",
     sectorId: "sec_diretoria",
     parentId: doors.id,
@@ -439,7 +469,9 @@ function createSeedItem(base, input) {
     id: input.id || uid("item"),
     title: input.title,
     type: input.type || "task",
-    status: Number(input.progressPercent ?? 0) > 0 && !["done","cancelled","blocked"].includes(input.status || "backlog") ? "in_progress" : input.status || "backlog",
+    status: Number(input.progressPercent ?? 0) > 0 && !["done","cancelled"].includes(input.status || "backlog") ? "in_progress" : input.status || "backlog",
+    blocked: input.blocked === true,
+    blockedReason: input.blocked === true ? String(input.blockedReason || "") : "",
     priority: input.priority || "media",
     ownerId: input.ownerId || "u_luis",
     createdBy: input.createdBy || "u_luis",
@@ -760,6 +792,7 @@ function visibleItems() {
   return state.items
     .filter((item) => !item.archivedAt && canViewItem(user, item))
     .filter((item) => state.filters.status === "all" || item.status === state.filters.status)
+    .filter((item) => (state.filters.indicator || "all") === "all" || (state.filters.indicator === "blocked" && isBlocked(item)) || (state.filters.indicator === "overdue" && isOverdue(item)) || (state.filters.indicator === "risk" && isAtRisk(item)))
     .filter((item) => state.filters.type === "all" || item.type === state.filters.type)
     .filter((item) => state.filters.owner === "all" || item.ownerId === state.filters.owner)
     .filter((item) => state.filters.organization === "all" || item.organizationId === state.filters.organization)
@@ -832,13 +865,13 @@ function dueDeltaDays(item) {
 }
 
 function isAtRisk(item) {
-  if (!item.dueAt || ["done", "cancelled", "blocked"].includes(item.status) || isOverdue(item)) return false;
+  if (!item.dueAt || ["done", "cancelled"].includes(item.status) || isBlocked(item) || isOverdue(item)) return false;
   const daysLeft = dueDeltaDays(item);
   return daysLeft <= (Number(state.riskThresholdDays) || 3) && Number(item.progressPercent || 0) < 75;
 }
 
 function signalOf(item) {
-  if (item.status === "blocked" || isOverdue(item)) return "red";
+  if (isBlocked(item) || isOverdue(item)) return "red";
   if (completeStatus(item.status)) return "green";
   if (["in_progress"].includes(item.status)) return "blue";
   if (["waiting", "under_review", "ready", "correction"].includes(item.status) || isAtRisk(item)) return "yellow";
@@ -846,6 +879,7 @@ function signalOf(item) {
 }
 
 function createItem(input) {
+  input = normalizeLegacyBlocked(input);
   const user = currentUser();
   if (!canCreateItem(user, input)) throw new Error("Sua regra GPO não permite criar itens neste escopo.");
   validateItemInput(input);
@@ -866,6 +900,9 @@ function createItem(input) {
     title: input.title,
     type: input.type || "task",
     status: input.status || "backlog",
+    blocked: input.blocked === true,
+    blockedReason: input.blocked === true ? String(input.blockedReason || "").trim() : "",
+    blockedAt: input.blocked === true ? nowIso() : "",
     priority: input.priority || "media",
     ownerId: input.ownerId,
     createdBy: user.id,
@@ -891,6 +928,7 @@ function createItem(input) {
   };
   state.items.push(item);
   createEvent(item.id, "created", "", item.status, "Item criado.", item.createdAt);
+  if (item.blocked) createEvent(item.id, "blocked_set", "", item.blockedReason, "Bloqueio sinalizado na criação.", item.createdAt);
   if (item.parentId) createRelation(item.parentId, item.id, "contains", 0);
   if (item.parentId) syncContainsRelations(item.id);
   const schedule = recalculatePlannedDates();
@@ -1178,7 +1216,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   if (!parent.baselineDueAt) parent.baselineDueAt = children.map((item)=>item.baselineDueAt || item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "";
   if (!children.length) return;
   const wasComplete = completeStatus(parent.status);
-  const rank = { blocked: 0, backlog: 0, waiting: 1, correction: 1, ready: 1, in_progress: 2, under_review: 3, done: 4 };
+  const rank = { backlog: 0, waiting: 1, correction: 1, ready: 1, in_progress: 2, under_review: 3, done: 4 };
   const leastAdvanced = [...children].sort((left, right) => (rank[left.status] ?? 0) - (rank[right.status] ?? 0) || Number(left.progressPercent || 0) - Number(right.progressPercent || 0))[0];
   const descendants = [];
   const visited = new Set();
@@ -1222,6 +1260,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
 
 function validateItemInput(input, existing = null) {
   if (!input.title?.trim()) throw new Error("Informe o nome do item.");
+  if (input.blocked === true && !String(input.blockedReason || "").trim()) throw new Error("Informe o motivo do bloqueio.");
   if (!itemTypes.some((type) => type.id === input.type)) throw new Error("Tipo de item inválido.");
   if (input.status !== undefined && !statusCatalog.some((status) => status.id === input.status)) throw new Error("Status inválido.");
   if (!state.organizations.some((org) => org.id === input.organizationId)) throw new Error("Selecione uma empresa.");
@@ -1245,6 +1284,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (!canEditItem(user,item)) throw new Error("Sua regra GPO não permite editar este item.");
   const rollbackItems = state.items.map((entry) => ({...entry}));
   const rollbackEventCount = state.events.length;
+  input = normalizeLegacyBlocked(input, item.status);
   // R2-26: empresa, setor e UF pertencem ao responsável. Quando o responsável muda,
   // o contexto é rederivado dele, para que nenhum chamador (formulário, edição em lote)
   // deixe o item com o contexto do responsável anterior.
@@ -1260,7 +1300,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
   if (input.type === "approval" && item.type !== "approval") { item.approvalRound ||= 1; item.approvalReviewerId ||= input.ownerId || ""; }
   if (input.status === "cancelled") input = { ...input, progressPercent: 100 };
-  else if (Number(input.progressPercent ?? item.progressPercent ?? 0) > 0 && !["done","cancelled","blocked"].includes(input.status)) input = { ...input, status: "in_progress" };
+  else if (Number(input.progressPercent ?? item.progressPercent ?? 0) > 0 && !["done","cancelled"].includes(input.status)) input = { ...input, status: "in_progress" };
   const wasComplete = completeStatus(item.status);
   const complete = completeStatus(input.status);
   if (wasComplete && !complete && (input.progressPercent === undefined || Number(input.progressPercent) === Number(item.progressPercent))) throw new Error("Informe um novo percentual ao reabrir uma atividade concluída.");
@@ -1287,8 +1327,20 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
     createEvent(id,eventType,item[field],next,"",effectiveAt);
     item[field] = next; changed = true;
   }
+  if (input.blocked !== undefined) {
+    const nextBlocked = input.blocked === true;
+    const nextReason = nextBlocked ? String(input.blockedReason ?? item.blockedReason ?? "").trim() : "";
+    if (nextBlocked !== (item.blocked === true)) {
+      createEvent(id, nextBlocked ? "blocked_set" : "blocked_cleared", item.blocked ? (item.blockedReason || "bloqueado") : "", nextReason, "", effectiveAt);
+      item.blocked = nextBlocked; item.blockedReason = nextReason; item.blockedAt = nextBlocked ? effectiveAt : ""; changed = true;
+    } else if (nextBlocked && nextReason !== (item.blockedReason || "")) {
+      createEvent(id, "blocked_reason_changed", item.blockedReason || "", nextReason, "", effectiveAt);
+      item.blockedReason = nextReason; changed = true;
+    }
+  }
   if (complete && !wasComplete) { item.completedAt = effectiveAt; createEvent(id,"completed","",item.status,"",effectiveAt); }
   if (wasComplete && !complete) { item.completedAt = ""; createEvent(id,"reopened","","","Item reaberto.",effectiveAt); }
+  if (item.blocked && (completeStatus(item.status) || item.status === "cancelled")) { createEvent(id,"blocked_cleared",item.blockedReason || "bloqueado","","Bloqueio removido ao encerrar o item.",effectiveAt); item.blocked = false; item.blockedReason = ""; item.blockedAt = ""; changed = true; }
   if (item.status === "in_progress" && !item.actualStartAt) { item.actualStartAt = effectiveAt; createEvent(id,"started","",effectiveAt,"Atividade iniciada.",effectiveAt); changed = true; }
   if (comment.trim()) { createEvent(id,"comment","","",comment.trim(),effectiveAt); changed = true; }
   if (changed) {

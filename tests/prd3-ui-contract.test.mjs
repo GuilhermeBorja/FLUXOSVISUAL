@@ -267,7 +267,7 @@ test("P0 R2-19: propagação percorre subárvore, sobe aos pais e visita ramos r
     {id:"root",parentId:"",sortOrder:0,status:"ready"},
     {id:"a",parentId:"root",sortOrder:100,status:"in_progress"},
     {id:"grandchild",parentId:"a",sortOrder:100,status:"ready"},
-    {id:"b",parentId:"root",sortOrder:200,status:"blocked"},
+    {id:"b",parentId:"root",sortOrder:200,status:"waiting",blocked:true},
     {id:"other",parentId:"",sortOrder:0,status:"ready"},
   ];
   const relations = [
@@ -365,4 +365,17 @@ test("R2-14/R2-12: estados transitórios e legados continuam representáveis sem
   assert.equal(labelOf("ready"), "Liberado para execução");
   assert.ok(!/\bBacklog\b|\bPronto\b/.test(workspace.replace(/"backlog"|backlog:/g, "")), "rótulo legado fixo na interface");
   assert.match(workspace, /statusChoices\(item\.status \|\| "backlog"\)/);
+});
+
+test("M-05: interface exibe bloqueio como indicador, com filtro, formulário e histórico próprios", () => {
+  assert.match(workspace, /const blockedMark = isBlocked\(item\)/);
+  assert.match(workspace, /\$\{blockedMark\}\$\{indicator\}/);
+  assert.match(workspace, /<select data-filter="indicator">/);
+  assert.match(workspace, /state\.filters\.indicator, state\.filters\.type/);
+  assert.match(workspace, /name="blocked"/);
+  assert.match(workspace, /name="blockedReason"/);
+  assert.match(workspace, /form\.id === "updateItemForm"\) \{ result\.blocked = form\.get\("blocked"\) === "on"/);
+  assert.match(workspace, /blocked_set:"Bloqueio sinalizado"/);
+  assert.doesNotMatch(workspace, /status === "blocked"/);
+  assert.doesNotMatch(graph, /status === "blocked"/);
 });

@@ -284,7 +284,7 @@ const FluxosGraph = (() => {
           nodeElements.forEach((element) => element.classList.remove("propagation-current"));
           nodeElements.get(entry.nodeId)?.classList.add("propagation-active","propagation-current");
           if (entry.edgeId) edgeElements.get(entry.edgeId)?.classList.add("propagation-active");
-          if (model.nodeById.get(entry.nodeId)?.item.status === "blocked") nodeElements.get(entry.nodeId)?.classList.add("propagation-stop");
+          if ((() => { const blockedItem = model.nodeById.get(entry.nodeId)?.item; return blockedItem?.blocked === true && !["done","cancelled"].includes(blockedItem.status); })()) nodeElements.get(entry.nodeId)?.classList.add("propagation-stop");
         },index * 430));
       });
       propagationTimers.push(setTimeout(() => {
