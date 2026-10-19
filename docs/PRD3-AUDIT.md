@@ -94,3 +94,8 @@ A execução 39168432112 confirmou que o teste ainda falhava porque, após valid
 - A correção do smoke test fechou o drawer de criação de subitem antes da matriz de resoluções. A execução [39168536101](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168536101) terminou com `success`.
 - O smoke test passou em 1920, 1366, 1024, 768 e 390 px; as etapas anteriores de `npm ci`, `npm run check`, `npm test`, build e instalação do Chromium também passaram.
 - Resultado limita-se ao workflow de validação da branch `PRD3`. A auditoria funcional permanece aberta e a branch não foi publicada em produção.
+
+
+## Evidência integrada adicional — CI #191
+
+O teste integrado “P0 integrado: rede temporal e repactuação preservam baseline e identidade da relação” passou no [CI #191](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39178756937). A verificação cobre relação TI com defasagem editada sem recriação, repactuação do término do grupo, preservação das baselines e registro do evento de edição. A suíte automatizada, o build e o smoke browser também passaram. Os estados dos 44 requisitos não foram alterados: esta evidência amplia a cobertura, mas não encerra as pendências visuais ou de matriz integrada restantes.
