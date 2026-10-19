@@ -209,7 +209,7 @@ test("atividades canceladas têm barra neutra no Gantt e não são caminho crít
 });
 
 test("criação em lote não presume a duração de etapas sem valor explícito", () => {
-  assert.match(workspace, /Duração \\(dias\\)/);
+  assert.ok(workspace.includes("Duração (dias)"));
   assert.match(workspace, /if \(!durationRaw\) throw new Error\(`Informe a duração da etapa/);
   assert.doesNotMatch(workspace, /duration === null \? Number\(input\.plannedDurationDays \|\| 0\)/);
 });
@@ -307,7 +307,7 @@ test("P0 R2-19: propagação percorre subárvore, sobe aos pais e visita ramos r
   };
   const propagate = vm.runInNewContext(source+"\npropagate",sandbox);
   assert.equal(propagate("a"),true);
-  const finishDelay = 5000;
+  const finishDelay = 6 * 430 + 1800;
   const order = [];
   for (const timer of timers.filter((entry)=>entry.delay<finishDelay).sort((a,b)=>a.delay-b.delay)) {
     timer.callback();

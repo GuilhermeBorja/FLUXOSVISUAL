@@ -624,7 +624,7 @@ function renderPanel(focus = true) {
   else if (ui.panel === "delete") content = renderDeletionPanel();
   else if (ui.panel === "item" && canViewItem(currentUser(), getItem(ui.selectedItemId))) content = renderItemPanel(getItem(ui.selectedItemId));
   if (!content) { closePanel(); return; }
-  const drawerWidth = Math.max(320,Math.min(900,Number(state.drawerWidth) || 510));
+  const drawerWidth = Math.max(320,Math.min(900,Number(state.drawerWidth) || 780));
   root.innerHTML = `<div class="panel-shade" data-action="close-panel"></div><aside class="drawer" style="--drawer-width:${drawerWidth}px" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1"><span class="drawer-resize-handle" role="separator" aria-orientation="vertical" aria-label="Redimensionar painel" tabindex="0"></span>${content}</aside>`;
   document.body.classList.add("panel-open");
   bindPanel(); bindDrawerResize(root.querySelector(".drawer")); mountIcons();
