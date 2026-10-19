@@ -344,3 +344,25 @@ test("R2-31: identidade 'Fluxo Visual' sem o slogan antigo e com nome da organiz
   assert.match(html, /<title>Fluxo Visual<\/title>/);
   assert.match(html, /content="Fluxo Visual — /);
 });
+
+test("R2-14/R2-12: estados transitórios e legados continuam representáveis sem aparecer nas escolhas comuns", () => {
+  const app = readFileSync(new URL("../dist/app.js", import.meta.url), "utf8");
+  const sandbox = vm.createContext({});
+  vm.runInContext(app.match(/const statusCatalog = \[[\s\S]*?\n\];/)[0], sandbox);
+  vm.runInContext(workspace.match(/function statusChoices\(currentStatus\) \{[^\n]*\}/)[0], sandbox);
+  const ids = (current) => vm.runInContext(`statusChoices(${JSON.stringify(current)}).map((status) => status.id)`, sandbox);
+  const labelOf = (id) => vm.runInContext(`statusCatalog.find((status) => status.id === ${JSON.stringify(id)})?.label`, sandbox);
+  // Escolhas comuns não oferecem os estados transitórios.
+  for (const current of ["backlog", "ready", "in_progress", "done"]) {
+    assert.ok(!ids(current).includes("under_review") && !ids(current).includes("correction"), `${current}: transitório não deve aparecer`);
+  }
+  // Registro antigo em estado transitório mantém a própria opção e não cai na primeira da lista.
+  assert.ok(ids("under_review").includes("under_review"));
+  assert.ok(ids("correction").includes("correction"));
+  assert.ok(!ids("under_review").includes("correction"));
+  // Mesmos ids de status de antes da renomeação: dados salvos continuam válidos; só os rótulos mudaram.
+  assert.equal(labelOf("backlog"), "Lista de pendências");
+  assert.equal(labelOf("ready"), "Liberado para execução");
+  assert.ok(!/\bBacklog\b|\bPronto\b/.test(workspace.replace(/"backlog"|backlog:/g, "")), "rótulo legado fixo na interface");
+  assert.match(workspace, /statusChoices\(item\.status \|\| "backlog"\)/);
+});

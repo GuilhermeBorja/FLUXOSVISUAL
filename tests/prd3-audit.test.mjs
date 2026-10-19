@@ -55,6 +55,6 @@ test("PRD3: matriz principal e checklist de regressão permanecem sincronizadas"
     assert.equal(auditById.get(row.id).status, row.status, `estado divergente para ${row.id}`);
   }
 
-  assert.match(audit, /15 requisitos continuam não verificados/);
-  assert.doesNotMatch(audit, /17 requisitos continuam não verificados/);
+  assert.match(audit, /12 requisitos continuam não verificados/);
+  assert.doesNotMatch(audit, /15 requisitos continuam não verificados/);
 });

@@ -88,6 +88,10 @@ const statusDefaults = {
   cancelled:{icon:"circle-x",color:"#687780"}
 };
 function statusConfig(id) { return {...(statusDefaults[id] || {icon:"circle-help",color:"#687780"}),...(state.statusSettings?.[id] || {})}; }
+// R2-14: "Em análise" e "Em correção" ficam fora das escolhas comuns, mas um registro que já
+// está em um desses estados precisa continuar representável; sem isso o seletor cairia na
+// primeira opção e a gravação alteraria o status sem que o usuário percebesse.
+function statusChoices(currentStatus) { return statusCatalog.filter((status) => !["under_review","correction"].includes(status.id) || status.id === currentStatus); }
 function statusOption(status, selected = false) { return `<option value="${escapeHtml(status.id)}" style="color:${escapeHtml(statusConfig(status.id).color)}" ${selected ? "selected" : ""}>${escapeHtml(status.label)}</option>`; }
 
 function statusBadge(item) {
@@ -647,7 +651,7 @@ function itemFormFields(item, create = false) {
   if (!organizations.some((org) => org.id === organizationId) && !create) { const existingOrganization = state.organizations.find((org) => org.id === organizationId); if (existingOrganization) organizations.push(existingOrganization); }
   const sectors = state.sectors.filter((sector) => sector.organizationId === organizationId);
   return `<label>Nome<input name="title" value="${escapeHtml(item.title)}" required maxlength="240" placeholder="Ex.: Contratação de novo ADM"/></label>
-    <div class="form-row"><label>Tipo<select name="type" >${itemTypes.map((type) => { const configured = itemTypeConfig(type.id,organizationId); return option(type.id,configured.label,(item.type || "task") === type.id); }).join("")}</select></label><label>Status<select name="status" ${item.type === "approval" && !create || summaryGroup ? "disabled title=\"Resumo herdado dos subitens ativos\"" : ""}>${statusCatalog.filter((status) => !["under_review","correction"].includes(status.id)).map((status) => statusOption(status,(item.status || "backlog") === status.id)).join("")}</select></label></div>
+    <div class="form-row"><label>Tipo<select name="type" >${itemTypes.map((type) => { const configured = itemTypeConfig(type.id,organizationId); return option(type.id,configured.label,(item.type || "task") === type.id); }).join("")}</select></label><label>Status<select name="status" ${item.type === "approval" && !create || summaryGroup ? "disabled title=\"Resumo herdado dos subitens ativos\"" : ""}>${statusChoices(item.status || "backlog").map((status) => statusOption(status,(item.status || "backlog") === status.id)).join("")}</select></label></div>
     <label>Responsável<select name="ownerId">${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select></label>
     ${create ? (item.parentId ? `<div class="schedule-summary"><span>Início de referência do pai<strong>${dateCell(item.plannedStartAt || today())}</strong></span><span>Início e término finais<strong>Calculados pelas relações</strong></span></div>` : `<label>Início ideal inicial<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt || today())}" required/></label>`) : `<div class="schedule-summary"><span>Início previsto<strong>${dateCell(item.plannedStartAt)}</strong></span><span>Término previsto<strong>${dateCell(item.dueAt)}</strong></span><span>Início baseline<strong>${dateCell(item.baselineStartAt || item.plannedStartAt)}</strong></span><span>Término baseline<strong>${dateCell(item.baselineDueAt || item.dueAt)}</strong></span></div>`}
     <label>Duração planejada (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="${escapeHtml(create && item.plannedDurationDays === undefined ? "" : item.plannedDurationDays ?? 0)}" ${summaryGroup || completed ? "disabled" : ""} required/></label>

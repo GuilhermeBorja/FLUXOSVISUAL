@@ -1245,6 +1245,13 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (!canEditItem(user,item)) throw new Error("Sua regra GPO não permite editar este item.");
   const rollbackItems = state.items.map((entry) => ({...entry}));
   const rollbackEventCount = state.events.length;
+  // R2-26: empresa, setor e UF pertencem ao responsável. Quando o responsável muda,
+  // o contexto é rederivado dele, para que nenhum chamador (formulário, edição em lote)
+  // deixe o item com o contexto do responsável anterior.
+  if (input.ownerId !== undefined && input.ownerId !== item.ownerId) {
+    const nextOwner = state.users.find((entry) => entry.id === input.ownerId);
+    if (nextOwner) input = {...input, organizationId: nextOwner.organizationId || input.organizationId, sectorId: nextOwner.sectorId || input.sectorId, state: nextOwner.state || input.state};
+  }
   validateItemInput(input,item);
   if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro das regras GPO.");
   const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && entry.status !== "cancelled");

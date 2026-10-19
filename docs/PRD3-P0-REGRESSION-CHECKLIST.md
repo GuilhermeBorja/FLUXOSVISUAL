@@ -10,10 +10,10 @@
 
 | Estado | Quantidade |
 |---|---:|
-| preservado | 21 |
-| corrigido | 8 |
+| preservado | 22 |
+| corrigido | 10 |
 | regressão encontrada | 0 |
-| não verificado | 15 |
+| não verificado | 12 |
 
 Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual. Nenhum P0 parcial permanece como `não verificado`; isso não libera produção, pois ainda faltam inspeção visual manual do grafo e fechamento dos cenários integrados listados abaixo.
 
@@ -42,7 +42,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 | M-09 | Aprovações/correções preservam decisão, motivo, autor, data e rodada | preservado | `tests/p0-integrity.test.mjs` valida reprovação na rodada 1, motivo/revisor/data, criação da revisão, reenvio na rodada 2, encadeamento por `previousDecisionId` e aprovação final. CI #158 passou. Repetições de reprovação e combinações de responsáveis/perfis GPO ainda precisam de matriz ampliada. |
 | M-10 | Templates preservam estrutura, relações, pesos, durações e rollback | preservado | CI #122 passou nos testes de template: subitens, pesos, durações, relação temporal interna e rollback integral após referência inválida. Falta ampliar para múltiplos tipos de relação e matriz GPO. |
 | M-12 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | corrigido | Teste P0 reproduziu mutação parcial: o título mudava antes de uma repactuação ser negada pelo GPO. Corrigido no commit 46864d31 com pré-validação de permissões; CI #140 passou com 75/75 testes e smoke browser. GPO segue client-side e a matriz completa de operações continua pendente. |
-| M-13 | Critérios de aceite, testes e evidência rastreáveis | preservado | `tests/prd3-audit.test.mjs` valida 44 requisitos parciais únicos, estados permitidos, evidência/pendência preenchida, resumo de estados e sincronização da matriz com a checklist. A validação passou no [CI #39176684873](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39176684873). A rastreabilidade está estruturada; 15 requisitos continuam não verificados e o gate de produção permanece bloqueado. |
+| M-13 | Critérios de aceite, testes e evidência rastreáveis | preservado | `tests/prd3-audit.test.mjs` valida 44 requisitos parciais únicos, estados permitidos, evidência/pendência preenchida, resumo de estados e sincronização da matriz com a checklist. A validação passou no [CI #39176684873](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39176684873). A rastreabilidade está estruturada; 12 requisitos continuam não verificados e o gate de produção permanece bloqueado. |
 
 ## 2. Checklist dos demais itens parciais
 
@@ -52,15 +52,15 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 | R2-07 | P1 | Transformar um tipo de item em aprovação | preservado | Conversão para aprovação preservando ID, relações e histórico tem teste de regressão. |
 | R2-08 | P1 | Editar uma relação sem excluir e recriar | preservado | Edição preserva ID da relação e registra evento; teste de regressão incluído. Faltam permissões e rollback de todas as transições. |
 | R2-10 | P1 | Histórico detalhado: estado anterior/novo, usuário, empresa, data e hora | não verificado | Eventos capturam snapshots de ator/contexto e valores anterior/novo. Falta cobertura sistemática por operação. |
-| R2-12 | P1 | Substituir BACKLOG por Lista de pendências | não verificado | Rótulo Lista de pendências existe. Falta validar compatibilidade com registros legados reais. |
-| R2-14 | P1 | Remover “Em análise” e “Em correção” dos estados operacionais comuns | não verificado | Estados transitórios são omitidos de seletores comuns. Falta auditoria de todas as superfícies e dados antigos. |
+| R2-12 | P1 | Substituir BACKLOG por Lista de pendências | preservado | Os ids de status não mudaram desde a versão original (backlog e ready); só os rótulos foram renomeados para Lista de pendências e Liberado para execução, então dados salvos continuam válidos. Teste de contrato confere os rótulos e garante que não há 'Backlog' nem 'Pronto' fixos na interface. Falta validar com registros reais exportados do navegador do usuário. |
+| R2-14 | P1 | Remover “Em análise” e “Em correção” dos estados operacionais comuns | corrigido | Defeito encontrado: o seletor de status do item ocultava Em análise e Em correção também para um registro que já estava nesse estado, e a gravação trocava o status em silêncio para a primeira opção. Corrigido com statusChoices: os estados transitórios continuam fora das escolhas comuns, mas permanecem disponíveis para o item que já os usa. Teste incluído. Falta auditar o histórico e os filtros com dados antigos. |
 | R2-16 | P1 | IDs da Sintética renumerados após reordenação/indentação | não verificado | ID visual é derivado da ordenação exibida sem alterar ID interno. Faltam testes com todas as mudanças de hierarquia/filtro. |
 | R2-17 | P1 | Criar várias etapas de uma vez também em subitem | não verificado | Criação em lote tem rollback em falha e exige duração por etapa. Falta teste funcional em subitem com dados individuais e relações internas. |
 | R2-18 | P1 | Alinhar integralmente o painel do item e remover textos auxiliares desnecessários | não verificado | Painel reorganizado; falta inspeção visual para confirmar alinhamento e remoção de todos os textos. |
 | R2-20 | P1 | Padronizar proporção do eixo horizontal do Gantt | não verificado | Eixo proporcional e ticks existem; faltam testes visuais de zoom e escalas curtas/longas. |
 | R2-21 | P1 | Escolher cor de preenchimento das linhas para diferenciar indentação e projeto | corrigido | Defeito de fallback de cor corrigido no commit 10a16c78; testes unitários de precedência/fallback e smoke browser da cor de linha passam. Contraste visual e combinações extensas de projeto/nível ainda não verificados. |
 | R2-23 | P1 | Modificar cores e ícones dos estados | não verificado | Cores aplicadas à tabela, grafo, Gantt e seletores; ícones configurados aparecem no Gantt. Falta comprovar consistência completa na legenda e tooltips. |
-| R2-26 | P1 | Empresa, setor e estado herdados do responsável; remover de “Descrição e contexto” | não verificado | Empresa, setor e UF são derivados do responsável na entrada. Falta testar troca de responsável em itens existentes e fallback. |
+| R2-26 | P1 | Empresa, setor e estado herdados do responsável; remover de “Descrição e contexto” | corrigido | Defeito encontrado: a edição em lote trocava o responsável mantendo empresa, setor e UF do responsável anterior. Corrigido em updateItem, que agora rederiva o contexto do novo responsável e registra o evento de contexto. Teste de regressão reproduziu a falha antes da correção e passa depois. Falta testar o fallback para responsável ausente ou desativado. |
 | R2-27 | P1 | Item cancelado com percentual de controle 100% | preservado | Cancelamento define controle em 100% sem marcar conclusão operacional; teste dedicado incluído. |
 | R2-29 | P1 | Redimensionar painéis de cadastro e itens | não verificado | Redimensionamento de painéis existe. Faltam testes de mouse/teclado, limites, persistência e telas pequenas. |
 | R2-31 | P1 | Nome do programa “Fluxo Visual”, remover “Gestão Operacional” e substituir texto genérico pelo nome da organização | preservado | Auditoria de textos: nenhuma ocorrência do slogan antigo em workspace.js, app.js, graph.js, index.html ou README; marca FLUXO VISUAL nas telas de login, usuário master e workspace; título e meta descrição padronizados; o cabeçalho do workspace exibe o nome da organização do usuário. Teste de contrato incluído em tests/prd3-ui-contract.test.mjs. A tela de login ainda não conhece a organização, pois o usuário ainda não foi escolhido. |

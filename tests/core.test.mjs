@@ -518,3 +518,20 @@ test("P0 GPO: precedência de escopo e exceção individual é determinística e
   assert.throws(() => run('updateItem(item.id,{...item,title:"Mutação negada"},nowIso())'),/GPO/);
   assert.equal(run('getItem(item.id).title'),run("originalTitle"));
 });
+
+test("R2-26: trocar o responsável (inclusive em lote) rederiva empresa, setor e UF do novo responsável", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  const before = JSON.parse(run('JSON.stringify((({ownerId,organizationId,sectorId,state:s})=>({ownerId,organizationId,sectorId,state:s}))(getItem("item_doors")))'));
+  assert.deepEqual(before, { ownerId: "u_luis", organizationId: "org_castro", sectorId: "sec_pmo", state: "PE" });
+  // Mesma forma do applyBulkEdit: {...item, ownerId} carrega o contexto do responsável antigo.
+  run('state.users.find((entry)=>entry.id==="u_dmk").state="BA";');
+  run('updateItem("item_doors",{...getItem("item_doors"),ownerId:"u_dmk"});');
+  const after = JSON.parse(run('JSON.stringify((({ownerId,organizationId,sectorId,state:s})=>({ownerId,organizationId,sectorId,state:s}))(getItem("item_doors")))'));
+  assert.deepEqual(after, { ownerId: "u_dmk", organizationId: "org_dmk", sectorId: "sec_fornecedor", state: "BA" });
+  assert.equal(run('state.events.some((entry)=>entry.itemId==="item_doors" && entry.eventType==="owner_changed")'), true);
+  assert.equal(run('state.events.some((entry)=>entry.itemId==="item_doors" && entry.eventType==="context_changed")'), true);
+  // Sem troca de responsável, o contexto informado continua valendo.
+  run('updateItem("item_doors",{...getItem("item_doors"),title:"Portas revisadas"});');
+  assert.equal(run('getItem("item_doors").organizationId'), "org_dmk");
+});
