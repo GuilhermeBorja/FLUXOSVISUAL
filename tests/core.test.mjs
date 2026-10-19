@@ -127,13 +127,13 @@ test("duração da atividade dependente começa na liberação da predecessora T
   assert.equal(run('activityStartAt(first)'),"2026-10-01T12:00:00.000Z");
 });
 
-test("reprovação registra decisão e cria revisão ligada sem status rejeitado", () => {
+test("reprovação conserva aprovação e vincula tarefa de correção", () => {
   const run = context(); run('state.currentUserId="u_luis";');
-  run(`item=createItem({...${defaults},title:"Aprovação",type:"approval",ownerId:"u_luis"});item.approvalReviewerId="u_luis";predecessor=createItem(${defaults});createRelation(predecessor.id,item.id,"TI");updateItem(predecessor.id,{...predecessor,status:"done"});submitApprovalForReview(item.id,"Validar entrega");decision=decideApproval(item.id,"rejected","Ajustar documentação","u_luis");revision=getItem(item.supersededBy);`);
-  assert.equal(run('item.status'),"cancelled");
+  run(`item=createItem({...${defaults},title:"Aprovação",type:"approval",ownerId:"u_luis"});item.approvalReviewerId="u_luis";predecessor=createItem(${defaults});createRelation(predecessor.id,item.id,"TI");updateItem(predecessor.id,{...predecessor,status:"done"});submitApprovalForReview(item.id,"Validar entrega");decision=decideApproval(item.id,"rejected","Ajustar documentação","u_luis");revision=getItem(item.correctionItemId);`);
+  assert.equal(run('item.status'),"correction");
   assert.equal(run('state.approvalDecisions.some((entry)=>entry.id===decision.id && entry.outcome==="rejected")'),true);
-  assert.equal(run('revision.revisionOf===item.id && revision.status==="correction"'),true);
-  assert.equal(run('state.relations.some((relation)=>relation.sourceId===predecessor.id && relation.targetId===revision.id)'),true);
+  assert.equal(run('revision.correctionFor===item.id && revision.type==="task"'),true);
+  assert.equal(run('state.relations.some((relation)=>relation.sourceId===revision.id && relation.targetId===item.id && relation.relationType==="blocks")'),true);
   assert.equal(run('statusCatalog.some((status)=>status.id==="rejected")'),false);
 });
 

@@ -652,7 +652,8 @@ function approvalGate(itemOrId) {
   const blockers = (state.relations || [])
     .filter((relation) => relation.targetId === item.id && prerequisiteTypes.has(relation.relationType))
     .map((relation) => getItem(relation.sourceId))
-    .filter((source) => source && !completeStatus(source.status));
+    .filter((source) => source && (!completeStatus(source.status) || isBlocked(source)));
+  if (isBlocked(item)) blockers.unshift(item);
   return { released: blockers.length === 0, blockers };
 }
 
@@ -719,38 +720,23 @@ function decideApproval(id, outcome, reason = "", correctionOwnerId = "") {
     setApprovalStatus(item, "done", "approval_decided", reason.trim() || "Aprovado e concluído.");
   } else {
     const originalParent = item.parentId || "";
-    const revisionRound = (item.approvalRound || 1) + 1;
-    item.superseded = true;
-    setApprovalStatus(item, "cancelled", "approval_decided", reason.trim());
-    const revision = createItem({
-      title: `${item.title} · Revisão ${revisionRound}`, type: "approval", status: "backlog",
+    const round = (item.approvalRound || 1) + 1;
+    item.approvalRound = round;
+    item.correctionOwnerId = correctionOwner.id;
+    item.superseded = false;
+    const correction = createItem({
+      title: "Corrigir: " + item.title, type: "task", status: "backlog",
       ownerId: correctionOwner.id, organizationId: item.organizationId, sectorId: item.sectorId,
-      state: item.state, parentId: originalParent, description: item.description,
-      plannedStartAt: "", dueAt: "", weight: item.weight, progressPercent: 0,
+      state: item.state, parentId: originalParent, description: reason.trim(),
+      plannedStartAt: item.plannedStartAt || today(), weight: 1, progressPercent: 0
     });
-    revision.status = "correction";
-    revision.revisionOf = item.id;
-    revision.approvalRequestId = item.approvalRequestId || item.id;
-    revision.approvalRound = revisionRound;
-    revision.correctionOwnerId = correctionOwner.id;
-    revision.approvalReviewerId = item.ownerId;
-    revision.lastDecisionId = decision.id;
-    item.supersededBy = revision.id;
-    decision.revisionId = revision.id;
-    state.relations.forEach((relation) => {
-      if (relation.relationType === "contains") return;
-      const wasSource = relation.sourceId === item.id;
-      const wasTarget = relation.targetId === item.id;
-      if (!wasSource && !wasTarget) return;
-      relation.previousSourceId = relation.sourceId;
-      relation.previousTargetId = relation.targetId;
-      if (wasSource) relation.sourceId = revision.id;
-      if (wasTarget) relation.targetId = revision.id;
-      relation.updatedAt = nowIso();
-      relation.updatedBy = user.id;
-      createEvent(revision.id, "relation_retargeted", item.id, relation.id, "Relação transferida para a nova rodada de revisão.");
-    });
-    createEvent(revision.id, "approval_revision_started", item.id, revision.id, reason.trim());
+    correction.correctionFor = item.id;
+    correction.approvalRound = round;
+    item.correctionItemId = correction.id;
+    decision.correctionItemId = correction.id;
+    createRelation(correction.id, item.id, "blocks", 0, "Correção obrigatória antes do reenvio.");
+    setApprovalStatus(item, "correction", "approval_decided", reason.trim());
+    createEvent(correction.id, "approval_revision_started", item.id, correction.id, reason.trim());
     syncParentSummary(originalParent);
   }
   return decision;
@@ -1255,7 +1241,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   const next = {
     status: leastAdvanced.status,
     progressPercent: weighted.weight ? Math.round(weighted.weighted / weighted.weight) : null,
-    plannedDurationDays: inclusiveDurationDays(children.map((item)=>item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || today(), children.map((item)=>item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || today()),
+    plannedDurationDays: children.some((child)=>!child.plannedStartAt || !child.dueAt) ? 0 : inclusiveDurationDays(children.map((item)=>item.plannedStartAt).sort()[0], children.map((item)=>item.dueAt).sort().at(-1)),
     plannedStartAt: children.map((item) => item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "",
     dueAt: children.map((item) => item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "",
   };
@@ -1714,7 +1700,7 @@ function recalculatePlannedDates() {
     if (!["backlog","ready"].includes(item.status)) continue;
     if (summaryGroupIds.has(item.id)) continue;
     const blockers = state.relations.filter((r)=>r.targetId===item.id && r.relationType==="blocks");
-    const released = deps.every((r) => { const pred=byId.get(r.sourceId); if (!pred) return false; if (r.relationType === "II" || r.relationType === "IF") return ["in_progress","done"].includes(pred.status); return pred.status === "done"; }) && blockers.every((r)=>["done","cancelled"].includes(byId.get(r.sourceId)?.status));
+    const released = !isBlocked(item) && deps.every((r) => { const pred=byId.get(r.sourceId); if (!pred || isBlocked(pred)) return false; if (r.relationType === "II" || r.relationType === "IF") return ["in_progress","done"].includes(pred.status); return pred.status === "done"; }) && blockers.every((r)=>{const source=byId.get(r.sourceId);return source && !isBlocked(source) && ["done","cancelled"].includes(source.status);});
     const nextStatus = released ? "ready" : "backlog";
     if (item.status !== nextStatus) { createEvent(item.id,"status_changed",item.status,nextStatus,"Liberação calculada automaticamente pelas predecessoras."); item.status=nextStatus; }
   }

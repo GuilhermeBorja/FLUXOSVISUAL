@@ -246,38 +246,20 @@ const FluxosGraph = (() => {
       nodeElements.forEach((element) => element.classList.remove("propagation-active","propagation-current","propagation-stop"));
       edgeElements.forEach((element) => element.classList.remove("propagation-active"));
       if (!model.nodeById.has(id)) return false;
-      const path = [];
-      const visited = new Set();
-      const byId = new Map(options.items.map((item)=>[item.id,item]));
-      const children = new Map();
-      options.items.forEach((item)=>{ if(item.parentId && byId.has(item.parentId)) { if(!children.has(item.parentId)) children.set(item.parentId,[]); children.get(item.parentId).push(item); } });
-      for (const entries of children.values()) entries.sort((a,b)=>Number(a.sortOrder ?? 0)-Number(b.sortOrder ?? 0));
-      function containsEdge(parentId, childId) {
-        return model.links.find((link)=>link.source.id===parentId && link.target.id===childId && link.relation.relationType==="contains")?.relation.id || "";
+      const path=[], visited=new Set(), byId=new Map(options.items.map(item=>[item.id,item])), children=new Map();
+      options.items.forEach(item=>{if(item.parentId&&byId.has(item.parentId)){if(!children.has(item.parentId))children.set(item.parentId,[]);children.get(item.parentId).push(item);}});
+      const sort=(a,b)=>Number(a.sortOrder??0)-Number(b.sortOrder??0)||options.items.indexOf(a)-options.items.indexOf(b);
+      for(const entries of children.values())entries.sort(sort);
+      const edge=(parent,child)=>model.links.find(link=>link.source.id===parent&&link.target.id===child&&link.relation.relationType==="contains")?.relation.id||"";
+      function walk(itemId,incoming="",depth=0){
+        if(visited.has(itemId)||!model.nodeById.has(itemId))return;
+        visited.add(itemId);path.push({nodeId:itemId,edgeId:incoming});
+        for(const child of children.get(itemId)||[]){if(visited.has(child.id))continue;walk(child.id,edge(itemId,child.id),depth+1);if(depth>0)path.push({nodeId:itemId,edgeId:edge(itemId,child.id)});}
       }
-      function visit(itemId, incomingEdgeId = "") {
-        if (visited.has(itemId) || !model.nodeById.has(itemId)) return;
-        visited.add(itemId);
-        path.push({nodeId:itemId,edgeId:incomingEdgeId});
-        for (const child of children.get(itemId) || []) visit(child.id,containsEdge(itemId,child.id));
-      }
-      // Begin at the explicitly selected item. Finish its subtree, then climb
-      // back through its ancestors and continue through each ancestor's remaining branches.
-      visit(id);
-      let branchId = id;
-      let parentId = byId.get(branchId)?.parentId || "";
-      const climbed = new Set();
-      while (parentId && byId.has(parentId) && !climbed.has(parentId)) {
-        climbed.add(parentId);
-        visit(parentId,containsEdge(parentId,branchId));
-        for (const sibling of children.get(parentId) || []) {
-          if (sibling.id !== branchId) visit(sibling.id,containsEdge(parentId,sibling.id));
-        }
-        branchId = parentId;
-        parentId = byId.get(branchId)?.parentId || "";
-      }
-      // Finally cover unrelated components in the current graph order, without loops or repeats.
-      for (const node of model.nodes) visit(node.id);
+      const roots=options.items.filter(item=>!item.parentId||!byId.has(item.parentId)).sort(sort);
+      let top=byId.get(id),seen=new Set();while(top?.parentId&&byId.has(top.parentId)&&!seen.has(top.id)){seen.add(top.id);top=byId.get(top.parentId);}
+      if(top){const index=roots.findIndex(root=>root.id===top.id);if(index>0)roots.push(...roots.splice(0,index));}
+      roots.forEach(root=>walk(root.id));options.items.forEach(item=>walk(item.id));
       if (!path.length && model.nodeById.has(id)) path.push({nodeId:id});
       path.forEach((entry,index) => {
         propagationTimers.push(setTimeout(() => {
