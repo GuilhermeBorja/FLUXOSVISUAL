@@ -111,3 +111,25 @@ test('legacy local data gets a recovery copy and retains explicit duration and i
   assert.equal(run('state.items[0].plannedDurationDays'),2);
   assert.deepEqual(JSON.parse(storage.get('fluxosVisualState.v2.beforeInclusiveCalendar')),saved);
 });
+
+test('Analytical graph forecast uses the same inclusive finish as the stored schedule',()=>{
+  const {run}=context();
+  run(`a=createItem({...${input},plannedDurationDays:2});FluxosGraph.mount=(target,options)=>{capturedLabels=options.labels;return {};};document.querySelectorAll=()=>[];mountGraph(state.items);`);
+  assert.equal(run('capturedLabels.expected(a)'),run("formatDate('2026-10-02')"));
+  assert.equal(run('capturedLabels.deviation(a)'),'No término ideal');
+});
+test('legacy reload immediately recalculates inclusive forecasts while preserving baselines and relations',()=>{
+  const seed=context();
+  seed.run(`a=createItem({...${input},plannedDurationDays:2});b=createItem({...${input},plannedDurationDays:2});createRelation(a.id,b.id,'TI');`);
+  const saved=JSON.parse(seed.run('JSON.stringify(state)'));
+  delete saved.calendarVersion;
+  saved.items[0].dueAt='2026-10-03'; saved.items[0].baselineDueAt='2026-10-03';
+  saved.items[1].dueAt='2026-10-05';
+  const {run}=context(saved);
+  assert.equal(run('state.items[0].dueAt'),'2026-10-02');
+  assert.equal(run('state.items[1].plannedStartAt'),'2026-10-03');
+  assert.equal(run('state.items[1].dueAt'),'2026-10-04');
+  assert.equal(run('state.items[0].baselineDueAt'),'2026-10-03');
+  assert.equal(run('state.relations[0].sourceId===state.items[0].id'),true);
+  assert.equal(run('state.calendarMigrationPending'),undefined);
+});

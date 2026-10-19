@@ -188,7 +188,7 @@ test("repactuação desloca previsão dos descendentes sem alterar a baseline or
   run('root=createItem({...' + defaults + ',title:"Grupo",plannedStartAt:"2026-10-25",dueAt:"2026-10-25"});' +
       'a=createItem({...' + defaults + ',title:"Atividade",parentId:root.id,plannedStartAt:"2026-10-25",dueAt:"2026-10-28",plannedDurationDays:3});' +
       'updateItem(root.id,{...root,replannedDueAt:"2026-10-31"});');
-  assert.equal(run("a.plannedStartAt"),"2026-10-28");
+  assert.equal(run("a.plannedStartAt"),"2026-10-29");
   assert.equal(run("a.dueAt"),"2026-10-31");
   assert.equal(run("a.baselineStartAt"),"2026-10-25");
   assert.equal(run("a.baselineDueAt"),"2026-10-28");
@@ -423,17 +423,17 @@ test("P0: falha ao aplicar template reverte integralmente itens, relações e ev
 test("P0: término baseline é capturado quando calculado pela duração inicial", () => {
   const run = context(); run('state.currentUserId="u_luis";');
   run('item=createItem({...' + defaults + ',title:"Duração sem término informado",plannedStartAt:"2026-10-25",dueAt:"",plannedDurationDays:3});');
-  assert.equal(run('item.dueAt'),"2026-10-28");
-  assert.equal(run('item.baselineDueAt'),"2026-10-28");
+  assert.equal(run('item.dueAt'),"2026-10-27");
+  assert.equal(run('item.baselineDueAt'),"2026-10-27");
   run('recalculatePlannedDates();');
-  assert.equal(run('item.baselineDueAt'),"2026-10-28");
+  assert.equal(run('item.baselineDueAt'),"2026-10-27");
 });
 
 test("P0: predecessora cancelada não desloca a previsão da atividade ativa", () => {
   const run = context(); run('state.currentUserId="u_luis";');
   run('cancelled=createItem({...' + defaults + ',title:"Atividade cancelada",status:"cancelled",progressPercent:100,plannedStartAt:"2026-10-01",dueAt:"2027-01-09",plannedDurationDays:100});active=createItem({...' + defaults + ',title:"Atividade ativa",status:"backlog",plannedStartAt:"2026-10-01",dueAt:"2026-10-03",plannedDurationDays:2});createRelation(cancelled.id,active.id,"TI",0);recalculatePlannedDates();');
   assert.equal(run('active.plannedStartAt'),"2026-10-01");
-  assert.equal(run('active.dueAt'),"2026-10-03");
+  assert.equal(run('active.dueAt'),"2026-10-02");
 });
 
 test("P0: arquivar e restaurar subárvore preserva relações CONTÉM e temporais", () => {
