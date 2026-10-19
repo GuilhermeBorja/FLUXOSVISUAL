@@ -676,6 +676,39 @@ function renderQuickStepRows(titles) {
   if(duration){duration.required=!rows.length;duration.disabled=!!rows.length;duration.closest("label").hidden=!!rows.length;}
 }
 
+function renderAttachments(item,editable) {
+  const entries = (state.attachments || []).filter((attachment) => attachment.itemId === item.id);
+  if (!entries.length) return '<section class="attachment-list"><h3>Anexos e evidências</h3><p class="secondary">Nenhum anexo neste item.</p></section>';
+  return '<section class="attachment-list"><h3>Anexos e evidências (' + entries.length + ')</h3><div class="admin-list">' + entries.map((entry) => '<div class="admin-entry"><span><a class="attachment-link" href="' + escapeHtml(entry.dataUrl) + '" download="' + escapeHtml(entry.name) + '">' + icon("paperclip") + escapeHtml(entry.name) + '</a><small>' + escapeHtml(entry.type) + ' · ' + Math.ceil(Number(entry.size || 0) / 1024) + ' KB · ' + escapeHtml(userName(entry.createdBy)) + ' · ' + escapeHtml(formatDateTime(entry.createdAt)) + '</small></span>' + (editable && gpoDecision(currentUser(),"delete_attachment",item) === true ? '<button type="button" class="icon-button delete-icon" data-delete-kind="attachment" data-delete-id="' + escapeHtml(entry.id) + '" aria-label="Excluir anexo ' + escapeHtml(entry.name) + '">' + icon("trash-2") + '</button>' : '') + '</div>').join("") + '</div><p class="secondary">Os arquivos permanecem neste navegador e não são enviados a um serviço compartilhado.</p></section>';
+}
+
+function updateSchedulePreview() {
+  const form=document.querySelector("#createItemForm"), output=document.querySelector("#schedulePreview");
+  if(!form||!output)return;
+  const start=String(form.querySelector('[name="plannedStartAt"]')?.value||today());
+  const durationRaw=String(form.querySelector('[name="plannedDurationDays"]')?.value||"").trim();
+  const titles=String(form.querySelector('[name="quickSteps"]')?.value||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if(titles.length){
+    const durations=titles.map((_,i)=>Number(form.querySelector('[name="stepDuration_'+i+'"]')?.value||0));
+    if(durations.some(d=>!Number.isInteger(d)||d<1)){output.textContent="Informe a duração de cada subitem.";return;}
+    let predecessorStart=start, predecessorDuration=durations[0], first=start,last=inclusiveFinishDate(start,durations[0]);
+    for(let i=1;i<durations.length;i++){
+      const relationType=String(form.querySelector('[name="stepRelation_'+i+'"]')?.value||"TI");
+      let candidate=start;
+      if(["TI","II","TT","IF"].includes(relationType)){
+        candidate=datePlusDays(predecessorStart,temporalStartOffset({relationType,lagDays:0},predecessorDuration,durations[i]));
+      }
+      predecessorStart=candidate;predecessorDuration=durations[i];
+      if(candidate<first)first=candidate;
+      const finish=inclusiveFinishDate(candidate,durations[i]);if(finish>last)last=finish;
+    }
+    output.textContent="Previsão do grupo: "+formatDate(first)+" a "+formatDate(last)+" · "+inclusiveDurationDays(first,last)+" dias";
+    return;
+  }
+  if(durationRaw===""||!Number.isFinite(Number(durationRaw))){output.textContent="Informe a duração da atividade.";return;}
+  output.textContent="Previsão final: "+formatDate(inclusiveFinishDate(start,Number(durationRaw)));
+}
+
 function renderCreatePanel() {
   const parent = getItem(ui.createParentId);
   const editable = accessibleItems().filter((item) => canEditItem(currentUser(), item));
