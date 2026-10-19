@@ -128,3 +128,11 @@ A execução 39168227194 falhou exclusivamente no smoke test de navegador: o sel
 - **Tipos (M-03):** uma aprovação em análise ou correção não pode mais ser convertida em outro tipo, e Em análise e Em correção não podem ser atribuídos a tipos que não são aprovação. Registros antigos nesses estados continuam editáveis.
 - **Limite mantido:** a configuração de tipos cobre ícone e cor por empresa. Campos obrigatórios e transições por tipo pertencem à Etapa 2, como declara o README.
 - **Pendência:** inspeção visual da linha do tempo do histórico e da tela de configuração de tipos.
+
+
+## Identificação da versão publicada — 19/10/2026
+
+- **Rodapé e telas de entrada** exibem `Versão <número> · build <commit> · <data e hora>`, por exemplo `Versão 0.4.0-prd3 · build e3ea713 · 19/10/2026, 12:19`. Sem build (arquivos servidos direto de `dist`), aparece "Versão de desenvolvimento (sem build)".
+- **Origem:** `npm run build` executa `scripts/build-version.mjs`, que grava `dist/version.js` (ignorado pelo Git) com a versão do `package.json`, o commit (`GITHUB_SHA`), a branch e a data do build. O mesmo script renova o sufixo `?v=` dos scripts e estilos no `index.html`, para o navegador não reutilizar arquivos antigos do cache.
+- **Como conferir um deploy:** compare o commit exibido no rodapé com o commit esperado (`git log -1 --format=%h`). Se o rodapé mostrar um commit anterior, o navegador ou o Pages ainda está servindo a versão antiga.
+- **Atenção:** `deploy.yml` só dispara em `main` e `feature/prd-evolution`; um push na `PRD3` roda apenas a validação e não publica.

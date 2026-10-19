@@ -16,6 +16,8 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   await page.locator(".ops-shell").waitFor();
   assert.match(await page.title(), /Fluxo Visual/);
+  // O rodapé identifica a versão publicada: versão do pacote, commit e data do build.
+  assert.match(await page.locator(".workspace-footer [data-build-label]").innerText(), /^Versão \S+ · build [0-9a-f]{7} · \d{2}\/\d{2}\/\d{4}/);
   assert.equal(await page.getByRole("tab", { name: /Sintética/ }).count(), 1);
   assert.equal(await page.getByRole("tab", { name: /Analítica/ }).count(), 1);
   assert.equal(await page.getByRole("tab", { name: /Gantt/ }).count(), 1);

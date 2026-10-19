@@ -74,6 +74,15 @@ function plannedLabel(item) {
 
 function statusDisplayLabel(item) { if (item?.type === "approval" && item.status === "under_review") return "Aguardando decisão"; if (item?.type === "approval" && item.status === "correction") return "Correção solicitada"; return labelOf(statusCatalog,item?.status); }
 
+// Identificação do build, gravada em dist/version.js pelo `npm run build`. Sem build (arquivos servidos
+// direto da pasta), exibe "desenvolvimento" para deixar claro que não é uma versão publicada.
+function buildLabel() {
+  const info = typeof FLUXO_BUILD !== "undefined" ? FLUXO_BUILD : null;
+  if (!info) return "Versão de desenvolvimento (sem build)";
+  const when = new Date(info.builtAt);
+  return `Versão ${info.version} · build ${info.build}${Number.isFinite(when.getTime()) ? ` · ${when.toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}` : ""}`;
+}
+
 function signalLabel(item) {
   if (isBlocked(item)) return "Bloqueado";
   if (isOverdue(item)) return "Atrasado";
@@ -186,7 +195,7 @@ function render() {
       <section id="workspaceView" role="tabpanel" aria-labelledby="${ui.overviewMode === "table" ? "tableTab" : ui.overviewMode === "graph" ? "graphTab" : "ganttTab"}">
         ${ui.overviewMode === "table" ? renderTable(items) : ui.overviewMode === "graph" ? renderGraph(items) : renderGantt(items)}
       </section>
-      <footer class="workspace-footer"><span>Permissões aplicadas por regras GPO</span><span>Dados de demonstração salvos neste navegador</span></footer>
+      <footer class="workspace-footer"><span>Permissões aplicadas por regras GPO</span><span>Dados de demonstração salvos neste navegador</span><span class="build-label" data-build-label title="Identificação desta versão publicada">${escapeHtml(buildLabel())}</span></footer>
     </main>
     <div id="panelRoot"></div>`;
   bindWorkspace();
@@ -202,6 +211,7 @@ function renderMasterSetup() {
     <p>O workspace começará vazio. O master poderá cadastrar a organização, os setores e os demais usuários.</p>
     <form id="masterSetupForm" class="form-stack"><label>Nome do administrador<input name="name" required maxlength="120" autocomplete="name"/></label><label>E-mail<input name="email" type="email" required autocomplete="email"/></label><button class="button primary" type="submit">Criar usuário master</button></form>
     <div class="demo-note"><strong>Protótipo de validação</strong><span>Os dados permanecem neste navegador. Esta etapa não substitui autenticação segura no servidor.</span></div>
+    <p class="build-label" data-build-label>${escapeHtml(buildLabel())}</p>
     </section></main>`;
   document.querySelector("#masterSetupForm").addEventListener("submit",(event)=>{
     event.preventDefault();
@@ -235,6 +245,7 @@ function renderLogin() {
     <p>Escolha um usuário para testar as regras GPO de demonstração.</p>
     <form id="loginForm"><label>Usuário<select name="userId" required>${state.users.filter((user) => !user.disabled).map((user) => option(user.id, `${user.name} · ${orgName(user.organizationId)}`)).join("")}</select></label><button class="button primary" type="submit">Entrar</button></form>
     <div class="demo-note"><strong>Modo de demonstração</strong><span>Login por perfil. Os dados ficam salvos neste navegador.</span></div>
+    <p class="build-label" data-build-label>${escapeHtml(buildLabel())}</p>
     </section></main>`;
   document.querySelector("#loginForm").addEventListener("submit", (event) => {
     event.preventDefault();
