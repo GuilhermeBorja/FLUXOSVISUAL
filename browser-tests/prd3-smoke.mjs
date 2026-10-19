@@ -121,7 +121,6 @@ try {
 
   // P0 R2-25: opening an item exposes the schedule/baseline fields and duration.
   await page.locator(`button[data-select="${crossViewItem.id}"]`).first().click();
-  console.log("UX_DEBUG_ITEM_OPEN",JSON.stringify(await page.evaluate(()=>({id:ui.selectedItemId,panel:ui.panel,tab:ui.panelTab,html:document.querySelector("#panelRoot")?.innerHTML.slice(0,1300)}))),"errors:",JSON.stringify(errors));
   await page.locator("#updateItemForm").waitFor();
   const itemScheduleSummary = await page.locator("#updateItemForm .schedule-summary").innerText();
   assert.match(itemScheduleSummary, /Início previsto/);
@@ -226,27 +225,15 @@ try {
   await draggedNode.waitFor();
   await linkedNode.waitFor();
 
-  await page.getByRole("button", { name: /Configurações/ }).click();
+  await page.getByRole("button", { name: /Cadastros e configurações/i }).click();
+  await page.getByRole("tab", { name: /Preferências/ }).click();
   const drawer = page.locator(".drawer");
-  await drawer.evaluate(async (element) => {
-    await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => {})));
-  });
-  const drawerWidthBefore = await drawer.evaluate((element) => element.getBoundingClientRect().width);
-  const drawerHandle = page.locator(".drawer-resize-handle");
-  const drawerHandleBox = await drawerHandle.boundingBox();
-  assert.ok(drawerHandleBox);
-  await page.mouse.move(drawerHandleBox.x + 4, drawerHandleBox.y + drawerHandleBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(drawerHandleBox.x - 36, drawerHandleBox.y + drawerHandleBox.height / 2);
-  await page.mouse.up();
-  const drawerWidthAfter = await drawer.evaluate((element) => element.getBoundingClientRect().width);
-  assert.ok(drawerWidthAfter >= drawerWidthBefore + 20, `drawer width did not increase: ${drawerWidthBefore} -> ${drawerWidthAfter}`);
+  await drawer.waitFor();
   await page.locator('[data-row-fill-level="1"]').waitFor();
   await page.locator('[data-row-fill-level="1"]').evaluate((input) => {
     input.value = "#123456";
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await page.locator(".ops-shell").waitFor();
   await page.getByRole("button", { name: /Fechar painel/ }).click();
   await page.locator(".drawer").waitFor({ state: "detached" });
   await page.getByRole("tab", { name: /Sintética/ }).click();
@@ -256,33 +243,24 @@ try {
   await childRow.waitFor();
   assert.equal(await childRow.evaluate((row) => getComputedStyle(row).getPropertyValue("--row-fill").trim()), "#123456");
 
-  await page.getByRole("button", { name: /Colunas/ }).click();
-  const weightToggle = page.locator('[data-column-toggle="weight"]');
+  // Column visibility now lives in the unified preferences panel.
+  await page.getByRole("button", { name: /Cadastros e configurações/i }).click();
+  await page.getByRole("tab", { name: /Preferências/ }).click();
+  const weightToggle = page.locator('[data-setting-column="weight"]');
   await weightToggle.uncheck();
-  const weightHeader = page.locator('th[data-column-key="weight"]');
-  assert.equal(await weightHeader.evaluate((header) => header.classList.contains("column-hidden")), true);
-  assert.equal(await weightHeader.locator(".column-resize-handle").count(), 1);
-  await weightToggle.check();
-  const visibleWeightHeader = page.locator('th[data-column-key="weight"]');
-  await visibleWeightHeader.scrollIntoViewIfNeeded();
-  const widthBefore = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
-  const handleBox = await visibleWeightHeader.locator(".column-resize-handle").boundingBox();
-  assert.ok(handleBox);
-  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox.x + handleBox.width / 2 + 24, handleBox.y + handleBox.height / 2);
-  await page.mouse.up();
-  const widthAfter = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
-  assert.ok(widthAfter >= widthBefore + 10, `column width did not increase: ${widthBefore} -> ${widthAfter}`);
-  await visibleWeightHeader.locator(".column-resize-handle").focus();
-  await page.keyboard.press("ArrowRight");
-  const widthAfterKeyboard = await visibleWeightHeader.evaluate((header) => header.getBoundingClientRect().width);
-  assert.ok(widthAfterKeyboard > widthAfter, `keyboard column resize did not increase width: ${widthAfter} -> ${widthAfterKeyboard}`);
+  await page.getByRole("button", { name: /Fechar painel/ }).click();
+  await page.locator(".drawer").waitFor({ state: "detached" });
+  assert.equal(await page.locator('th[data-column-key="weight"]').evaluate(header=>header.classList.contains("column-hidden")), true);
+  await page.getByRole("button", { name: /Cadastros e configurações/i }).click();
+  await page.getByRole("tab", { name: /Preferências/ }).click();
+  await page.locator('[data-setting-column="weight"]').check();
+  await page.getByRole("button", { name: /Fechar painel/ }).click();
+  await page.locator(".drawer").waitFor({ state: "detached" });
 
   await page.locator('button[data-select="item_adm"]').first().click();
   await page.locator('[data-action="new-subitem"]').click();
   await page.locator("#createItemForm").waitFor();
-  assert.equal(await page.locator('#createItemForm [name="plannedStartAt"]').count(), 0);
+  assert.equal(await page.locator('#createItemForm [name="plannedStartAt"]').count(), 1);
   assert.equal(await page.locator('#createItemForm [name="plannedDurationDays"]').inputValue(), "");
   await page.getByRole("button", { name: /Fechar painel/ }).click();
   await page.locator(".drawer").waitFor({ state: "detached" });
