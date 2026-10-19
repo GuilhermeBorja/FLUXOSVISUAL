@@ -109,3 +109,12 @@ A execução 39168227194 falhou exclusivamente no smoke test de navegador: o sel
 - Corrigido o smoke test para fechar o formulário de criação do subitem e aguardar a remoção do drawer antes de medir os viewports.
 - Execução integral confirmada como sucesso: [GitHub Actions run 39168536101](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39168536101). O log contém `PRD3 browser smoke passed` e cobriu navegação, Gantt, grafo, configuração de cor, redimensionamento de mouse/teclado e resoluções 1920/1366/1024/768/390px.
 - Esta correção fecha apenas a falha de smoke test identificada; não representa aceite de todos os requisitos do PRD3 nem deploy para `main`.
+
+
+## Bloqueio como indicador (M-05) — 19/10/2026
+
+- **Decisão:** "Bloqueado" deixa de ser status operacional e passa a ser indicador do item (`blocked`, `blockedReason`, `blockedAt`). O status operacional não muda ao sinalizar ou remover o bloqueio. Atraso e risco já eram derivados de prazo e progresso.
+- **Interface:** badge com o motivo, filtro "Indicador" (bloqueados, atrasados, em risco), campo no formulário de edição e eventos de histórico próprios. A edição em lote não gera evento quando o bloqueio não muda.
+- **Migração:** dados salvos com status `blocked` recuperam o status anterior pelo histórico; sem histórico, itens com avanço ficam "Em execução" e os demais "Aguardando". O motivo recebe o texto "Migrado do status Bloqueado" e é registrado um evento. O filtro de status antigo é convertido para o indicador. Modelos e entradas legadas com `blocked` passam pela mesma normalização.
+- **Concluir ou cancelar** um item encerra o indicador, com evento.
+- **Pendência:** inspeção visual do badge e do formulário; o tooltip analítico ainda não mostra o motivo do bloqueio.

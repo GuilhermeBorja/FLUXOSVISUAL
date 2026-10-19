@@ -910,3 +910,7 @@ body.panel-open { overflow: hidden; }
   .type-setting { grid-template-columns: minmax(0, 1fr); }
   .template-review-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+.blocked-row { align-items: end; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; }
+.blocked-mark { color: #c2474d; }
