@@ -314,3 +314,33 @@ test("P0 R2-19: propagação percorre subárvore, sobe aos pais e visita ramos r
   assert.equal(new Set(order).size,items.length);
   assert.equal(classes.get("b").has("propagation-stop"),true);
 });
+
+test("M-11: seletor de anexos informa limites e armazenamento local antes do envio", () => {
+  const app = readFileSync(new URL("../dist/app.js", import.meta.url), "utf8");
+  const perFile = Number(app.match(/const MAX_ATTACHMENT_BYTES = (\d+);/)?.[1]);
+  const total = Number(app.match(/const MAX_ATTACHMENT_TOTAL_BYTES = (\d+);/)?.[1]);
+  const notice = workspace.match(/<small class="attachment-limits">([^<]+)<\/small>/)?.[1] || "";
+  assert.ok(notice, "aviso de limites ausente no seletor de anexos");
+  assert.equal(perFile, 256 * 1024);
+  assert.equal(total, 1024 * 1024);
+  assert.match(notice, /256 KB por arquivo/);
+  assert.match(notice, /1 MB no total/);
+  assert.match(notice, /apenas neste navegador/);
+  assert.match(notice, /sem armazenamento no servidor/);
+});
+
+test("R2-31: identidade 'Fluxo Visual' sem o slogan antigo e com nome da organização no cabeçalho", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../dist/app.js", import.meta.url), "utf8");
+  const normalize = (text) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  for (const [name, content] of [["workspace.js", workspace], ["app.js", app], ["graph.js", graph], ["index.html", html], ["README.md", readme]]) {
+    assert.doesNotMatch(normalize(content), /gestao operacional/, `${name} ainda contém o slogan antigo`);
+  }
+  assert.doesNotMatch(readme, /Fluxos ·/);
+  const brands = workspace.match(/<div class="brand">\$\{icon\("workflow"\)\}<span>([^<]+)<\/span><\/div>/g) || [];
+  assert.ok(brands.length >= 3, "telas de login, master e workspace devem exibir a marca");
+  for (const brand of brands) assert.match(brand, /<span>FLUXO VISUAL<\/span>/);
+  assert.match(workspace, /<h1>\$\{escapeHtml\(orgName\(user\.organizationId\) === "-" \? "Organização" : orgName\(user\.organizationId\)\)\}<\/h1>/);
+  assert.match(html, /<title>Fluxo Visual<\/title>/);
+  assert.match(html, /content="Fluxo Visual — /);
+});

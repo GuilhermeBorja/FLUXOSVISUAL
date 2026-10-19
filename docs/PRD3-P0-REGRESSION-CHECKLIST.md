@@ -10,10 +10,10 @@
 
 | Estado | Quantidade |
 |---|---:|
-| preservado | 20 |
-| corrigido | 7 |
+| preservado | 21 |
+| corrigido | 8 |
 | regressão encontrada | 0 |
-| não verificado | 17 |
+| não verificado | 15 |
 
 Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; baseline final vazia quando o término era derivado da duração; predecessora cancelada deslocando a previsão de atividade ativa; relações CONTÉM ancestrais obsoletas ao excluir um pai mantendo os filhos; edição parcial antes de uma negação GPO; e prévia de subitem calculada a partir de hoje em vez da baseline do pai. Os seis foram corrigidos e validados nos CI #131, #135, #136, #140 e #150 (77/77 testes e smoke browser no último). Nenhuma regressão permanece identificada como aberta no CI atual. Nenhum P0 parcial permanece como `não verificado`; isso não libera produção, pois ainda faltam inspeção visual manual do grafo e fechamento dos cenários integrados listados abaixo.
 
@@ -42,7 +42,7 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 | M-09 | Aprovações/correções preservam decisão, motivo, autor, data e rodada | preservado | `tests/p0-integrity.test.mjs` valida reprovação na rodada 1, motivo/revisor/data, criação da revisão, reenvio na rodada 2, encadeamento por `previousDecisionId` e aprovação final. CI #158 passou. Repetições de reprovação e combinações de responsáveis/perfis GPO ainda precisam de matriz ampliada. |
 | M-10 | Templates preservam estrutura, relações, pesos, durações e rollback | preservado | CI #122 passou nos testes de template: subitens, pesos, durações, relação temporal interna e rollback integral após referência inválida. Falta ampliar para múltiplos tipos de relação e matriz GPO. |
 | M-12 | GPO local com escopos, precedência e exceções; sem alegar segurança server-side | corrigido | Teste P0 reproduziu mutação parcial: o título mudava antes de uma repactuação ser negada pelo GPO. Corrigido no commit 46864d31 com pré-validação de permissões; CI #140 passou com 75/75 testes e smoke browser. GPO segue client-side e a matriz completa de operações continua pendente. |
-| M-13 | Critérios de aceite, testes e evidência rastreáveis | preservado | `tests/prd3-audit.test.mjs` valida 44 requisitos parciais únicos, estados permitidos, evidência/pendência preenchida, resumo de estados e sincronização da matriz com a checklist. A validação passou no [CI #39176684873](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39176684873). A rastreabilidade está estruturada; 17 requisitos continuam não verificados e o gate de produção permanece bloqueado. |
+| M-13 | Critérios de aceite, testes e evidência rastreáveis | preservado | `tests/prd3-audit.test.mjs` valida 44 requisitos parciais únicos, estados permitidos, evidência/pendência preenchida, resumo de estados e sincronização da matriz com a checklist. A validação passou no [CI #39176684873](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39176684873). A rastreabilidade está estruturada; 15 requisitos continuam não verificados e o gate de produção permanece bloqueado. |
 
 ## 2. Checklist dos demais itens parciais
 
@@ -63,14 +63,14 @@ Foram reproduzidos seis defeitos P0: peso zero legado interpretado como peso 1; 
 | R2-26 | P1 | Empresa, setor e estado herdados do responsável; remover de “Descrição e contexto” | não verificado | Empresa, setor e UF são derivados do responsável na entrada. Falta testar troca de responsável em itens existentes e fallback. |
 | R2-27 | P1 | Item cancelado com percentual de controle 100% | preservado | Cancelamento define controle em 100% sem marcar conclusão operacional; teste dedicado incluído. |
 | R2-29 | P1 | Redimensionar painéis de cadastro e itens | não verificado | Redimensionamento de painéis existe. Faltam testes de mouse/teclado, limites, persistência e telas pequenas. |
-| R2-31 | P1 | Nome do programa “Fluxo Visual”, remover “Gestão Operacional” e substituir texto genérico pelo nome da organização | não verificado | Título e README padronizados para Fluxo Visual. Falta auditar metadados, login e todos os textos. |
+| R2-31 | P1 | Nome do programa “Fluxo Visual”, remover “Gestão Operacional” e substituir texto genérico pelo nome da organização | preservado | Auditoria de textos: nenhuma ocorrência do slogan antigo em workspace.js, app.js, graph.js, index.html ou README; marca FLUXO VISUAL nas telas de login, usuário master e workspace; título e meta descrição padronizados; o cabeçalho do workspace exibe o nome da organização do usuário. Teste de contrato incluído em tests/prd3-ui-contract.test.mjs. A tela de login ainda não conhece a organização, pois o usuário ainda não foi escolhido. |
 | R2-32 | P1 | Grafo exibe término idealizado inicial abaixo do nome e timer do responsável | preservado | Nós exibem início/término idealizados, baseline e responsável; timer mede tempo com o responsável atual. Falta validação visual em nós densos. |
 | R2-33 | P1 | Clicar no responsável na árvore lateral destaca os itens desse responsável | não verificado | Árvore lateral oferece destaque por responsável. Falta teste de interação e reversão sem perda de contexto. |
 | M-03 | P1 | Tipos configuráveis com campos obrigatórios, estados e transições coerentes | não verificado | Falta matriz por tipo e fluxo de aprovação. |
 | M-05 | P1 | Atraso/risco/bloqueio como indicadores, não estados operacionais | não verificado | Falta validar todas as visões e filtros. |
 | M-07 | P1 | Tooltip analítico completo | não verificado | Falta inspeção visual e teste de todos os campos. |
 | M-08 | P1 | Árvore/filtros com expansão, seleção e combinações coerentes | não verificado | Falta matriz de combinações de filtros. |
-| M-11 | P1 | Limitações de anexos locais explicitadas; sem simular backend | não verificado | Auditar avisos em todas as superfícies. |
+| M-11 | P1 | Limitações de anexos locais explicitadas; sem simular backend | corrigido | Defeito encontrado: o seletor de anexos tinha o aviso vazio e os limites só apareciam após um erro. Corrigido: o seletor informa 256 KB por arquivo, 1 MB no total e armazenamento apenas neste navegador, sem servidor. Teste de contrato confere o texto contra as constantes de app.js. Falta inspeção visual do aviso. |
 
 ## 3. Correções e commits de evidência
 

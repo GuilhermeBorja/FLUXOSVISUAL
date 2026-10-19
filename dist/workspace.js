@@ -655,7 +655,7 @@ function itemFormFields(item, create = false) {
     <div class="form-row"><label>Peso da atividade<input type="number" name="weight" min="0.1" step="0.1" value="${escapeHtml(item.weight ?? 1)}" ${summaryGroup ? "disabled title=\"O peso é aplicado às atividades finais\"" : ""} required/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent ?? 0)}" placeholder="0" ${summaryGroup ? "disabled title=\"Progresso herdado dos subitens ativos\"" : ""}/><small>${summaryGroup ? "Resumo calculado a partir das atividades finais." : ""}</small></label></div>
     <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description)}</textarea></label>
      </details>
-    ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state || user.state,createdBy:item.createdBy || user.id}) === true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small></small></label>' : ""}`;
+    ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state || user.state,createdBy:item.createdBy || user.id}) === true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Demonstração: até 256 KB por arquivo e 1 MB no total. Os arquivos ficam apenas neste navegador, sem armazenamento no servidor.</small></label>' : ""}`;
 }
 
 function renderQuickStepRows(titles) {
