@@ -295,38 +295,76 @@ const tableColumnOptions = [
 
 function renderColumnSettings() {
   const hidden = new Set(state.hiddenTableColumns || []);
-  return `<div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-column-toggle="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}<button type="button" class="button quiet" data-action="auto-fit-columns">Ajustar colunas automaticamente</button></div>`;
+  return `<div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-column-toggle="${key}" ${hidden.has(key) || ui.autoHiddenTableColumns?.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}<button type="button" class="button quiet" data-action="auto-fit-columns">Ajustar colunas automaticamente</button></div>`;
 }
 
-function syncTableWidth(table) {
-  if (!table) return;
-  const headers = [...table.querySelectorAll("thead th")];
-  const widths = state.tableColumnWidths || {};
-  const requested = headers.reduce((sum,header,index) => { const key = tableColumnOptions[index]?.[0]; return sum + Math.max(60,Number(widths[key]) || Number.parseFloat(header.style.width) || header.getBoundingClientRect().width || 0); },0);
-  table.style.width = Math.max(table.parentElement?.clientWidth || 0,requested) + "px";
-}
+// Adaptive sizing uses the available space rather than old persisted pixel widths.
+// Manual visibility preferences remain separate from columns hidden temporarily to fit.
+const tableColumnMinimums = {
+  select:38,id:65,name:250,progress:90,owner:105,created:105,start:105,
+  actualStart:100,released:105,due:110,completed:105,elapsed:96,
+  activityDuration:110,weight:58,status:158,actions:142
+};
+const tableColumnPriority = ["select","id","name","actions","status","progress","owner",
+  "due","start","elapsed","created","weight","released","completed","actualStart","activityDuration"];
 
 function applyTableColumnLayout() {
-  const hidden = new Set(state.hiddenTableColumns || []), widths = state.tableColumnWidths || {};
-  const table = document.querySelector(".synth-table"); if (!table) return;
-  const headers = [...table.querySelectorAll("thead th")];
-  headers.forEach((header,index)=>{
-  const [key] = tableColumnOptions[index] || []; if (!key) return;
-  header.dataset.columnKey=key; header.classList.toggle("column-hidden",hidden.has(key)); if (widths[key]) header.style.width=widths[key]+"px";
-  let handle=header.querySelector(".column-resize-handle");
-  if(!handle){
-    handle=document.createElement("span"); handle.className="column-resize-handle"; handle.setAttribute("role","separator"); handle.setAttribute("aria-orientation","vertical"); handle.setAttribute("aria-label","Redimensionar coluna "+key); handle.tabIndex=0; header.append(handle);
-    handle.addEventListener("pointerdown",(event)=>{
-      if(event.button!==0)return; event.preventDefault(); const startX=event.clientX,startWidth=header.getBoundingClientRect().width; 
-      const move=(nextEvent)=>{ const width=Math.max(60,Math.round(startWidth+nextEvent.clientX-startX)); header.style.width=width+"px"; syncTableWidth(table); };
-      const finish=()=>{ const width=Math.round(header.getBoundingClientRect().width); state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; syncTableWidth(table); saveState(); document.removeEventListener("pointermove",move); document.removeEventListener("pointerup",finish); document.removeEventListener("pointercancel",finish); };
-      document.addEventListener("pointermove",move); document.addEventListener("pointerup",finish); document.addEventListener("pointercancel",finish);
-    });
-    handle.addEventListener("keydown",(event)=>{ if(!["ArrowLeft","ArrowRight"].includes(event.key))return; event.preventDefault(); const width=Math.max(60,Math.round(header.getBoundingClientRect().width)+(event.key==="ArrowRight"?12:-12)); header.style.width=width+"px"; state.tableColumnWidths ||= {}; state.tableColumnWidths[key]=width; syncTableWidth(table); saveState(); });
+  const table=document.querySelector(".synth-table");
+  if(!table) return;
+  const container=table.closest(".synth-table-wrap");
+  const available=Math.max(0,Math.floor(container?.clientWidth || 0)-2);
+  if(!available) return;
+  const manuallyHidden=new Set(state.hiddenTableColumns || []);
+  const pinned=new Set(state.tableColumnPinned || []);
+  const mandatory=new Set(["select","id","name","actions"]);
+  const visible=new Set();
+  const widthFor=(key)=>tableColumnMinimums[key] || 90;
+  let occupied=0;
+  // Keep the identity, item title and actions available at every viewport.
+  for(const key of tableColumnPriority){
+    if(mandatory.has(key) && !manuallyHidden.has(key)){
+      visible.add(key);occupied+=widthFor(key);
+    }
   }
-});
-  syncTableWidth(table);
-  table.querySelectorAll("tbody tr").forEach((row)=>[...row.children].forEach((cell,index)=>{const [key]=tableColumnOptions[index]||[]; if(key) cell.classList.toggle("column-hidden",hidden.has(key));}));
+  for(const key of tableColumnPriority){
+    if(visible.has(key)||manuallyHidden.has(key))continue;
+    const width=widthFor(key);
+    if(occupied+width<=available || pinned.has(key)){
+      visible.add(key);occupied+=width;
+    }
+  }
+  // A manually selected column takes precedence over less important automatic columns.
+  if(occupied>available){
+    for(const key of [...tableColumnPriority].reverse()){
+      if(occupied<=available) break;
+      if(visible.has(key)&&!pinned.has(key)&&!mandatory.has(key)){
+        visible.delete(key);occupied-=widthFor(key);
+      }
+    }
+  }
+  const autoHidden=new Set(tableColumnOptions.map(([key])=>key).filter(key=>!visible.has(key)&&!manuallyHidden.has(key)));
+  ui.autoHiddenTableColumns=autoHidden;
+  const headers=[...table.querySelectorAll("thead th")];
+  const weights=tableColumnOptions.map(([key])=>visible.has(key)?widthFor(key):0);
+  const sum=weights.reduce((a,b)=>a+b,0)||1;
+  table.style.width="100%";
+  table.style.minWidth="0";
+  table.style.tableLayout="fixed";
+  headers.forEach((header,index)=>{
+    const [key]=tableColumnOptions[index]||[];
+    if(!key)return;
+    header.dataset.columnKey=key;
+    header.classList.toggle("column-hidden",!visible.has(key));
+    header.style.width=visible.has(key)?(weights[index]/sum*100).toFixed(4)+"%":"";
+    // Disable old pixel sizing and drag handles: these caused the table to exceed its wrapper.
+    header.querySelector(".column-resize-handle")?.remove();
+  });
+  table.querySelectorAll("tbody tr").forEach(row=>
+    [...row.children].forEach((cell,index)=>{
+      const [key]=tableColumnOptions[index]||[];
+      if(key) cell.classList.toggle("column-hidden",!visible.has(key));
+    })
+  );
 }
 
 function rowFillColor(item, depth) {
@@ -1191,6 +1229,10 @@ function bindWorkspace() {
 
   document.querySelectorAll("[data-column-toggle]").forEach((input)=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.columnToggle; state.hiddenTableColumns= input.checked ? state.hiddenTableColumns.filter((entry)=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
   applyTableColumnLayout();
+  if (!window.__fluxosColumnResizeBound) {
+    window.__fluxosColumnResizeBound=true;
+    window.addEventListener("resize",()=>applyTableColumnLayout(),{passive:true});
+  }
 }
 
 function panelFailure(error) {
@@ -1242,7 +1284,7 @@ function applyBulkEdit(form) {
 
 function bindPanel() {
   const root = document.querySelector("#panelRoot");
-  root.querySelectorAll("[data-setting-column]").forEach(input=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked ? state.hiddenTableColumns.filter(entry=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
+  root.querySelectorAll("[data-setting-column]").forEach(input=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= [];state.tableColumnPinned ||= [];const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked ? state.hiddenTableColumns.filter(entry=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])];state.tableColumnPinned=input.checked ? [...new Set([...state.tableColumnPinned,key])] : state.tableColumnPinned.filter(entry=>entry!==key);saveState();render(); }));
   root.onclick = (event) => {
     const button = event.target.closest("button,[data-action]"); if (!button) return;
     event.stopPropagation();

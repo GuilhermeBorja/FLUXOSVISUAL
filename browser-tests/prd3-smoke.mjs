@@ -290,6 +290,19 @@ try {
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     const viewportWidth = await page.evaluate(() => document.documentElement.clientWidth);
     assert.ok(documentWidth <= viewportWidth + 2, `page-level horizontal overflow at ${viewport.width}px: ${documentWidth} > ${viewportWidth}`);
+    await page.getByRole("tab", { name: /Sintética/ }).click();
+    const geometry=await page.locator(".synth-table").evaluate(table=>{
+      const wrapper=table.closest(".synth-table-wrap").getBoundingClientRect();
+      const bounds=table.getBoundingClientRect();
+      const cells=[...table.querySelectorAll("tbody td")].filter(cell=>getComputedStyle(cell).display!=="none");
+      const clipped=cells.filter(cell=>cell.getBoundingClientRect().right>wrapper.right+2).length;
+      const actions=[...table.querySelectorAll("tbody .row-actions")];
+      const missingActions=actions.filter(el=>el.getBoundingClientRect().right>wrapper.right+2).length;
+      return {wrapper:wrapper.width,table:bounds.width,clipped,missingActions};
+    });
+    assert.ok(geometry.table <= geometry.wrapper + 2, `table exceeds container at ${viewport.width}px: ${JSON.stringify(geometry)}`);
+    assert.equal(geometry.clipped,0,`cells clipped at ${viewport.width}px: ${JSON.stringify(geometry)}`);
+    assert.equal(geometry.missingActions,0,`actions clipped at ${viewport.width}px: ${JSON.stringify(geometry)}`);
   }
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log("PRD3 browser smoke passed: navigation, Gantt, graph dates, row color setting, mouse/keyboard resizing, and 1920/1366/1024/768/390px viewports.");

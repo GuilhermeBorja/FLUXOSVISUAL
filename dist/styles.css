@@ -929,3 +929,17 @@ body.panel-open { overflow: hidden; }
 .event-values{display:flex;gap:7px;flex-wrap:wrap}.event-values b{font-size:11px}
 @media(max-width:1180px){.synth-table th:nth-child(6),.synth-table td:nth-child(6),.synth-table th:nth-child(8),.synth-table td:nth-child(8),.synth-table th:nth-child(9),.synth-table td:nth-child(9),.synth-table th:nth-child(11),.synth-table td:nth-child(11),.synth-table th:nth-child(12),.synth-table td:nth-child(12),.synth-table th:nth-child(13),.synth-table td:nth-child(13),.synth-table th:nth-child(14),.synth-table td:nth-child(14){display:none!important}}
 @media(max-width:740px){.synth-table th:nth-child(5),.synth-table td:nth-child(5),.synth-table th:nth-child(7),.synth-table td:nth-child(7),.synth-table th:nth-child(10),.synth-table td:nth-child(10){display:none!important}.quick-step-row{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-step-row strong{grid-column:1/-1}}
+
+/* Responsive table: keep all displayed cells within the table-card viewport. */
+.synth-table-wrap{width:100%;max-width:100%;min-width:0;overflow:hidden!important}
+.synth-table{box-sizing:border-box;width:100%!important;min-width:0!important;max-width:100%;table-layout:fixed!important}
+.synth-table th,.synth-table td{box-sizing:border-box;min-width:0!important;max-width:none!important;overflow-wrap:anywhere;word-break:normal;white-space:normal!important;padding:9px 4px!important}
+.synth-table th:nth-child(3),.synth-table td.title-cell{min-width:0!important;max-width:none!important;width:auto}
+.synth-table .date-cell,.synth-table .duration-cell,.synth-table .id-cell{white-space:normal!important}
+.synth-table .tree-cell{min-width:0;max-width:100%;overflow:hidden;padding-left:min(calc(var(--depth)*10px),35%)}
+.synth-table .item-title{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.synth-table .status-badge{max-width:100%;min-width:0;display:inline-flex;flex-wrap:wrap;white-space:normal;overflow-wrap:anywhere;justify-content:center}
+.synth-table .row-actions{display:flex;flex-wrap:wrap;gap:1px;justify-content:center;align-items:center;max-width:100%}
+.synth-table .row-actions .icon-button{width:27px;height:29px;min-height:29px;padding:4px;flex-shrink:0}
+.synth-table .row-actions .lucide{width:15px;height:15px}
+.synth-table .column-hidden{display:none!important}
