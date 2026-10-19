@@ -31,7 +31,7 @@ jobs:
       - name: Run regression tests
         run: npm test
       - name: Install browser test runner
-        run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+        run: npm install --no-save playwright@1.56.0 && npx playwright install --with-deps chromium
       - name: Run browser smoke tests
         run: |
           nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &

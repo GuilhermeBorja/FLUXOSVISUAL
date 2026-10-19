@@ -16,7 +16,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply source correction
-        run: node scripts/apply-calendar-fix.mjs && node scripts/calendar-regression-update.mjs
+        run: node scripts/apply-calendar-fix.mjs && node scripts/calendar-regression-update.mjs && node scripts/calendar-finalize.mjs
       - name: Install dependencies
         run: npm ci
       - name: Build and syntax check
@@ -26,7 +26,7 @@ jobs:
       - name: Full regression suite
         run: npm test
       - name: Install browser runner
-        run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+        run: npm install --no-save playwright@1.56.0 && npx playwright install --with-deps chromium
       - name: Browser regression
         run: |
           nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &
@@ -37,7 +37,7 @@ jobs:
           git restore dist/index.html dist/vendor.js
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add dist/app.js dist/workspace.js package.json package-lock.json README.md tests
+          git add dist/app.js dist/workspace.js package.json package-lock.json README.md tests browser-tests
           git commit -m 'fix: inclusive calendar dates, consistent CPM and bulk durations'
           git push origin HEAD:fix/prd3-inclusive-calendar-20261019
       - name: Show source diff on failure
