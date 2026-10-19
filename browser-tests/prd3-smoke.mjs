@@ -121,6 +121,7 @@ try {
 
   // P0 R2-25: opening an item exposes the schedule/baseline fields and duration.
   await page.locator(`button[data-select="${crossViewItem.id}"]`).first().click();
+  console.log("UX_DEBUG_ITEM_OPEN",JSON.stringify(await page.evaluate(()=>({id:ui.selectedItemId,panel:ui.panel,tab:ui.panelTab,html:document.querySelector("#panelRoot")?.innerHTML.slice(0,1300)}))),"errors:",JSON.stringify(errors));
   await page.locator("#updateItemForm").waitFor();
   const itemScheduleSummary = await page.locator("#updateItemForm .schedule-summary").innerText();
   assert.match(itemScheduleSummary, /Início previsto/);
