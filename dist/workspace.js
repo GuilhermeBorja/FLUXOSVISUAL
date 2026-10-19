@@ -1188,7 +1188,7 @@ function bindWorkspace() {
   }));
   submitHandler("bulkEditForm", applyBulkEdit);
   document.querySelectorAll("[data-status-setting]").forEach((form)=>form.addEventListener("submit",(event)=>{ event.preventDefault(); const data=new FormData(form); state.statusSettings ||= {}; state.statusSettings[form.dataset.statusSetting]={icon:String(data.get("icon")||"circle-help"),color:String(data.get("color")||"#687780")}; saveState(); renderPanel(false); notify("Apresentação do status atualizada."); }));
-  document.querySelectorAll("[data-setting-column]").forEach((input)=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked?state.hiddenTableColumns.filter((entry)=>entry!==key):[...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
+
   document.querySelectorAll("[data-column-toggle]").forEach((input)=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.columnToggle; state.hiddenTableColumns= input.checked ? state.hiddenTableColumns.filter((entry)=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
   applyTableColumnLayout();
 }
@@ -1242,6 +1242,7 @@ function applyBulkEdit(form) {
 
 function bindPanel() {
   const root = document.querySelector("#panelRoot");
+  root.querySelectorAll("[data-setting-column]").forEach(input=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= []; const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked ? state.hiddenTableColumns.filter(entry=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])]; saveState(); render(); }));
   root.onclick = (event) => {
     const button = event.target.closest("button,[data-action]"); if (!button) return;
     event.stopPropagation();
