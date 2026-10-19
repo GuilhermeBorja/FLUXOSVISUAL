@@ -1,6 +1,6 @@
 # Fluxo Visual
 
-Protótipo navegável para explorar a gestão de projetos, atividades, relações e aprovações. A branch `feature/prd-evolution` reúne as melhorias funcionais desta rodada e publica a demonstração no [GitHub Pages](https://guilhermeborja.github.io/FLUXOSVISUAL/).
+Protótipo navegável para explorar a gestão de projetos, atividades, relações e aprovações. A branch `PRD3` reúne as melhorias funcionais desta rodada e publica a demonstração no [GitHub Pages](https://guilhermeborja.github.io/FLUXOSVISUAL/).
 
 ## Como testar
 
@@ -38,3 +38,9 @@ Sirva a pasta `dist` com qualquer servidor estático. Os arquivos sincronizados 
 Os dados e anexos ficam no navegador atual. Login por seleção de usuário e regras GPO executadas no cliente servem para demonstrar o fluxo, não para proteger dados em produção; não há servidor, autenticação real, isolamento seguro entre empresas, sincronização entre navegadores ou colaboração em tempo real.
 
 O Gantt e o caminho crítico são calculados localmente em dias corridos e dependem de datas e relações temporais válidas; o aplicativo indica quando faltam dados. Atributos personalizados e regras configuráveis de transição pertencem à formalização do modelo prevista na Etapa 2. Anexos protegidos e compartilhados exigem armazenamento e autorização no servidor, previstos para etapa futura.
+
+## Calendário inclusivo (PRD3 0.4.1)
+
+Datas planejadas contam início e término: 01/10 a 02/10 = 2 dias. Uma atividade de 1 dia termina no mesmo dia; duração zero continua representando um marco. TI sem defasagem inicia a sucessora no dia seguinte ao término da predecessora. II alinha inícios; TT alinha términos; IF alinha o término da sucessora ao início da predecessora. Defasagens deslocam datas, sem somar um dia extra. Timers reais continuam medindo tempo decorrido. A numeração visual continua dependente da posição, sem alterar IDs internos.
+
+Durações explicitamente registradas são preservadas e suas previsões passam a usar a convenção inclusiva. Registros sem duração usam o intervalo das datas. Antes da primeira leitura de dados legados, uma cópia de recuperação é mantida em `fluxosVisualState.v2.beforeInclusiveCalendar`; nenhum registro é apagado.

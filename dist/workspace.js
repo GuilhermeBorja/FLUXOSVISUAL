@@ -67,9 +67,8 @@ function progressCell(item) {
 }
 
 function plannedLabel(item) {
-  if (!item.plannedStartAt || !item.dueAt) return "Sem duração";
-  const days = Math.round((new Date(`${item.dueAt}T12:00:00`) - new Date(`${item.plannedStartAt}T12:00:00`)) / 86400000);
-  return `${Math.max(0, days)}d previstos`;
+  if (!item.plannedStartAt || !item.dueAt) return "Sem dura\u00e7\u00e3o";
+  return itemDurationDays(item) + "d previstos";
 }
 
 function statusDisplayLabel(item) { if (item?.type === "approval" && item.status === "under_review") return "Aguardando decisão"; if (item?.type === "approval" && item.status === "correction") return "Correção solicitada"; return labelOf(statusCatalog,item?.status); }
@@ -386,7 +385,7 @@ function scheduleAnalysis(items) {
     const days = hasExplicitDuration
       ? explicitDuration
       : hasDateRange
-        ? Math.max(0,(new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000)
+        ? inclusiveDurationDays(item.plannedStartAt,item.dueAt)
         : null;
     if (days === null) durationsComplete = false;
     duration.set(item.id,days ?? 0);
@@ -413,21 +412,14 @@ function scheduleAnalysis(items) {
   }
   if (order.length !== tasks.length) return {valid:false,reliable:false,startDate,finishDate:"",durationDays:0,rows:tasks.map((item) => ({item,startOffset:plannedStart.get(item.id),duration:duration.get(item.id),slack:null,critical:false})),message:"Há um ciclo nas dependências temporais. O caminho crítico não pode ser calculado."};
   const earliest = new Map(tasks.map((item) => [item.id,plannedStart.get(item.id)]));
-  const offsetFor = (relation) => {
-    const predDuration = duration.get(relation.sourceId);
-    const nextDuration = duration.get(relation.targetId);
-    const lag = Number(relation.lagDays) || 0;
-    if (relation.relationType === "TI") return predDuration + lag;
-    if (relation.relationType === "II") return lag;
-    if (relation.relationType === "TT") return predDuration + lag - nextDuration;
-    return lag - nextDuration;
-  };
+  const offsetFor = (relation) => temporalStartOffset(relation,duration.get(relation.sourceId),duration.get(relation.targetId));
   for (const id of order) for (const relation of outgoing.get(id)) {
     earliest.set(relation.targetId,Math.max(earliest.get(relation.targetId),earliest.get(id) + offsetFor(relation)));
   }
-  const terminalIds = tasks.map((item) => item.id).filter((id) => outgoing.get(id).length === 0);
-  const projectFinish = Math.max(0,...terminalIds.map((id) => earliest.get(id) + duration.get(id)));
-  const latest = new Map(tasks.map((item) => [item.id,projectFinish - duration.get(item.id)]));
+  // II/IF links do not guarantee that terminal nodes finish last.
+  const projectFinish = Math.max(0,...tasks.map((item) => earliest.get(item.id) + durationEndOffset(duration.get(item.id))));
+  const projectDuration = projectFinish + (tasks.some((item) => duration.get(item.id) > 0) ? 1 : 0);
+  const latest = new Map(tasks.map((item) => [item.id,projectFinish - durationEndOffset(duration.get(item.id))]));
   for (const id of [...order].reverse()) for (const relation of outgoing.get(id)) {
     latest.set(id,Math.min(latest.get(id),latest.get(relation.targetId) - offsetFor(relation)));
   }
@@ -436,7 +428,7 @@ function scheduleAnalysis(items) {
     const slack = Math.max(0,latest.get(item.id) - es);
     return {item,startOffset:es,duration:duration.get(item.id),slack,critical:slack < 0.01};
   });
-  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectFinish),rows,message:reliable ? "" : "Cronograma incompleto: informe a data inicial idealizada e uma duração explícita (ou início e término válidos) para cada atividade; nenhuma duração é presumida."};
+  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectDuration),rows,message:reliable ? "" : "Cronograma incompleto: informe a data inicial idealizada e uma duração explícita (ou início e término válidos) para cada atividade; nenhuma duração é presumida."};
 }
 
 function renderGantt(items) {
@@ -445,7 +437,7 @@ function renderGantt(items) {
   const rows = tableRows(items).map(({item,depth,children}) => {
     if (computed.has(item.id)) return {...computed.get(item.id),depth,children};
     const startOffset = item.plannedStartAt ? Math.max(0,(new Date(item.plannedStartAt + "T12:00:00") - new Date(analysis.startDate + "T12:00:00")) / 86400000) : 0;
-    const duration = item.plannedStartAt && item.dueAt ? Math.max(0,(new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000) : 0;
+    const duration = itemDurationDays(item);
     return {item,startOffset,duration,slack:null,critical:false,structural:true,depth,children};
   });
   const maxDay = Math.max(1,...rows.map((row) => row.startOffset + row.duration + (row.slack || 0)));
@@ -458,7 +450,7 @@ function renderGantt(items) {
     const left = Math.max(0,Math.min(100,row.startOffset / maxDay * 100));
     const width = Math.max(1,Math.min(100 - left,Math.max(1,row.duration / maxDay * 100)));
     const start = shiftedDate(analysis.startDate,row.startOffset);
-    const finish = shiftedDate(analysis.startDate,row.startOffset + row.duration);
+    const finish = inclusiveFinishDate(start,row.duration);
     const incoming = relationsFor(items).filter((relation) => relation.targetId === row.item.id && ["TI","II","TT","IF"].includes(relation.relationType)).map((relation) => ({relation,item:getItem(relation.sourceId)})).filter((entry) => entry.item);
     const barTone = row.item.status === "cancelled" ? "cancelled" : row.critical && analysis.valid ? "critical" : isOverdue(row.item) ? "overdue" : isAtRisk(row.item) ? "at-risk" : "";
     const slackLeft = Math.max(0,Math.min(100,(row.startOffset + row.duration) / maxDay * 100));
@@ -515,7 +507,7 @@ function layoutKey() { return `${currentUser().id}:${ui.grouping}`; }
 function mountGraph(items) {
   const graphKey = `${layoutKey()}:${items.map((item) => item.id).join("|")}`;
   const schedule = scheduleAnalysis(items);
-  const forecasts = new Map(schedule.rows.map((row) => [row.item.id,shiftedDate(schedule.startDate,row.startOffset + row.duration)]));
+  const forecasts = new Map(schedule.rows.map((row) => [row.item.id,inclusiveFinishDate(shiftedDate(schedule.startDate,row.startOffset),row.duration)]));
   graphInstance = FluxosGraph.mount(document.querySelector("#graphCanvas"), {
     items, relations: relationsFor(items), grouping: ui.grouping,
     savedPositions: ui.positions[layoutKey()] || {}, selectedId: ui.selectedItemId,
@@ -699,14 +691,14 @@ function updateSchedulePreview() {
   let duration=baseDuration;
   if(titles.length){ const durations=titles.map((_,index)=>{const value=String(form.querySelector(`[name="stepDuration_${index}"]`)?.value || "").trim(); return value==="" ? null : Math.max(0,Number(value)||0);}); if(durations.some((value)=>value===null)){ output.textContent="Informe a duração de cada etapa para calcular a previsão."; return; } duration=form.querySelector('[name="sequence"]')?.checked ? durations.reduce((sum,value)=>sum+value,0) : Math.max(0,...durations); }
   if(duration===null || !Number.isFinite(duration)){ output.textContent="Informe a duração planejada para calcular a previsão."; return; }
-  output.textContent=`Previsão final: ${formatDate(datePlusDays(start,duration))} · ${duration} dias corridos`;
+  output.textContent=`Previsão final: ${formatDate(inclusiveFinishDate(start,duration))} · ${duration} dias corridos`;
 }
 
 function renderCreatePanel() {
   const parent = getItem(ui.createParentId);
   const editable = accessibleItems().filter((item) => canEditItem(currentUser(), item));
   const defaults = parent ? { type:"substage", parentId:parent.id, ownerId:parent.ownerId, organizationId:parent.organizationId, sectorId:parent.sectorId, state:parent.state, plannedStartAt:parent.baselineStartAt || parent.plannedStartAt || today() } : { type:"project" };
-  const previewDate=datePlusDays(defaults.plannedStartAt || today(),defaults.plannedDurationDays || 0);
+  const previewDate=inclusiveFinishDate(defaults.plannedStartAt || today(),defaults.plannedDurationDays || 0);
   return `${panelHeader(parent ? "Novo subitem" : "Cadastro", parent ? `Adicionar a ${parent.title}` : "Novo item")}
     <form id="createItemForm" class="drawer-body form-stack">
       ${itemFormFields(defaults, true)}
@@ -1206,7 +1198,8 @@ function applyBulkEdit(form) {
         if (!Number.isFinite(days) || days < 0) throw new Error("Informe uma duração válida em dias.");
         const start = item.plannedStartAt || today();
         input.plannedStartAt = start;
-        input.dueAt = shiftedDate(start, days);
+        input.plannedDurationDays = days;
+        input.dueAt = inclusiveFinishDate(start, days);
       }
       updateItem(item.id, input, nowIso());
     }
@@ -1310,7 +1303,7 @@ function bindPanel() {
         const duration = Number(durationRaw);
         if (!Number.isFinite(duration) || duration < 0) throw new Error(`Informe uma duração válida para a etapa ${index + 1}.`);
         const start = input.plannedStartAt || today();
-        const child = createItem({...input,title,type:"substage",status:String(form.get(`stepStatus_${index}`) || "backlog"),ownerId:String(form.get(`stepOwner_${index}`) || ""),weight:Number(form.get(`stepWeight_${index}`) || 1),progressPercent:0,parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration,dueAt:shiftedDate(start,duration)});
+        const child = createItem({...input,title,type:"substage",status:String(form.get(`stepStatus_${index}`) || "backlog"),ownerId:String(form.get(`stepOwner_${index}`) || ""),weight:Number(form.get(`stepWeight_${index}`) || 1),progressPercent:0,parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration,dueAt:inclusiveFinishDate(start,duration)});
         if (previous && form.get("sequence")) createRelation(previous.id,child.id,"TI"); previous = child;
       });
       await addAttachments(item.id,form.getAll("attachments"));
@@ -1491,7 +1484,7 @@ function itemInput(form) {
 
 function exportVisible() {
   const items = accessibleItems(); const ids = new Set(items.map((item) => item.id));
-  const content = {version:state.version,exportedAt:nowIso(),items,relations:relationsFor(items),events:state.events.filter((event) => ids.has(event.itemId)),approvalDecisions:(state.approvalDecisions || []).filter((entry) => ids.has(entry.itemId)),attachments:(state.attachments || []).filter((entry) => ids.has(entry.itemId))};
+  const content = {version:state.version,calendarVersion:1,exportedAt:nowIso(),items,relations:relationsFor(items),events:state.events.filter((event) => ids.has(event.itemId)),approvalDecisions:(state.approvalDecisions || []).filter((entry) => ids.has(entry.itemId)),attachments:(state.attachments || []).filter((entry) => ids.has(entry.itemId))};
   if (canManageAnyUsers(currentUser()) || canManageGpo(currentUser())) Object.assign(content,{organizations:state.organizations,sectors:state.sectors,users:state.users,permissionRules:state.permissionRules || [],templates:state.templates || [],events:state.events,approvalDecisions:state.approvalDecisions || [],archivedItems:state.archivedItems || [],archivedRelations:state.archivedRelations || [],archivedAttachments:state.archivedAttachments || [],archivedUsers:state.archivedUsers || [],archivedOrganizations:state.archivedOrganizations || [],archivedSectors:state.archivedSectors || [],registryEvents:state.registryEvents || []});
   const url = URL.createObjectURL(new Blob([JSON.stringify(content,null,2)],{type:"application/json"}));
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = `fluxos-${today()}.json`; anchor.click(); URL.revokeObjectURL(url);

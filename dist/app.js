@@ -229,6 +229,13 @@ function loadState() {
     try {
       const parsed = JSON.parse(saved);
       if (parsed.version === 2) {
+        // Preserve a recovery copy before adopting inclusive calendar dates.
+        if (!parsed.calendarVersion && !localStorage.getItem(STORAGE_KEY + '.beforeInclusiveCalendar')) {
+          try { localStorage.setItem(STORAGE_KEY + '.beforeInclusiveCalendar', saved); }
+          catch (error) { console.warn('Calendar recovery copy could not be saved.', error); }
+        }
+        parsed.calendarMigrationPending = parsed.calendarMigrationPending || !parsed.calendarVersion;
+        parsed.calendarVersion = 1;
         parsed.permissionRules ||= [];
         parsed.permissionProfiles ||= [];
         parsed.statusSettings ||= {};
@@ -265,9 +272,9 @@ function loadState() {
         for (const item of parsed.items || []) {
           if (item.type === "approval") item.approvalRound ||= 1;
           item.weight ??= 1;
-          item.plannedDurationDays = Number.isFinite(Number(item.plannedDurationDays)) ? Math.max(0, Number(item.plannedDurationDays)) : (item.plannedStartAt && item.dueAt ? Math.max(0, (new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000) : 0);
+          item.plannedDurationDays = itemDurationDays(item);
           item.baselineStartAt ||= item.plannedStartAt || "";
-          item.baselineDueAt ||= item.dueAt || datePlusDays(item.baselineStartAt || item.plannedStartAt || today(), item.plannedDurationDays || 0);
+          item.baselineDueAt ||= item.dueAt || inclusiveFinishDate(item.baselineStartAt || item.plannedStartAt || today(), item.plannedDurationDays || 0);
           item.replannedDueAt ??= "";
           if (item.status === "approved") item.status = "done";
           if (item.status === "rejected") item.status = "correction";
@@ -289,7 +296,7 @@ function loadState() {
 
 function emptyState() {
   return {
-    version:2, gpoVersion:1, setupComplete:false, currentUserId:"", activePage:"overview",
+    version:2, calendarVersion:1, gpoVersion:1, setupComplete:false, currentUserId:"", activePage:"overview",
     workspaceName:"", organizations:[], sectors:[], users:[], items:[], relations:[], events:[],
     attachments:[], archivedAttachments:[], archivedItems:[], archivedRelations:[], archivedUsers:[],
     archivedOrganizations:[], archivedSectors:[], permissionRules:[], permissionProfiles:[], approvalDecisions:[], templates:[],
@@ -301,6 +308,7 @@ function emptyState() {
 function seedState() {
   const base = {
     version: 2,
+    calendarVersion: 1,
     gpoVersion: 1,
     currentUserId: "",
     activePage: "overview",
@@ -483,9 +491,9 @@ function createSeedItem(base, input) {
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
-    plannedDurationDays: Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0),
+    plannedDurationDays: itemDurationDays(input),
     baselineStartAt: input.plannedStartAt || today(),
-    baselineDueAt: input.baselineDueAt || input.dueAt || datePlusDays(input.plannedStartAt || today(), Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0)),
+    baselineDueAt: input.baselineDueAt || input.dueAt || inclusiveFinishDate(input.plannedStartAt || today(), itemDurationDays(input)),
     replannedDueAt: "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (["done","cancelled"].includes(input.status) ? 100 : 0)),
@@ -914,9 +922,9 @@ function createItem(input) {
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
-    plannedDurationDays: Number.isFinite(Number(input.plannedDurationDays)) ? Math.max(0, Number(input.plannedDurationDays)) : (input.plannedStartAt && input.dueAt ? Math.max(0, (new Date(input.dueAt + "T12:00:00") - new Date(input.plannedStartAt + "T12:00:00")) / 86400000) : 0),
+    plannedDurationDays: itemDurationDays(input),
     baselineStartAt: input.plannedStartAt || today(),
-    baselineDueAt: input.dueAt || (input.plannedDurationDays !== undefined && input.plannedDurationDays !== null && input.plannedDurationDays !== "" && Number.isFinite(Number(input.plannedDurationDays)) ? datePlusDays(input.plannedStartAt || today(), Math.max(0, Number(input.plannedDurationDays))) : ""),
+    baselineDueAt: input.baselineDueAt || input.dueAt || inclusiveFinishDate(input.plannedStartAt || today(), itemDurationDays(input)),
     replannedDueAt: "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (completeStatus(input.status) ? 100 : 0)),
@@ -1247,7 +1255,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   const next = {
     status: leastAdvanced.status,
     progressPercent: weighted.weight ? Math.round(weighted.weighted / weighted.weight) : null,
-    plannedDurationDays: Math.max(0, (new Date((children.map((item)=>item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || today()) + "T12:00:00") - new Date((children.map((item)=>item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || today()) + "T12:00:00")) / 86400000),
+    plannedDurationDays: inclusiveDurationDays(children.map((item)=>item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || today(), children.map((item)=>item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || today()),
     plannedStartAt: children.map((item) => item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "",
     dueAt: children.map((item) => item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "",
   };
@@ -1650,10 +1658,42 @@ function datePlusDays(dateValue, days) {
   return date.getFullYear() + "-" + String(date.getMonth()+1).padStart(2,"0") + "-" + String(date.getDate()).padStart(2,"0");
 }
 
+// Calendar dates are inclusive; elapsed timers and date offsets are not durations.
+function calendarDayNumber(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').slice(0,10));
+  if (!match) return NaN;
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const date = new Date(0);
+  date.setUTCFullYear(year,month-1,day); date.setUTCHours(0,0,0,0);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month-1 || date.getUTCDate() !== day) return NaN;
+  return date.getTime() / 86400000;
+}
+function inclusiveDurationDays(start, finish) {
+  const difference = calendarDayNumber(finish) - calendarDayNumber(start);
+  return Number.isFinite(difference) && difference >= 0 ? difference + 1 : 0;
+}
+function hasPlannedDuration(item) {
+  const value = item?.plannedDurationDays;
+  return value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
+}
+function durationEndOffset(duration) {
+  return Math.max(0,Number(duration) - 1);
+}
+function inclusiveFinishDate(start, duration) {
+  return datePlusDays(start,durationEndOffset(duration));
+}
+function temporalStartOffset(relation, predecessorDuration, successorDuration) {
+  const lag = Number(relation.lagDays) || 0;
+  if (relation.relationType === 'TI') return Number(predecessorDuration) + lag;
+  if (relation.relationType === 'II') return lag;
+  if (relation.relationType === 'TT') return durationEndOffset(predecessorDuration) + lag - durationEndOffset(successorDuration);
+  if (relation.relationType === 'IF') return lag - durationEndOffset(successorDuration);
+  throw new Error('Unknown temporal relation: ' + relation.relationType);
+}
+
 function itemDurationDays(item) {
-  if (Number.isFinite(Number(item.plannedDurationDays))) return Math.max(0, Number(item.plannedDurationDays));
-  if (item.plannedStartAt && item.dueAt) return Math.max(0, (new Date(item.dueAt + "T12:00:00") - new Date(item.plannedStartAt + "T12:00:00")) / 86400000);
-  return 0;
+  if (hasPlannedDuration(item)) return Number(item.plannedDurationDays);
+  return inclusiveDurationDays(item.plannedStartAt,item.dueAt);
 }
 
 function recalculatePlannedDates() {
@@ -1685,18 +1725,15 @@ function recalculatePlannedDates() {
     for (const r of incoming.get(id)) {
       const pred = byId.get(r.sourceId);
       if (pred.status === "cancelled") continue;
-      const ps = starts.get(pred.id), pf = datePlusDays(ps,durations.get(pred.id)), lag = Number(r.lagDays) || 0;
-      if (r.relationType === "TI") candidates.push(datePlusDays(pf,lag));
-      else if (r.relationType === "II") candidates.push(datePlusDays(ps,lag));
-      else if (r.relationType === "TT") candidates.push(datePlusDays(pf,lag-duration));
-      else if (r.relationType === "IF") candidates.push(datePlusDays(ps,lag-duration));
+      const ps = starts.get(pred.id);
+      candidates.push(datePlusDays(ps,temporalStartOffset(r,durations.get(pred.id),duration)));
     }
     if (candidates.length) { const earliestAllowed=starts.get(id); const dependencyStart=candidates.filter(Boolean).sort().at(-1); starts.set(id,earliestAllowed && dependencyStart ? (earliestAllowed > dependencyStart ? earliestAllowed : dependencyStart) : earliestAllowed || dependencyStart); }
   }
   for (const item of items) {
     if (items.some((child) => child.parentId === item.id && child.status !== "cancelled")) continue;
     item.plannedStartAt = starts.get(item.id) || item.baselineStartAt || item.plannedStartAt || today();
-    item.dueAt = datePlusDays(item.plannedStartAt,durations.get(item.id));
+    item.dueAt = inclusiveFinishDate(item.plannedStartAt,durations.get(item.id));
   }
   const depthOf = (item) => { let depth=0, cursor=item, seen=new Set(); while (cursor?.parentId && !seen.has(cursor.parentId)) { seen.add(cursor.parentId); cursor=byId.get(cursor.parentId); if (cursor) depth++; } return depth; };
   const groups = items.filter((item) => items.some((child) => child.parentId === item.id && child.status !== "cancelled")).sort((a,b)=>depthOf(a)-depthOf(b));
@@ -1712,4 +1749,19 @@ function recalculatePlannedDates() {
   const summaryGroups = [...groups].sort((a,b)=>depthOf(b)-depthOf(a));
   for (const group of summaryGroups) syncParentSummary(group.id);
   return {valid:true};
+}
+
+// Run the one-time calendar migration after all state and function dependencies are initialized.
+// Reuse the actual scheduling engine so all views open with the same dates immediately.
+if (state.calendarMigrationPending) {
+  const beforeCalendarMigration = JSON.parse(JSON.stringify(state));
+  try {
+    const result = recalculatePlannedDates();
+    if (!result.valid) throw new Error(result.message);
+    delete state.calendarMigrationPending;
+    saveState();
+  } catch (error) {
+    state = beforeCalendarMigration;
+    console.warn('Calendario inclusivo: migracao adiada; dados originais preservados.', error);
+  }
 }

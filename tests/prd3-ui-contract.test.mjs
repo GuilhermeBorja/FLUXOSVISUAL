@@ -87,7 +87,9 @@ function analyzeSchedule(items, relations) {
       return value.toISOString().slice(0, 10);
     },
   };
-  return vm.runInNewContext(source + "\nscheduleAnalysis", sandbox)(items);
+  const appSource = readFileSync(new URL("../dist/app.js",import.meta.url),"utf8");
+  const helpers = appSource.slice(appSource.indexOf("function calendarDayNumber("),appSource.indexOf("function recalculatePlannedDates("));
+  return vm.runInNewContext(helpers + source + "\nscheduleAnalysis", sandbox)(items);
 }
 
 test("análise do Gantt calcula dependências, paralelismo e caminho crítico", () => {

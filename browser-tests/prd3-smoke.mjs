@@ -292,7 +292,7 @@ try {
   await page.locator("#createItemForm").waitFor();
   const expectedSubitemFinish = await page.evaluate((id) => {
     const parent = getItem(id);
-    return formatDate(datePlusDays(parent.baselineStartAt || parent.plannedStartAt, 3));
+    return formatDate(datePlusDays(parent.baselineStartAt || parent.plannedStartAt, 2));
   }, crossViewItem.id);
   await page.locator('#createItemForm [name="plannedDurationDays"]').fill("3");
   const previewText = await page.locator("#schedulePreview").textContent();
