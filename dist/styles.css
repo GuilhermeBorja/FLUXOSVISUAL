@@ -914,3 +914,6 @@ body.panel-open { overflow: hidden; }
 .blocked-row { align-items: end; }
 .checkbox-row { display: flex; align-items: center; gap: 8px; }
 .blocked-mark { color: #c2474d; }
+
+.build-label { font-size: .75rem; color: #8a97a0; font-variant-numeric: tabular-nums; }
+.login-card .build-label { margin: 18px 0 0; text-align: center; }
