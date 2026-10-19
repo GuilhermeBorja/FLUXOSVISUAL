@@ -192,7 +192,7 @@ function render() {
       <section id="workspaceView" role="tabpanel" aria-labelledby="${ui.overviewMode === "table" ? "tableTab" : ui.overviewMode === "graph" ? "graphTab" : "ganttTab"}">
         ${ui.overviewMode === "table" ? renderTable(items) : ui.overviewMode === "graph" ? renderGraph(items) : renderGantt(items)}
       </section>
-      <footer class="workspace-footer"><span>Permissões aplicadas por regras GPO</span><span>Dados de demonstração salvos neste navegador</span><span class="build-label" data-build-label title="Identificação desta versão publicada">${escapeHtml(buildLabel())}</span></footer>
+      <footer class="workspace-footer"><span class="build-label" data-build-label title="Identificação desta versão publicada">${escapeHtml(buildLabel())}</span></footer>
     </main>
     <div id="panelRoot"></div>`;
   bindWorkspace();

@@ -665,8 +665,9 @@ function canDecideApproval(user, item) {
 }
 
 function canSubmitApproval(user, item) {
-  if (!user || user.disabled || !item || item.type !== "approval" || !canEditItem(user, item)) return false;
-  return gpoDecision(user, "create_approval", item) === true;
+  if (!user || user.disabled || !item || item.type !== "approval" || !canViewItem(user,item)) return false;
+  if (item.status === "correction" && item.correctionOwnerId === user.id && canEditItem(user,getItem(item.correctionItemId))) return true;
+  return canEditItem(user,item) && gpoDecision(user, "create_approval", item) === true;
 }
 
 function setApprovalStatus(item, nextStatus, eventType, comment = "") {
@@ -724,17 +725,37 @@ function decideApproval(id, outcome, reason = "", correctionOwnerId = "") {
     item.approvalRound = round;
     item.correctionOwnerId = correctionOwner.id;
     item.superseded = false;
-    const correction = createItem({
-      title: "Corrigir: " + item.title, type: "task", status: "backlog",
-      ownerId: correctionOwner.id, organizationId: item.organizationId, sectorId: item.sectorId,
-      state: item.state, parentId: originalParent, description: reason.trim(),
-      plannedStartAt: item.plannedStartAt || today(), weight: 1, progressPercent: 0
-    });
-    correction.correctionFor = item.id;
-    correction.approvalRound = round;
-    item.correctionItemId = correction.id;
-    decision.correctionItemId = correction.id;
-    createRelation(correction.id, item.id, "blocks", 0, "Correção obrigatória antes do reenvio.");
+    // Approval decision authorizes a correction work order. The approver does not
+    // need unrelated create_item/create_relation privileges, and the assignee
+    // owns the work order for creator-scoped editing rules.
+    const startDate = item.plannedStartAt || today();
+    const timestamp = nowIso();
+    const correction = {
+      id: uid("item"), title: "Corrigir: " + item.title,
+      type:"task", status:"backlog",blocked:false,blockedReason:"",blockedAt:"",
+      priority:"media",ownerId:correctionOwner.id,createdBy:correctionOwner.id,
+      organizationId:correctionOwner.organizationId,sectorId:correctionOwner.sectorId,
+      state:correctionOwner.state || item.state,parentId:originalParent,
+      sortOrder:state.items.filter(entry=>entry.parentId===originalParent).length*100,
+      description:reason.trim(),plannedStartAt:startDate,dueAt:startDate,
+      plannedDurationDays:1,baselineStartAt:startDate,baselineDueAt:startDate,
+      replannedDueAt:"",weight:1,progressPercent:0,completedAt:"",
+      actualStartAt:"",createdAt:timestamp,updatedAt:timestamp,lastChangeAt:timestamp,
+      correctionFor:item.id,approvalRound:round
+    };
+    state.items.push(correction);
+    const correctionRelation = {
+      id:uid("rel"), sourceId:correction.id,targetId:item.id,
+      relationType:"blocks",lagDays:0,
+      description:"Correção obrigatória antes do reenvio.",
+      createdBy:user.id,createdAt:timestamp
+    };
+    state.relations.push(correctionRelation);
+    item.correctionItemId=correction.id;
+    decision.correctionItemId=correction.id;
+    createEvent(correction.id,"created","",correction.title,"Correção vinculada à aprovação original.");
+    createEvent(item.id,"relation_created","","blocks","A correção impede o reenvio até sua conclusão.");
+    recalculatePlannedDates();
     setApprovalStatus(item, "correction", "approval_decided", reason.trim());
     createEvent(correction.id, "approval_revision_started", item.id, correction.id, reason.trim());
     syncParentSummary(originalParent);
