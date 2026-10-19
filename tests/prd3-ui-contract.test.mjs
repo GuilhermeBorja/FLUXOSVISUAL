@@ -14,12 +14,11 @@ test("templates têm acesso unificado ao catálogo e aplicação dos modelos",()
  assert.match(workspace,/data-apply-template/);
  assert.match(workspace,/submitHandler\("templateApplyForm"/);
 });
-test("propagação usa percurso hierárquico com retorno intermediário e sem ciclos",()=>{
- assert.match(graph,/function walk\(itemId,incoming="",depth=0\)/);
- assert.match(graph,/path\.push\(\{nodeId:itemId,edgeId:edge\(itemId,child.id\)\}\)/);
- assert.match(graph,/roots\.forEach\(root=>walk\(root.id\)\)/);
+test("propagação ordena irmãos pela precedência e retorna ao pai intermediário",()=>{
+ assert.match(graph,/function orderedSiblings\(entries\)/);
+ assert.match(graph,/const temporalTypes=new Set\(\["TI","II","TT","IF"\]\)/);
+ assert.match(graph,/if\(depth>0 && path.length>before\)append\(itemId/);
 });
-
 test("magnetismo controlado move nós relacionados proporcionalmente sem reexecutar forças", () => {
   assert.match(graph, /Controlled PRD3 magnetism attempt/);
   assert.match(graph, /distanceById\.set\(neighborId, distanceById\.get\(currentId\) \+ 1\)/);
@@ -318,6 +317,52 @@ test("P0 R2-19: propagação percorre subárvore, sobe aos pais e visita ramos r
   assert.equal(classes.get("b").has("propagation-stop"),true);
 });
 
+test("animacao: PAI -> FILHO 01 -> FILHO 02 -> NETO -> FILHO 02 -> FILHO 03",()=>{
+  const start=graph.indexOf("function propagate(id) {");
+  const end=graph.indexOf("function fit(initial = false)",start);
+  const items=[
+    {id:"pai",parentId:"",sortOrder:0,status:"ready"},
+    {id:"f3",parentId:"pai",sortOrder:100,status:"ready"},
+    {id:"f2",parentId:"pai",sortOrder:200,status:"ready"},
+    {id:"neto",parentId:"f2",sortOrder:100,status:"ready"},
+    {id:"f1",parentId:"pai",sortOrder:300,status:"ready"}
+  ];
+  const relations=[
+    {id:"c1",sourceId:"pai",targetId:"f1",relationType:"contains"},
+    {id:"c2",sourceId:"pai",targetId:"f2",relationType:"contains"},
+    {id:"c3",sourceId:"pai",targetId:"f3",relationType:"contains"},
+    {id:"c4",sourceId:"f2",targetId:"neto",relationType:"contains"},
+    {id:"r1",sourceId:"f1",targetId:"f2",relationType:"TI"},
+    {id:"r2",sourceId:"f2",targetId:"f3",relationType:"TI"}
+  ];
+  const active=new Map(items.map(item=>[item.id,new Set()]));
+  const nodeElements=new Map(items.map(item=>[item.id,{
+    classList:{
+      add:(...names)=>names.forEach(name=>active.get(item.id).add(name)),
+      remove:(...names)=>names.forEach(name=>active.get(item.id).delete(name))
+    }
+  }]));
+  const edgeElements=new Map(relations.map(rel=>[rel.id,{classList:{add:()=>{},remove:()=>{}}}]));
+  const model={
+    nodes:items.map(item=>({id:item.id,item})),
+    nodeById:new Map(items.map(item=>[item.id,{id:item.id,item}])),
+    links:relations.map(relation=>({
+      source:{id:relation.sourceId},target:{id:relation.targetId},relation
+    }))
+  };
+  const timers=[];
+  const sandbox={model,options:{items},nodeElements,edgeElements,propagationTimers:[],
+    setTimeout:(callback,delay)=>{timers.push({callback,delay});return timers.length;},
+    clearTimeout:()=>{}};
+  const propagate=vm.runInNewContext(graph.slice(start,end)+"\\npropagate",sandbox);
+  assert.equal(propagate("f2"),true);
+  const steps=[];
+  for(const timer of timers.filter(t=>t.delay<6*430).sort((a,b)=>a.delay-b.delay)){
+    timer.callback();
+    steps.push([...active].find(([,classes])=>classes.has("propagation-current"))?.[0]);
+  }
+  assert.equal(steps.join(","),"pai,f1,f2,neto,f2,f3");
+});
 test("M-11: seletor de anexos informa limites e armazenamento local antes do envio", () => {
   const app = readFileSync(new URL("../dist/app.js", import.meta.url), "utf8");
   const perFile = Number(app.match(/const MAX_ATTACHMENT_BYTES = (\d+);/)?.[1]);

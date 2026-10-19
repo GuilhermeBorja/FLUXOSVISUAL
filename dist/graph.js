@@ -246,20 +246,85 @@ const FluxosGraph = (() => {
       nodeElements.forEach((element) => element.classList.remove("propagation-active","propagation-current","propagation-stop"));
       edgeElements.forEach((element) => element.classList.remove("propagation-active"));
       if (!model.nodeById.has(id)) return false;
-      const path=[], visited=new Set(), byId=new Map(options.items.map(item=>[item.id,item])), children=new Map();
-      options.items.forEach(item=>{if(item.parentId&&byId.has(item.parentId)){if(!children.has(item.parentId))children.set(item.parentId,[]);children.get(item.parentId).push(item);}});
-      const sort=(a,b)=>Number(a.sortOrder??0)-Number(b.sortOrder??0)||options.items.indexOf(a)-options.items.indexOf(b);
-      for(const entries of children.values())entries.sort(sort);
-      const edge=(parent,child)=>model.links.find(link=>link.source.id===parent&&link.target.id===child&&link.relation.relationType==="contains")?.relation.id||"";
+      // Walk hierarchy in depth-first order. Sibling precedence is defined by
+      // TI/II/TT/IF relations; when it does not constrain a pair, use visual order.
+      const path=[], visited=new Set();
+      const byId=new Map(options.items.map(item=>[item.id,item]));
+      const positions=new Map(options.items.map((item,index)=>[item.id,index]));
+      const children=new Map();
+      for(const item of options.items){
+        if(item.parentId && byId.has(item.parentId)){
+          if(!children.has(item.parentId))children.set(item.parentId,[]);
+          children.get(item.parentId).push(item);
+        }
+      }
+      const byVisualOrder=(a,b)=>
+        Number(a.sortOrder??0)-Number(b.sortOrder??0)
+        || positions.get(a.id)-positions.get(b.id);
+      const temporalTypes=new Set(["TI","II","TT","IF"]);
+      const temporalLinks=model.links.filter(link=>temporalTypes.has(link.relation.relationType));
+      const containmentLink=(parent,child)=>model.links.find(link=>
+        link.source.id===parent && link.target.id===child
+        && link.relation.relationType==="contains")?.relation.id||"";
+      const temporalLink=(source,target)=>temporalLinks.find(link=>
+        link.source.id===source && link.target.id===target)?.relation.id||"";
+
+      function orderedSiblings(entries) {
+        const original=[...entries].sort(byVisualOrder);
+        const groupIds=new Set(original.map(item=>item.id));
+        const inDegree=new Map(original.map(item=>[item.id,0]));
+        const outgoing=new Map(original.map(item=>[item.id,new Set()]));
+        for(const link of temporalLinks){
+          const from=link.source.id,to=link.target.id;
+          if(from===to || !groupIds.has(from) || !groupIds.has(to)
+             || outgoing.get(from).has(to)) continue;
+          outgoing.get(from).add(to);
+          inDegree.set(to,inDegree.get(to)+1);
+        }
+        const done=new Set(),ordered=[];
+        while(ordered.length<original.length){
+          const next=original.find(item=>!done.has(item.id)&&inDegree.get(item.id)===0);
+          if(!next){
+            // Invalid/cyclic precedence must never freeze the visualization.
+            // Retain each remaining item once, in its stable visual order.
+            ordered.push(...original.filter(item=>!done.has(item.id)));
+            break;
+          }
+          ordered.push(next);done.add(next.id);
+          for(const to of outgoing.get(next.id))inDegree.set(to,inDegree.get(to)-1);
+        }
+        return ordered;
+      }
+      function append(nodeId,edgeId=""){
+        if(!path.length){path.push({nodeId,edgeId});return;}
+        const previous=path[path.length-1].nodeId;
+        path.push({nodeId,edgeId:edgeId||temporalLink(previous,nodeId)});
+      }
       function walk(itemId,incoming="",depth=0){
         if(visited.has(itemId)||!model.nodeById.has(itemId))return;
-        visited.add(itemId);path.push({nodeId:itemId,edgeId:incoming});
-        for(const child of children.get(itemId)||[]){if(visited.has(child.id))continue;walk(child.id,edge(itemId,child.id),depth+1);if(depth>0)path.push({nodeId:itemId,edgeId:edge(itemId,child.id)});}
+        visited.add(itemId);append(itemId,incoming);
+        for(const child of orderedSiblings(children.get(itemId)||[])){
+          if(visited.has(child.id))continue;
+          const before=path.length;
+          walk(child.id,containmentLink(itemId,child.id),depth+1);
+          // Once a nested branch finishes, visually return to its immediate
+          // parent before moving to the next sibling. Do not revisit the root
+          // between root-level siblings.
+          if(depth>0 && path.length>before)append(itemId,containmentLink(itemId,child.id));
+        }
       }
-      const roots=options.items.filter(item=>!item.parentId||!byId.has(item.parentId)).sort(sort);
-      let top=byId.get(id),seen=new Set();while(top?.parentId&&byId.has(top.parentId)&&!seen.has(top.id)){seen.add(top.id);top=byId.get(top.parentId);}
-      if(top){const index=roots.findIndex(root=>root.id===top.id);if(index>0)roots.push(...roots.splice(0,index));}
-      roots.forEach(root=>walk(root.id));options.items.forEach(item=>walk(item.id));
+      const roots=orderedSiblings(options.items.filter(item=>
+        !item.parentId || !byId.has(item.parentId)));
+      let top=byId.get(id),ancestors=new Set();
+      while(top?.parentId && byId.has(top.parentId) && !ancestors.has(top.id)){
+        ancestors.add(top.id);top=byId.get(top.parentId);
+      }
+      if(top){
+        const index=roots.findIndex(root=>root.id===top.id);
+        if(index>0)roots.push(...roots.splice(0,index));
+      }
+      for(const root of roots)walk(root.id);
+      for(const item of options.items)walk(item.id);
       if (!path.length && model.nodeById.has(id)) path.push({nodeId:id});
       path.forEach((entry,index) => {
         propagationTimers.push(setTimeout(() => {
