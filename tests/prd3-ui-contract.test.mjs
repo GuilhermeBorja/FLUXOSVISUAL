@@ -354,7 +354,7 @@ test("animacao: PAI -> FILHO 01 -> FILHO 02 -> NETO -> FILHO 02 -> FILHO 03",()=
   const sandbox={model,options:{items},nodeElements,edgeElements,propagationTimers:[],
     setTimeout:(callback,delay)=>{timers.push({callback,delay});return timers.length;},
     clearTimeout:()=>{}};
-  const propagate=vm.runInNewContext(graph.slice(start,end)+"\\npropagate",sandbox);
+  const propagate=vm.runInNewContext(graph.slice(start,end)+"\npropagate",sandbox);
   assert.equal(propagate("f2"),true);
   const steps=[];
   for(const timer of timers.filter(t=>t.delay<6*430).sort((a,b)=>a.delay-b.delay)){
