@@ -280,7 +280,13 @@ test("editar relação preserva o ID e registra a alteração", () => {
   run('state.currentUserId="u_luis";');
   run(`a=createItem({...${defaults},title:"Origem"});b=createItem({...${defaults},title:"Destino B"});c=createItem({...${defaults},title:"Destino C"});rel=createRelation(a.id,b.id,"TI",0,"Inicial");relId=rel.id;updateRelation(rel.id,{sourceId:a.id,targetId:c.id,relationType:"TT",lagDays:2,description:"Atualizada"});`);
   assert.equal(run("state.relations.some((r)=>r.id===relId && r.targetId===c.id && r.relationType===\"TT\" && r.lagDays===2 && r.description===\"Atualizada\")"),true);
-  assert.equal(run('state.events.some((e)=>e.eventType==="relation_updated" && e.itemId===b.id)'),true);
+  // R2-10: o tipo mudou (TI -> TT) e o destino mudou (b -> c): o tipo, a defasagem e a descrição são
+  // registrados no destino atual; o destino antigo registra que a relação saiu dele.
+  assert.equal(run('state.events.some((e)=>e.eventType==="relation_updated" && e.itemId===c.id && e.fromValue==="TI" && e.toValue==="TT")'),true);
+  assert.equal(run('state.events.some((e)=>e.eventType==="relation_lag_changed" && e.itemId===c.id && e.fromValue==="0" && e.toValue==="2")'),true);
+  assert.equal(run('state.events.some((e)=>e.eventType==="relation_description_changed" && e.itemId===c.id && e.fromValue==="Inicial" && e.toValue==="Atualizada")'),true);
+  assert.equal(run('state.events.some((e)=>e.eventType==="relation_retargeted" && e.itemId===b.id && e.fromValue===b.id && e.toValue===c.id)'),true);
+  assert.equal(run('state.events.some((e)=>e.eventType==="relation_retargeted" && e.itemId===c.id)'),true);
 });
 
 test("transformar um item em aprovação preserva identidade, relações e histórico", () => {
@@ -613,4 +619,123 @@ test("M-05: filtro por indicador separa bloqueados, atrasados e em risco do stat
   assert.ok(JSON.parse(run('JSON.stringify(visibleItems().map((entry)=>entry.id))')).every((id) => run(`isOverdue(getItem("${id}"))`)));
   run('state.filters.indicator="all";');
   assert.ok(run('visibleItems().length') >= blocked.length);
+});
+
+test("R2-10: toda operação sobre itens gera eventos completos, com anterior/novo coerentes", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`P=createItem({...${defaults},title:"Pai"});C1=createItem({...${defaults},title:"F1",parentId:P.id});C2=createItem({...${defaults},title:"F2",parentId:P.id});`);
+  run('R=createRelation(C1.id,C2.id,"TI",0,"");updateRelation(R.id,{sourceId:C1.id,targetId:C2.id,relationType:"II",lagDays:1,description:"x"});');
+  run('updateItem(C1.id,{...getItem(C1.id),title:"F1b",ownerId:"u_enrique",weight:2,plannedDurationDays:5,dueAt:today(5),description:"d"});');
+  run('updateItem(C2.id,{...getItem(C2.id),status:"waiting"});updateItem(C2.id,{...getItem(C2.id),progressPercent:30});updateItem(C2.id,{...getItem(C2.id),status:"done"});updateItem(C2.id,{...getItem(C2.id),status:"in_progress",progressPercent:50});');
+  run('updateItem(C1.id,{...getItem(C1.id),blocked:true,blockedReason:"x"});moveItemHierarchy(C2.id,"");moveItemHierarchy(C2.id,P.id);archiveItem(C1.id);restoreArchivedItem(C1.id);removeRelation(R.id);removeItemsByIds(new Set([C2.id]),"teste");');
+  const events = JSON.parse(run('JSON.stringify(state.events.filter((entry)=>[P.id,C1.id,C2.id].includes(entry.itemId)))'));
+  assert.ok(events.length >= 40, `bateria deveria gerar muitos eventos, gerou ${events.length}`);
+  for (const event of events) {
+    for (const field of ["id","itemId","eventType","userId","actorNameSnapshot","organizationIdSnapshot","organizationNameSnapshot","sectorIdSnapshot","stateSnapshot","createdAt","effectiveAt"]) {
+      assert.ok(event[field], `${event.eventType}: falta ${field}`);
+    }
+    assert.ok(Number.isFinite(new Date(event.effectiveAt).getTime()), `${event.eventType}: effectiveAt inválido`);
+    assert.ok("fromValue" in event && "toValue" in event, `${event.eventType}: falta anterior/novo`);
+    if (/_changed$/.test(event.eventType) && !["blocked_reason_changed"].includes(event.eventType)) {
+      assert.notEqual(String(event.fromValue), String(event.toValue), `${event.eventType}: anterior e novo iguais`);
+    }
+  }
+  const types = new Set(events.map((event) => event.eventType));
+  for (const expected of ["created","relation_created","relation_updated","relation_lag_changed","relation_description_changed","title_changed","owner_changed","weight_changed","duration_changed","status_changed","progress_changed","completed","reopened","blocked_set","parent_changed","archived","restored","relation_removed","item_removed","context_changed"]) {
+    assert.ok(types.has(expected), `a bateria deveria ter gerado ${expected}`);
+  }
+});
+
+test("R2-10: mudança de contexto identifica o campo e reabertura guarda anterior/novo", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`ctx=createItem({...${defaults},title:"Contexto"});updateItem(ctx.id,{...getItem(ctx.id),ownerId:"u_enrique"});`);
+  const context_ = JSON.parse(run('JSON.stringify(state.events.filter((entry)=>entry.itemId===ctx.id && entry.eventType==="context_changed").map((entry)=>({comment:entry.comment,from:entry.fromValue,to:entry.toValue})))'));
+  assert.deepEqual(context_, [{ comment: "Setor", from: "sec_pmo", to: "sec_obra" }]);
+  run('updateItem(ctx.id,{...getItem(ctx.id),status:"done",progressPercent:100});updateItem(ctx.id,{...getItem(ctx.id),status:"in_progress",progressPercent:40});');
+  assert.equal(run('state.events.some((entry)=>entry.itemId===ctx.id && entry.eventType==="reopened" && entry.fromValue==="done" && entry.toValue==="in_progress")'), true);
+});
+
+test("R2-10: editar só a defasagem registra um evento de defasagem e nenhum evento de tipo", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`a=createItem({...${defaults},title:"A"});b=createItem({...${defaults},title:"B"});rel=createRelation(a.id,b.id,"TI",0,"");updateRelation(rel.id,{sourceId:a.id,targetId:b.id,relationType:"TI",lagDays:3,description:""});`);
+  assert.equal(run('state.events.filter((e)=>e.itemId===b.id && e.eventType==="relation_lag_changed" && e.fromValue==="0" && e.toValue==="3").length'), 1);
+  assert.equal(run('state.events.some((e)=>e.itemId===b.id && e.eventType==="relation_updated")'), false);
+  // Sem nenhuma diferença, nenhum evento novo.
+  const before = run("state.events.length");
+  run('updateRelation(rel.id,{sourceId:a.id,targetId:b.id,relationType:"TI",lagDays:3,description:""});');
+  assert.equal(run("state.events.length"), before);
+});
+
+test("R2-10: recálculo não libera automaticamente grupos cujo status resume os subitens", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  run(`grp=createItem({...${defaults},title:"Grupo"});kid=createItem({...${defaults},title:"Filho",parentId:grp.id});`);
+  // Depois que o grupo tem subitem, o status dele é resumo: recalcular não pode gerar evento nenhum.
+  const before = run("state.events.length");
+  run("recalculatePlannedDates();recalculatePlannedDates();recalculatePlannedDates();");
+  assert.equal(run("state.events.length"), before);
+  assert.equal(run("getItem(grp.id).status"), run("getItem(kid.id).status"), "o grupo segue o status do subitem");
+  // Forçando o grupo ao estado inicial com o filho em execução, quem decide é o resumo dos subitens:
+  // o grupo acompanha o filho, e a liberação automática não grava evento nenhum para ele.
+  const mark = run("state.events.length");
+  run('getItem(grp.id).status="backlog";getItem(kid.id).status="in_progress";getItem(kid.id).progressPercent=10;');
+  run("recalculatePlannedDates();");
+  assert.equal(run("getItem(grp.id).status"), "in_progress");
+  assert.equal(run(`state.events.slice(${mark}).some((e)=>e.itemId===grp.id && /Liberação calculada/.test(e.comment))`), false);
+});
+
+test("M-03: matriz por tipo — todo tipo cria, converte e resolve ícone e cor por empresa", () => {
+  const run = context();
+  run('state.currentUserId="u_luis";');
+  const types = JSON.parse(run("JSON.stringify(itemTypes.map((type)=>type.id))"));
+  assert.equal(types.length, 10);
+  for (const type of types) {
+    // Cada tipo tem rótulo, ícone disponível e cor hexadecimal válida.
+    const config = JSON.parse(run(`JSON.stringify(itemTypeConfig("${type}","org_castro"))`));
+    assert.ok(config.label && /^#[0-9a-fA-F]{6}$/.test(config.color), `${type}: configuração base inválida`);
+    assert.equal(run(`availableItemIcons.includes(itemTypeConfig("${type}","org_castro").icon)`), true, `${type}: ícone indisponível`);
+    // Cada tipo pode ser criado com dados mínimos válidos.
+    run(`created=createItem({...${defaults},title:"Tipo ${type}",type:"${type}"});`);
+    assert.equal(run("created.type"), type);
+  }
+  // Conversão entre qualquer par de tipos é aceita quando não há decisão de aprovação pendente.
+  run(`conv=createItem({...${defaults},title:"Conversível"});`);
+  for (const type of types) {
+    run(`updateItem(conv.id,{...getItem(conv.id),type:"${type}"});`);
+    assert.equal(run("getItem(conv.id).type"), type);
+  }
+  assert.equal(run('state.events.filter((entry)=>entry.itemId===conv.id && entry.eventType==="type_changed").length') >= types.length - 1, true);
+  // Aprovação pendente não pode virar outro tipo e ficar presa sem painel de decisão.
+  run(`ap=createItem({...${defaults},title:"Aprovação",type:"approval"});setApprovalStatus(ap,"under_review","approval_submitted","enviado");`);
+  assert.throws(() => run('updateItem(ap.id,{...getItem(ap.id),type:"task"})'), /decisão de aprovação em andamento/);
+  assert.equal(run("getItem(ap.id).type"), "approval");
+  // Estados de análise e correção não são atribuíveis a tipos que não são aprovação.
+  run(`plain=createItem({...${defaults},title:"Comum",type:"task"});`);
+  assert.throws(() => run('updateItem(plain.id,{...getItem(plain.id),status:"under_review"})'), /fluxo de aprovação/);
+  assert.throws(() => run('updateItem(plain.id,{...getItem(plain.id),status:"correction"})'), /fluxo de aprovação/);
+  assert.equal(run("getItem(plain.id).status") !== "under_review", true);
+  // Registros antigos que já estão nesses estados continuam editáveis sem mudar o status.
+  run('getItem(plain.id).status="correction";');
+  run('updateItem(plain.id,{...getItem(plain.id),title:"Comum revisado"});');
+  assert.equal(run("getItem(plain.id).status"), "correction");
+  // Aprovação concluída pode ser convertida (não há decisão pendente).
+  run('ap2=createItem({...' + defaults + ',title:"Aprovação concluída",type:"approval"});updateItem(ap2.id,{...getItem(ap2.id),type:"task"});');
+  assert.equal(run("getItem(ap2.id).type"), "task");
+});
+
+test("M-03: configuração por empresa vence a global, não vaza entre empresas e ignora ícone inválido", () => {
+  const run = context();
+  const base = JSON.parse(run('JSON.stringify(itemTypeConfig("task","org_castro"))'));
+  run('state.typeSettings={task:{icon:"flag",color:"#112233"},org_dmk:{task:{icon:"users",color:"#445566"}}};');
+  const castro = JSON.parse(run('JSON.stringify(itemTypeConfig("task","org_castro"))'));
+  const dmk = JSON.parse(run('JSON.stringify(itemTypeConfig("task","org_dmk"))'));
+  assert.deepEqual([castro.icon, castro.color], ["flag", "#112233"], "sem ajuste da empresa vale o ajuste global");
+  assert.deepEqual([dmk.icon, dmk.color], ["users", "#445566"], "o ajuste da empresa vence o global");
+  assert.equal(castro.label, base.label, "o rótulo do tipo não é configurável");
+  run('state.typeSettings.org_dmk.task.icon="ícone-inexistente";');
+  assert.equal(run('itemTypeConfig("task","org_dmk").icon'), base.icon, "ícone inválido volta ao ícone base do tipo");
+  assert.equal(run('itemTypeConfig("tipo_desconhecido","org_dmk").icon'), "circle");
 });

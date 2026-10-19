@@ -1129,8 +1129,18 @@ function updateRelation(id, input) {
   if (previous.relationType === "contains") syncContainsRelations(previous.targetId);
   if (relation.relationType === "contains") syncContainsRelations(target.id);
   if (previous.relationType === "contains") affectedParents.add(previous.sourceId);
-  createEvent(previous.targetId,"relation_updated",previous.relationType,input.relationType,`Relação atualizada: ${getItem(previous.sourceId)?.title} → ${source.title}.`);
-  if (target.id !== previous.targetId) createEvent(target.id,"relation_updated",previous.targetId,relation.id,relation.description || "Relação transferida para este item.");
+  // R2-10: um evento por atributo que mudou, com valores anterior/novo legíveis. O evento fica no
+  // item de destino atual (onde a relação passa a viver); se o destino mudou, o antigo também registra.
+  const otherTitle = (itemId) => getItem(itemId)?.title || "Item arquivado";
+  const eventItemId = target.id;
+  if (previous.relationType !== relation.relationType) createEvent(eventItemId,"relation_updated",previous.relationType,relation.relationType,`Relação com ${otherTitle(source.id)}.`);
+  if (Number(previous.lagDays || 0) !== Number(relation.lagDays || 0)) createEvent(eventItemId,"relation_lag_changed",String(Number(previous.lagDays || 0)),String(Number(relation.lagDays || 0)),`Defasagem da relação com ${otherTitle(source.id)}.`);
+  if ((previous.description || "") !== (relation.description || "")) createEvent(eventItemId,"relation_description_changed",previous.description || "",relation.description || "",`Descrição da relação com ${otherTitle(source.id)}.`);
+  if (previous.sourceId !== source.id) createEvent(eventItemId,"relation_retargeted",previous.sourceId,source.id,"Origem da relação alterada.");
+  if (target.id !== previous.targetId) {
+    createEvent(previous.targetId,"relation_retargeted",previous.targetId,target.id,"Relação transferida para outro item.");
+    createEvent(target.id,"relation_retargeted",previous.targetId,target.id,relation.description || "Relação transferida para este item.");
+  }
   for (const parentId of affectedParents) syncParentSummary(parentId);
   return relation;
 }
@@ -1298,6 +1308,10 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays","weight"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
+  // M-03: Em análise e Em correção só fazem sentido no fluxo de aprovação. Sem estas travas, uma
+  // aprovação pendente convertida em outro tipo ficava presa, sem painel para decidir.
+  if (item.type === "approval" && input.type !== "approval" && ["under_review","correction"].includes(item.status)) throw new Error("Conclua a decisão de aprovação em andamento antes de mudar o tipo do item.");
+  if (input.type !== "approval" && ["under_review","correction"].includes(input.status) && input.status !== item.status) throw new Error("Em análise e Em correção pertencem ao fluxo de aprovação.");
   if (input.type === "approval" && item.type !== "approval") { item.approvalRound ||= 1; item.approvalReviewerId ||= input.ownerId || ""; }
   if (input.status === "cancelled") input = { ...input, progressPercent: 100 };
   else if (Number(input.progressPercent ?? item.progressPercent ?? 0) > 0 && !["done","cancelled"].includes(input.status)) input = { ...input, status: "in_progress" };
@@ -1324,7 +1338,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
     if (next === item[field]) continue;
     const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt","plannedDurationDays","replannedDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
     if (operation && gpoDecision(user, operation, item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
-    createEvent(id,eventType,item[field],next,"",effectiveAt);
+    createEvent(id,eventType,item[field],next,eventType === "context_changed" ? { organizationId: "Empresa", sectorId: "Setor", state: "UF" }[field] : "",effectiveAt);
     item[field] = next; changed = true;
   }
   if (input.blocked !== undefined) {
@@ -1339,7 +1353,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
     }
   }
   if (complete && !wasComplete) { item.completedAt = effectiveAt; createEvent(id,"completed","",item.status,"",effectiveAt); }
-  if (wasComplete && !complete) { item.completedAt = ""; createEvent(id,"reopened","","","Item reaberto.",effectiveAt); }
+  if (wasComplete && !complete) { item.completedAt = ""; createEvent(id,"reopened","done",item.status,"Item reaberto.",effectiveAt); }
   if (item.blocked && (completeStatus(item.status) || item.status === "cancelled")) { createEvent(id,"blocked_cleared",item.blockedReason || "bloqueado","","Bloqueio removido ao encerrar o item.",effectiveAt); item.blocked = false; item.blockedReason = ""; item.blockedAt = ""; changed = true; }
   if (item.status === "in_progress" && !item.actualStartAt) { item.actualStartAt = effectiveAt; createEvent(id,"started","",effectiveAt,"Atividade iniciada.",effectiveAt); changed = true; }
   if (comment.trim()) { createEvent(id,"comment","","",comment.trim(),effectiveAt); changed = true; }
@@ -1652,9 +1666,13 @@ function recalculatePlannedDates() {
   const queue = items.filter((item) => indegree.get(item.id) === 0).map((item) => item.id), order = [];
   while (queue.length) { const id = queue.shift(); order.push(id); for (const r of outgoing.get(id)) { const n = indegree.get(r.targetId)-1; indegree.set(r.targetId,n); if (n === 0) queue.push(r.targetId); } }
   if (order.length !== items.length) return {valid:false,message:"Há um ciclo nas dependências temporais. As datas não foram recalculadas."};
+  // R2-10: o status de um grupo é resumo dos subitens (syncParentSummary). Liberá-lo aqui o fazia
+  // alternar entre Liberado e Lista de pendências, gravando eventos falsos a cada recálculo.
+  const summaryGroupIds = new Set(items.filter((entry) => entry.parentId && entry.status !== "cancelled").map((entry) => entry.parentId));
   for (const item of items) {
     const deps = incoming.get(item.id) || [];
     if (!["backlog","ready"].includes(item.status)) continue;
+    if (summaryGroupIds.has(item.id)) continue;
     const blockers = state.relations.filter((r)=>r.targetId===item.id && r.relationType==="blocks");
     const released = deps.every((r) => { const pred=byId.get(r.sourceId); if (!pred) return false; if (r.relationType === "II" || r.relationType === "IF") return ["in_progress","done"].includes(pred.status); return pred.status === "done"; }) && blockers.every((r)=>["done","cancelled"].includes(byId.get(r.sourceId)?.status));
     const nextStatus = released ? "ready" : "backlog";

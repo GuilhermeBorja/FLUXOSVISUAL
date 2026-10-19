@@ -118,3 +118,13 @@ A execução 39168227194 falhou exclusivamente no smoke test de navegador: o sel
 - **Migração:** dados salvos com status `blocked` recuperam o status anterior pelo histórico; sem histórico, itens com avanço ficam "Em execução" e os demais "Aguardando". O motivo recebe o texto "Migrado do status Bloqueado" e é registrado um evento. O filtro de status antigo é convertido para o indicador. Modelos e entradas legadas com `blocked` passam pela mesma normalização.
 - **Concluir ou cancelar** um item encerra o indicador, com evento.
 - **Pendência:** inspeção visual do badge e do formulário; o tooltip analítico ainda não mostra o motivo do bloqueio.
+
+
+## Histórico e tipos de item (R2-10 e M-03) — 19/10/2026
+
+- **Histórico (R2-10):** todos os tipos de evento emitidos têm rótulo em português; contexto, item pai e relações aparecem com nomes e não com ids; a mudança de contexto indica empresa, setor ou UF; a reabertura registra o status anterior e o novo.
+- **Relações:** a edição gera um evento por atributo alterado (tipo, defasagem, descrição, origem, destino) no item de destino atual, e nenhum evento quando nada mudou. O destino antigo registra que a relação saiu dele.
+- **Liberação automática:** deixa de alterar o status de grupos que resumem subitens. Antes, cada recálculo podia gravar um par de eventos falsos (liberado e de volta à lista de pendências).
+- **Tipos (M-03):** uma aprovação em análise ou correção não pode mais ser convertida em outro tipo, e Em análise e Em correção não podem ser atribuídos a tipos que não são aprovação. Registros antigos nesses estados continuam editáveis.
+- **Limite mantido:** a configuração de tipos cobre ícone e cor por empresa. Campos obrigatórios e transições por tipo pertencem à Etapa 2, como declara o README.
+- **Pendência:** inspeção visual da linha do tempo do histórico e da tela de configuração de tipos.

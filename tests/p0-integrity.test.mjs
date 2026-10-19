@@ -93,5 +93,8 @@ test("P0 integrado: rede temporal e repactuação preservam baseline e identidad
   assert.equal(run("JSON.stringify({start:b.baselineStartAt,due:b.baselineDueAt})"), baselineB);
   assert.notEqual(run("a.plannedStartAt"), "2026-10-20", "repactuação deve alterar a previsão, não a baseline");
   assert.equal(run('state.relations.filter((entry)=>entry.sourceId===a.id && entry.targetId===b.id && entry.relationType==="TI").length'), 1);
-  assert.equal(run('state.events.some((entry)=>entry.itemId===b.id && entry.eventType==="relation_updated")'), true);
+  // R2-10: só defasagem e descrição mudaram; o tipo continua TI e não gera evento de tipo.
+  assert.equal(run('state.events.some((entry)=>entry.itemId===b.id && entry.eventType==="relation_lag_changed" && entry.toValue==="1")'), true);
+  assert.equal(run('state.events.some((entry)=>entry.itemId===b.id && entry.eventType==="relation_description_changed" && entry.toValue==="Defasagem revisada")'), true);
+  assert.equal(run('state.events.some((entry)=>entry.itemId===b.id && entry.eventType==="relation_updated")'), false);
 });
