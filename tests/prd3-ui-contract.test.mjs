@@ -379,3 +379,39 @@ test("M-05: interface exibe bloqueio como indicador, com filtro, formulário e h
   assert.doesNotMatch(workspace, /status === "blocked"/);
   assert.doesNotMatch(graph, /status === "blocked"/);
 });
+
+test("R2-10: todo tipo de evento emitido tem rótulo e valores legíveis no histórico", () => {
+  const app = readFileSync(new URL("../dist/app.js", import.meta.url), "utf8");
+  const emitted = new Set([...app.matchAll(/createEvent\([^,]+,\s*"([a-z_]+)"/g)].map((match) => match[1]));
+  for (const [, type] of app.match(/const fields = \{([^}]*)\}/)[1].matchAll(/:"([a-z_]+_changed)"/g)) emitted.add(type);
+  const labels = new Set([...workspace.match(/const eventLabels = \{([\s\S]*?)\};/)[1].matchAll(/(\w+):"/g)].map((match) => match[1]));
+  const missing = [...emitted].filter((type) => !labels.has(type));
+  assert.deepEqual(missing, [], `tipos de evento sem rótulo: ${missing.join(", ")}`);
+
+  const storage = new Map();
+  const sandbox = vm.createContext({ console, document: { querySelector: () => ({}) }, localStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) } });
+  vm.runInContext(app, sandbox);
+  vm.runInContext('state = seedState(); function dateCell(value) { return "D:" + value; } function formatDateTime(value) { return "DT"; } function userName(id) { return state.users.find((user) => user.id === id)?.name || id; }', sandbox);
+  vm.runInContext(workspace.match(/function eventValue\(event, value\) \{[\s\S]*?\n\}\n/)[0], sandbox);
+  const show = (eventType, value) => vm.runInContext(`eventValue({eventType:${JSON.stringify(eventType)},itemId:"item_doors"},${JSON.stringify(value)})`, sandbox);
+  assert.equal(show("context_changed", "sec_obra"), vm.runInContext('state.sectors.find((entry)=>entry.id==="sec_obra").name', sandbox));
+  assert.equal(show("context_changed", "org_dmk"), vm.runInContext('state.organizations.find((entry)=>entry.id==="org_dmk").name', sandbox));
+  assert.equal(show("context_changed", "PE"), "PE");
+  assert.equal(show("parent_changed", "item_doors"), vm.runInContext('getItem("item_doors").title', sandbox));
+  assert.equal(show("relation_retargeted", "item_doors"), vm.runInContext('getItem("item_doors").title', sandbox));
+  assert.equal(show("relation_updated", "TI"), "TI · Término / Início");
+  assert.equal(show("relation_lag_changed", "3"), "3 dias");
+  assert.equal(show("started", "2026-10-19T01:08:31.700Z"), "DT");
+  assert.equal(show("reopened", "done"), "Concluído");
+});
+
+test("M-03: telas que exibem o tipo usam a configuração por empresa", () => {
+  const uses = (workspace.match(/itemTypeConfig\(/g) || []).length;
+  assert.ok(uses >= 5, `tabela, árvore, grafo, formulário e configurações devem usar itemTypeConfig (achou ${uses})`);
+  assert.match(workspace, /itemTypeConfig\(item\.type,item\.organizationId\)\.label/);
+  assert.match(workspace, /typeColor: \(item\) => itemTypeConfig\(item\.type,item\.organizationId\)\.color/);
+  assert.match(workspace, /const configured = itemTypeConfig\(type\.id,organizationId\)/);
+  // Limite documentado: a configuração cobre ícone e cor; campos e transições por tipo são da Etapa 2.
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  assert.match(readme, /Atributos personalizados e regras configuráveis de transição pertencem à formalização do modelo/);
+});
