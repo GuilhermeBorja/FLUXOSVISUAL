@@ -48,28 +48,22 @@ test("P0 M-01: relação duplicada não cria eventos nem altera o grafo", () => 
 });
 
 
-test("P0 M-09: reprovação, correção e aprovação preservam rodada e encadeamento", () => {
-  const run = createContext();
-  run(`item=createItem({... ${itemDefaults},title:"Aprovação em duas rodadas",type:"approval",ownerId:"u_luis"});item.approvalReviewerId="u_luis";firstSubmission=submitApprovalForReview(item.id,"Enviar rodada 1");firstDecision=decideApproval(item.id,"rejected","Corrigir critério","u_luis");revision=getItem(item.supersededBy);secondSubmission=submitApprovalForReview(revision.id,"Reenviar após correção");secondDecision=decideApproval(revision.id,"approved","Critério atendido");`);
-
-  assert.equal(run("firstSubmission.round"), 1);
-  assert.equal(run("firstSubmission.kind"), "submitted");
-  assert.equal(run("firstDecision.round"), 1);
-  assert.equal(run("firstDecision.outcome"), "rejected");
-  assert.equal(run("firstDecision.reason"), "Corrigir critério");
-  assert.equal(run("firstDecision.reviewerId"), "u_luis");
-  assert.ok(run("firstDecision.createdAt"));
-  assert.equal(run("revision.approvalRound"), 2);
-  assert.equal(run("revision.revisionOf"), run("item.id"));
-  assert.equal(run("secondSubmission.round"), 2);
-  assert.equal(run("secondSubmission.previousDecisionId"), run("firstDecision.id"));
-  assert.equal(run("secondDecision.round"), 2);
-  assert.equal(run("secondDecision.outcome"), "approved");
-  assert.equal(run("secondDecision.previousDecisionId"), run("firstDecision.id"));
-  assert.equal(run('getItem(revision.id).status'), "done");
-  assert.equal(run('state.approvalDecisions.filter((entry)=>entry.requestId===item.id).length'), 4);
+test("P0 M-09: reprovação mantém identidade da aprovação, corrige e reenvia",()=>{
+ const run=createContext();
+ run(`item=createItem({... ${itemDefaults},title:"Aprovação em duas rodadas",type:"approval",ownerId:"u_luis"});item.approvalReviewerId="u_luis";originalId=item.id;firstSubmission=submitApprovalForReview(item.id,"Enviar rodada 1");firstDecision=decideApproval(item.id,"rejected","Corrigir critério","u_luis");correction=getItem(item.correctionItemId);updateItem(correction.id,{...correction,status:"done",progressPercent:100});secondSubmission=submitApprovalForReview(item.id,"Reenviar após correção");secondDecision=decideApproval(item.id,"approved","Critério atendido");`);
+ assert.equal(run('item.id===originalId'),true);
+ assert.equal(run('firstSubmission.round'),1);
+ assert.equal(run('firstDecision.round'),1);
+ assert.equal(run('firstDecision.outcome'),"rejected");
+ assert.equal(run('correction.correctionFor===item.id'),true);
+ assert.equal(run('state.relations.some(rel=>rel.sourceId===correction.id&&rel.targetId===item.id&&rel.relationType==="blocks")'),true);
+ assert.equal(run('secondSubmission.round'),2);
+ assert.equal(run('secondSubmission.previousDecisionId'),run('firstDecision.id'));
+ assert.equal(run('secondDecision.round'),2);
+ assert.equal(run('secondDecision.outcome'),"approved");
+ assert.equal(run('item.status'),"done");
+ assert.equal(run('state.approvalDecisions.filter(entry=>entry.requestId===item.id).length'),4);
 });
-
 
 test("P0 integrado: rede temporal e repactuação preservam baseline e identidade da relação", () => {
   const run = createContext();

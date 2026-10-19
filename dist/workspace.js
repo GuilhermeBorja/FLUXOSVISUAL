@@ -812,9 +812,9 @@ function renderTemplatesPanel() {
   const user = currentUser();
   const templates = (state.templates || []).filter((entry) => gpoDecision(user,"view_item",{organizationId:entry.organizationId,state:state.organizations.find((org) => org.id === entry.organizationId)?.state}) === true);
   let html = panelHeader(ui.templateCreationMode ? "Criar conforme template" : "Modelos",ui.templateCreationMode ? "Escolha e revise um fluxo para criar novas instâncias" : "Fluxos reutilizáveis");
-  html += '<div class="drawer-body"><p class="muted">' + (ui.templateCreationMode ? 'Selecione um modelo e revise seus dados antes de criar. O modelo original não será alterado.' : 'Gerencie os modelos reutilizáveis. Para iniciar um fluxo a partir de um modelo, use “Criar conforme template” ao lado de “Novo item”.') + '</p>';
+  html += '<div class="drawer-body"><p class="muted">' + (ui.templateCreationMode ? 'Selecione um modelo e revise seus dados antes de criar. O modelo original não será alterado.' : 'Gerencie, escolha e aplique um modelo diretamente neste painel.') + '</p>';
   if (!templates.length) html += '<p class="secondary">Nenhum modelo disponível para esta empresa. Abra um projeto ou processo editável e salve-o como modelo.</p>';
-  else html += '<div class="admin-list">' + templates.map((entry) => '<div class="admin-entry"><span><strong>' + escapeHtml(entry.name) + '</strong><small>' + escapeHtml(orgName(entry.organizationId)) + ' · ' + entry.items.length + ' itens · ' + entry.relations.length + ' relações</small></span><button type="button" class="button quiet" data-apply-template="' + escapeHtml(entry.id) + '">' + (ui.templateCreationMode ? 'Usar modelo' : 'Revisar') + '</button>' + ((!ui.templateCreationMode && (entry.createdBy === user.id || canManageGpo(user))) ? '<button type="button" class="icon-button delete-icon" data-remove-template="' + escapeHtml(entry.id) + '" aria-label="Excluir modelo">' + icon("trash-2") + '</button>' : '') + '</div>').join("") + '</div>';
+  else html += '<div class="admin-list">' + templates.map((entry) => '<div class="admin-entry"><span><strong>' + escapeHtml(entry.name) + '</strong><small>' + escapeHtml(orgName(entry.organizationId)) + ' · ' + entry.items.length + ' itens · ' + entry.relations.length + ' relações</small></span><button type="button" class="button quiet" data-apply-template="' + escapeHtml(entry.id) + '">' + 'Usar modelo' + '</button>' + ((!ui.templateCreationMode && (entry.createdBy === user.id || canManageGpo(user))) ? '<button type="button" class="icon-button delete-icon" data-remove-template="' + escapeHtml(entry.id) + '" aria-label="Excluir modelo">' + icon("trash-2") + '</button>' : '') + '</div>').join("") + '</div>';
   const selected = templates.find((entry) => entry.id === ui.templateId);
   if (selected) {
     const organizations = editableOrganizations();
@@ -893,7 +893,7 @@ function renderAdmin() {
     ${ui.adminTab === "statuses" && canManageGpo(currentUser()) ? renderStatusSettings() : ""}
     ${ui.adminTab === "archive" && (canManageGpo(currentUser()) || state.items.some((item)=>item.archivedAt && canEditItem(currentUser(),item))) ? renderArchivedItems() : ""}
     ${ui.adminTab === "types" ? renderTypeSettings() : ""}
-    ${ui.adminTab === "preferences" ? renderViewSettingsPanel() : ""}
+    ${ui.adminTab === "preferences" ? renderViewSettingsPanel().replace(/^.*?<div class="drawer-body">/s,"").replace(/<\/div>$/,"") : ""}
     ${ui.adminTab === "history" ? renderRegistryTimeline() : ""}
   </div>`;
 }
