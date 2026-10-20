@@ -1,4 +1,4 @@
-name: Deploy FLUXOSVISUAL
+name: Deploy PRD4 FLUXOSVISUAL
 on:
   push:
     branches: [PRD3]
@@ -13,10 +13,17 @@ concurrency:
 jobs:
   build:
     if: github.ref == 'refs/heads/PRD3'
+    outputs:
+      deployed_sha: ${{ steps.source.outputs.sha }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout PRD3
+      - name: Checkout PRD4 for Pages
         uses: actions/checkout@v4
+        with:
+          ref: PRD4
+      - name: Record deployed PRD4 commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -36,7 +43,7 @@ jobs:
         run: |
           nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &
           timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
-          node browser-tests/prd3-smoke.mjs
+          node browser-tests/prd4-smoke.mjs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
@@ -50,17 +57,17 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy PRD3 to GitHub Pages
+      - name: Deploy PRD4 to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
       - name: Verify published version
         env:
           SITE_URL: ${{ steps.deployment.outputs.page_url }}
-          EXPECTED_BUILD: ${{ github.sha }}
+          EXPECTED_BUILD: ${{ needs.build.outputs.deployed_sha }}
         run: |
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error "${SITE_URL}version.js?verify=${EXPECTED_BUILD}-${attempt}" | grep -F "${EXPECTED_BUILD:0:7}"; then
-              echo "Published PRD3 commit ${EXPECTED_BUILD} at ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
+              echo "Published PRD4 commit ${EXPECTED_BUILD} at ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 5
