@@ -93,8 +93,7 @@ try{
     notice:document.querySelector("#noticeRoot")?.innerText||"",
     activeHandles:document.querySelectorAll("[data-gantt-handle]").length,
     links:document.querySelectorAll("[data-gantt-ti]").length,
-    trace:window.__prd43Trace,
-    dragTarget:(()=>{const tr=document.querySelector('[data-gantt-row="'+c+'"]');return tr?.dataset.ganttRow||""})()
+    trace:window.__prd43Trace
   }));
   const hit=await page.evaluate(({x,y})=>({
     row:prd43GanttDropTarget(x,y)?.dataset.ganttRow,
