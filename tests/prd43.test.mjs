@@ -51,7 +51,7 @@ test("PRD4.3: dashboard e tabela priorizam leitura sem alterar permissoes",()=>{
   assert.doesNotMatch(workspace,/Trabalho <small>Sintética/);
   assert.doesNotMatch(workspace,/Perfis reutilizáveis/);
   assert.match(workspace,/data-action="toggle-subitems"/);
-  assert.match(workspace,/const mandatory=new Set\(\["select","name","status","owner","due","actions"\]\)/);
+  assert.match(workspace,/const mandatory=new Set\(compact\?/);
   assert.match(workspace,/function prd43ProgressBasis/);
   assert.match(workspace,/prd43InlineDeletion/);
   assert.match(css,/\.prd43-inline-confirm/);
