@@ -77,6 +77,13 @@ try{
   await origin.scrollIntoViewIfNeeded();
   const rect=await origin.boundingBox();
   const targetRect=await page.locator('[data-gantt-row="'+c+'"] .gantt-item').boundingBox();
+  await page.evaluate(id=>{
+    window.__prd43Trace=[];
+    const handle=document.querySelector('[data-gantt-handle="'+id+'"]');
+    for(const type of ["pointerdown","pointermove","pointerup","pointercancel"]){
+      handle.addEventListener(type,e=>window.__prd43Trace.push({type,target:e.target?.tagName,x:Math.round(e.clientX),y:Math.round(e.clientY),captured:handle.hasPointerCapture(e.pointerId)}),true);
+    }
+  },a);
   await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);
   await page.mouse.down();
   await page.mouse.move(targetRect.x+Math.min(85,targetRect.width/3),targetRect.y+targetRect.height/2,{steps:9});
@@ -85,9 +92,15 @@ try{
   const info=await page.evaluate(()=>({
     notice:document.querySelector("#noticeRoot")?.innerText||"",
     activeHandles:document.querySelectorAll("[data-gantt-handle]").length,
-    links:document.querySelectorAll("[data-gantt-ti]").length
+    links:document.querySelectorAll("[data-gantt-ti]").length,
+    trace:window.__prd43Trace,
+    dragTarget:(()=>{const tr=document.querySelector('[data-gantt-row="'+c+'"]');return tr?.dataset.ganttRow||""})()
   }));
-  assert.ok(extra,"drag creates additional TI: "+JSON.stringify(info)+" errors="+errors.join("; "));
+  const hit=await page.evaluate(({x,y})=>({
+    row:prd43GanttDropTarget(x,y)?.dataset.ganttRow,
+    stack:document.elementsFromPoint(x,y).slice(0,8).map(el=>({tag:el.tagName,cls:String(el.className?.baseVal||el.className||"").slice(0,70),row:el.closest?.("[data-gantt-row]")?.dataset.ganttRow||""}))
+  }),{x:targetRect.x+Math.min(85,targetRect.width/3),y:targetRect.y+targetRect.height/2});
+  assert.ok(extra,"drag creates additional TI: "+JSON.stringify(info)+" hit="+JSON.stringify(hit)+" errors="+errors.join("; "));
   await page.locator('[data-gantt-ti="'+extra+'"]').dispatchEvent("click");
   assert.equal(await page.locator("#prd43GanttRelationEditor").isVisible(),true);
   await page.locator("#prd43TiTarget").selectOption(d);
