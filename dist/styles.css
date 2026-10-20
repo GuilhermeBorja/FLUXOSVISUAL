@@ -1517,3 +1517,15 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
   #panelRoot #createItemForm>.prd42-create-extras:nth-of-type(2),#panelRoot #createItemForm>.prd42-create-extras:nth-of-type(3){display:none}
   #panelRoot #createItemForm>.prd42-create-actions{grid-row:6;grid-column:1}
 }
+
+
+/* PRD4.3.1: os tres grupos avancados permanecem disponiveis no celular,
+   sem ocultar funcionalidades para economizar espaco. */
+@media(max-width:760px){
+  #panelRoot #createItemForm{grid-template-rows:auto auto auto minmax(65px,1fr) auto auto auto auto!important}
+  #panelRoot #createItemForm>.prd42-create-extras:nth-of-type(1){grid-row:5;display:block}
+  #panelRoot #createItemForm>.prd42-create-extras:nth-of-type(2){grid-row:6;display:block}
+  #panelRoot #createItemForm>.prd42-create-extras:nth-of-type(3){grid-row:7;display:block}
+  #panelRoot #createItemForm>.prd42-create-actions{grid-row:8}
+  #panelRoot #createItemForm>.prd42-create-extras>summary{padding:2px!important}
+}
