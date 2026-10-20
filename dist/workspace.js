@@ -287,7 +287,7 @@ function render() {
         </div>
       </header>
       <section class="workspace-heading">
-        <div><h1>${escapeHtml(orgName(user.organizationId) === "-" ? "Organização" : orgName(user.organizationId))}</h1><p>${items.length} ${items.length === 1 ? "item visível" : "itens visíveis"}</p></div>
+        <div class="prd42-context-title"><h1>${escapeHtml(orgName(user.organizationId) === "-" ? "Organização" : orgName(user.organizationId))}</h1><span class="prd42-items-count">${items.length} ${items.length === 1 ? "item" : "itens"}</span></div>
         <div class="workspace-heading-actions">
           <button class="button quiet" data-action="templates">${icon("workflow")}Modelos</button>
           <button class="button primary" data-action="create" ${canCreateItem(user) ? "" : 'disabled title="Seu perfil GPO não permite criar itens neste contexto."'}>${icon("plus")}Novo item</button>
@@ -297,15 +297,15 @@ function render() {
       ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
       <section class="workspace-controls" aria-label="Visualização e filtros">
-        <div class="prd41-mode-label" aria-label="Visualização unificada">${icon("panels-top-left")} Área integrada <small>Sintética · Analítica · Gantt</small></div>
+        <div class="prd41-mode-label" aria-label="Visualização unificada">${icon("panels-top-left")} Trabalho <small>Sintética · Analítica · Gantt</small></div>
         <div class="view-filters">
           <label class="search-box">${icon("search")}<input id="searchInput" type="search" placeholder="Buscar item ou responsável" value="${escapeHtml(state.filters.query)}" aria-label="Buscar item ou responsável"/></label>
           <select id="scopeSelect" aria-label="Projeto ou processo"><option value="all">Todos os processos</option>${projectOptions().map((item) => option(item.id, item.title, ui.scopeId === item.id)).join("")}</select>
+          <label class="prd42-subitems-global" title="Aplicar a tabela e ao Gantt"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/> Subitens</label>
           <button class="button quiet ${ui.filtersOpen ? "active" : ""}" data-action="filters" aria-expanded="${ui.filtersOpen}">${icon("sliders-horizontal")}Filtros${filterCount() ? `<span class="count-badge">${filterCount()}</span>` : ""}</button>
         </div>
       </section>
       ${ui.filtersOpen ? renderFilters() : ""}
-      ${renderPrd4QuickCreate()}
       <section id="workspaceView" aria-label="Três visualizações sincronizadas">
         ${renderPrd41Workspace(items)}
       </section>
@@ -501,7 +501,7 @@ function renderTable(items) {
   const rows = tableRows(items);
   const selectedVisible = rows.filter(({item}) => ui.bulkSelected.has(item.id)).length;
   return `<div class="table-card">
-    <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/>Mostrar subitens</label><label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar visíveis</label><span class="secondary">${selectedVisible} selecionados · ${rows.length} linhas</span><button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Editar em lote</button></div>
+    <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar visíveis</label><span class="secondary">${selectedVisible} selecionados · ${rows.length} linhas</span><button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Editar em lote</button></div>
     ${ui.bulkOpen && selectedVisible ? renderBulkEditor() : ""}
     ${!rows.length ? emptyMarkup() : `<div class="synth-table-wrap"><table class="synth-table"><thead><tr><th><span class="sr-only">Selecionar</span></th><th>ID</th><th>Nome</th><th>Conclusão</th><th>Responsável</th><th>Criação</th><th>Início projetado</th><th>Início real</th><th>Liberada em</th><th>Término projetado</th><th>Término real</th><th>Duração total</th><th>Duração da atividade</th><th>Peso</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
       ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" data-depth="${depth}" data-type="${escapeHtml(item.type)}" data-row-draggable="${canChangeHierarchy(currentUser(),item) ? "true" : "false"}" draggable="${canChangeHierarchy(currentUser(),item)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}" style="--row-fill:${rowFillColor(item,depth)}">
@@ -597,7 +597,7 @@ function renderGantt(items) {
   });
   const maxDay = Math.max(1,...rows.map((row) => row.startOffset + row.duration + (row.slack || 0)));
   let html = '<div class="gantt-card"><div class="gantt-heading"><div><h2>Cronograma e caminho crítico</h2></div><div><strong>Previsão de término</strong><span>' + escapeHtml(analysis.finishDate ? formatDate(analysis.finishDate) : "—") + '</span></div></div>';
-  html += '<div class="gantt-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitemsGantt" ' + (ui.showSubitems ? 'checked' : '') + '/>Mostrar subitens</label>' + (canManageGpo(currentUser()) ? '<label class="risk-setting">Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="' + Math.max(1,Math.min(60,Number(state.riskThresholdDays) || 3)) + '"/></label>' : '') + '</div>';
+  html += '<div class="gantt-toolbar">' + (canManageGpo(currentUser()) ? '<label class="risk-setting">Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="' + Math.max(1,Math.min(60,Number(state.riskThresholdDays) || 3)) + '"/></label>' : '') + '</div>';
   if (analysis.message) html += '<div class="notice ' + (analysis.valid ? '' : 'error') + '" role="' + (analysis.valid ? 'status' : 'alert') + '">' + escapeHtml(analysis.message) + '</div>';
   if (!rows.length) return html + emptyMarkup() + '</div>';
   html += '<div class="gantt-scroll"><div class="gantt-axis"><span>Item</span><div class="gantt-axis-track">' + [0,25,50,75,100].map((percent)=>'<span style="left:' + percent + '%">' + escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100)))) + '</span>').join("") + '</div></div>';
@@ -657,26 +657,10 @@ function renderPrd4Overview(items){
     {label:"Impedimentos",value:affected.length,description:"Atividades a verificar",focus:affected[0]?.id||""},
     {label:"Atrasos",value:late.length,description:"Prazos vencidos",focus:late[0]?.id||""},
     {label:"Aprovações",value:approvals.length,description:"Aguardando decisão ou correção",focus:approvals[0]?.id||""}];
-  return `<section class="prd4-summary" aria-label="Visão geral dos processos">${options.map(item=>
-    `<button type="button" class="prd4-summary-card" ${item.focus ? `data-prd4-focus="${escapeHtml(item.focus)}"` : "disabled"}>
-      <strong>${item.value}</strong><span>${item.label}</span><small>${item.description}</small></button>`).join("")}</section>`;
-}
-
-function renderPrd4QuickCreate() {
-  if(!canCreateItem(currentUser()))return "";
-  const parent=getItem(ui.selectedItemId), owner=parent?.ownerId||currentUser().id;
-  return `<form id="prd4QuickCreate" class="prd4-quick-create" aria-label="Adicionar atividades">
-    <div class="prd4-quick-top">
-      <label>Nome<input name="title" maxlength="240" placeholder="Nome da atividade" required/></label>
-      <label>Tipo<select name="type">${itemTypes.map(t=>option(t.id,t.label,t.id==="task")).join("")}</select></label>
-      <label>Responsável<select name="ownerId" required>${ownerOptions(owner)}</select></label>
-      <label>Início esperado<input type="date" name="plannedStartAt" value="${today()}" required/></label>
-      <label>Duração (dias)<input type="number" name="plannedDurationDays" value="1" min="0" step="1" required/></label>
-      <button type="submit" class="button primary">${icon("plus")}Adicionar</button>
-    </div>
-    <details><summary>Adicionar vários itens</summary><label>Mais itens, um por linha<textarea name="additionalTitles" rows="3" placeholder="Atividade 2&#10;Atividade 3"></textarea></label></details>
-    ${parent ? `<small class="secondary">Inserindo dentro de: ${escapeHtml(parent.title)}</small>` : ""}
-  </form>`;
+  return `<section class="prd42-summary" aria-label="Indicadores de acompanhamento">
+    ${options.map(item=>`<button type="button" class="prd42-indicator" ${item.focus ? `data-prd4-focus="${escapeHtml(item.focus)}"` : 'disabled title="Nenhum item nesta condição"' } title="${escapeHtml(item.description)}">
+      <strong>${item.value}</strong><span>${item.label}</span></button>`).join("")}
+  </section>`;
 }
 
 function renderGraph(items) {
@@ -1236,27 +1220,6 @@ function renderDeletionPanel() {
 }
 
 function bindWorkspace() {
-  app.onsubmit = event => {
-    if(event.target.id!=="prd4QuickCreate")return;
-    event.preventDefault();
-    const data=new FormData(event.target);
-    const names=[String(data.get("title")||"").trim(),...String(data.get("additionalTitles")||"").split("\n").map(v=>v.trim()).filter(Boolean)].filter(Boolean);
-    if(names.length>100){notify("Limite de 100 itens por operação.","error");return;}
-    const saved=JSON.stringify(state);
-    try{
-      const owner=state.users.find(user=>user.id===String(data.get("ownerId")));
-      if(!owner)throw new Error("Selecione um responsável.");
-      let first=null;
-      for(const title of names){
-        const item=createItem({title,type:String(data.get("type")||"task"),ownerId:owner.id,
-          organizationId:owner.organizationId,sectorId:owner.sectorId,state:owner.state,
-          parentId:ui.selectedItemId||"",plannedStartAt:String(data.get("plannedStartAt")||today()),
-          plannedDurationDays:Number(data.get("plannedDurationDays")||0),status:"backlog"});
-        first||=item;
-      }
-      saveState();notify(names.length+" item(ns) criado(s).");render();
-    }catch(error){const restored=JSON.parse(saved);for(const key of Object.keys(state))delete state[key];Object.assign(state,restored);notify(error.message,"error");}
-  };
   app.onclick = (event) => {
     const button = event.target.closest("button,[data-action]");
     if (!button || button.closest("#panelRoot")) return;
@@ -1407,7 +1370,7 @@ function bindWorkspace() {
   });
   document.querySelector("#scopeSelect").addEventListener("change", (event) => { ui.scopeId = event.target.value; ui.graphTransform = null; render(); });
   document.querySelectorAll("[data-filter]").forEach((select) => select.addEventListener("change", (event) => { state.filters[event.target.dataset.filter] = event.target.value; saveState(); render(); }));
-  document.querySelectorAll("#showSubitems, #showSubitemsGantt").forEach(toggle => toggle.addEventListener("change", (event) => { ui.showSubitems = event.target.checked; ui.collapsed = new Set(); render(); }));
+  document.querySelector("#showSubitems")?.addEventListener("change", (event) => { ui.showSubitems = event.target.checked; ui.collapsed = new Set(); render(); });
   document.querySelector("#riskThresholdDays")?.addEventListener("change", (event) => {
     const value = Number(event.target.value);
     if (!Number.isInteger(value) || value < 1 || value > 60) { notify("Defina o limite de risco entre 1 e 60 dias.","error"); render(); return; }
