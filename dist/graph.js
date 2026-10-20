@@ -242,106 +242,184 @@ const FluxosGraph = (() => {
       });
     }
 
-    function propagate(id) {
+    function clearAnimation() {
       propagationTimers.forEach(clearTimeout);
-      propagationTimers = [];
-      nodeElements.forEach((element) => element.classList.remove("propagation-active","propagation-current","propagation-stop"));
-      edgeElements.forEach((element) => element.classList.remove("propagation-active"));
-      if (!model.nodeById.has(id)) return false;
-      // Walk hierarchy in depth-first order. Sibling precedence is defined by
-      // TI/II/TT/IF relations; when it does not constrain a pair, use visual order.
-      const path=[], visited=new Set();
-      const byId=new Map(options.items.map(item=>[item.id,item]));
-      const positions=new Map(options.items.map((item,index)=>[item.id,index]));
+      propagationTimers=[];
+      nodeElements.forEach(el=>el.classList.remove("propagation-active","propagation-current","propagation-stop"));
+      edgeElements.forEach(el=>el.classList.remove("propagation-active"));
+      svg.querySelectorAll(".prd4-traversal-label").forEach(el=>el.remove());
+    }
+
+    function hasFlowBlocker(id) {
+      const item=model.nodeById.get(id)?.item;
+      return item?.status==="blocked" || Boolean(item?.inheritedBlockedFrom?.length);
+    }
+
+    function animationPath(rootId,layoutMode) {
+      const items=options.items,byId=new Map(items.map(item=>[item.id,item]));
+      const orderIndex=new Map(items.map((item,index)=>[item.id,index]));
       const children=new Map();
-      for(const item of options.items){
+      for(const item of items){
         if(item.parentId && byId.has(item.parentId)){
           if(!children.has(item.parentId))children.set(item.parentId,[]);
           children.get(item.parentId).push(item);
         }
       }
-      const byVisualOrder=(a,b)=>
-        Number(a.sortOrder??0)-Number(b.sortOrder??0)
-        || positions.get(a.id)-positions.get(b.id);
-      const temporalTypes=new Set(["TI","II","TT","IF"]);
-      const temporalLinks=model.links.filter(link=>temporalTypes.has(link.relation.relationType));
-      const containmentLink=(parent,child)=>model.links.find(link=>
-        link.source.id===parent && link.target.id===child
-        && link.relation.relationType==="contains")?.relation.id||"";
-      const temporalLink=(source,target)=>temporalLinks.find(link=>
-        link.source.id===source && link.target.id===target)?.relation.id||"";
-
-      function orderedSiblings(entries) {
-        const original=[...entries].sort(byVisualOrder);
-        const groupIds=new Set(original.map(item=>item.id));
-        const inDegree=new Map(original.map(item=>[item.id,0]));
-        const outgoing=new Map(original.map(item=>[item.id,new Set()]));
-        for(const link of temporalLinks){
-          const from=link.source.id,to=link.target.id;
-          if(from===to || !groupIds.has(from) || !groupIds.has(to)
-             || outgoing.get(from).has(to)) continue;
-          outgoing.get(from).add(to);
-          inDegree.set(to,inDegree.get(to)+1);
+      const visual=(a,b)=>Number(a.sortOrder??0)-Number(b.sortOrder??0)||orderIndex.get(a.id)-orderIndex.get(b.id);
+      const preliminary=[],visited=new Set();
+      function traverse(id) {
+        if(visited.has(id))return;
+        visited.add(id);preliminary.push(id);
+        for(const child of [...(children.get(id)||[])].sort(visual))traverse(child.id);
+      }
+      traverse(rootId);
+      const active=new Set(preliminary);
+      const dependencies=model.links.filter(link=>(link.relation.relationType==="TI" || link.relation.relationType==="contains")
+        && active.has(link.source.id) && active.has(link.target.id));
+      const outgoing=new Map(preliminary.map(id=>[id,[]]));
+      const indegree=new Map(preliminary.map(id=>[id,0]));
+      const levels=new Map(preliminary.map(id=>[id,0]));
+      for(const link of dependencies){
+        outgoing.get(link.source.id).push(link.target.id);
+        indegree.set(link.target.id,indegree.get(link.target.id)+1);
+      }
+      const remaining=new Set(preliminary),sorted=[];
+      while(remaining.size){
+        let next=preliminary.find(id=>remaining.has(id)&&indegree.get(id)===0);
+        if(!next)next=preliminary.find(id=>remaining.has(id)); // invalid legacy graph; never loop infinitely
+        sorted.push(next);remaining.delete(next);
+        for(const to of outgoing.get(next)){
+          indegree.set(to,indegree.get(to)-1);
+          levels.set(to,Math.max(levels.get(to),levels.get(next)+1));
         }
-        const done=new Set(),ordered=[];
-        while(ordered.length<original.length){
-          const next=original.find(item=>!done.has(item.id)&&inDegree.get(item.id)===0);
-          if(!next){
-            // Invalid/cyclic precedence must never freeze the visualization.
-            // Retain each remaining item once, in its stable visual order.
-            ordered.push(...original.filter(item=>!done.has(item.id)));
-            break;
+      }
+      // Edges are the only allowed visual routes. Containment is traversable
+      // in both directions; temporal links only in their forward direction.
+      const adjacent=new Map(preliminary.map(id=>[id,[]]));
+      for(const link of model.links){
+        if(!active.has(link.source.id)||!active.has(link.target.id))continue;
+        if(link.relation.relationType==="contains"){
+          adjacent.get(link.source.id).push({id:link.target.id,edgeId:link.relation.id});
+          adjacent.get(link.target.id).push({id:link.source.id,edgeId:link.relation.id});
+        } else if(link.relation.relationType==="TI"){
+          adjacent.get(link.source.id).push({id:link.target.id,edgeId:link.relation.id});
+        }
+      }
+      function route(from,to){
+        if(from===to)return [];
+        const current=byId.get(from),target=byId.get(to);
+        // The sibling temporal link is preferred over an unnecessary return.
+        const direct=adjacent.get(from)?.find(edge=>edge.id===to
+          && model.links.some(link=>link.relation.id===edge.edgeId && link.relation.relationType==="TI"));
+        if(direct && current?.parentId===target?.parentId)return [{nodeId:to,edgeId:direct.edgeId}];
+        // Between different branches, first climb to the immediate parent.
+        const queue=[{id:from,path:[]}],seen=new Set([from]);
+        while(queue.length){
+          const entry=queue.shift();
+          const edges=[...(adjacent.get(entry.id)||[])].sort((x,y)=>{
+            const px=byId.get(entry.id)?.parentId;
+            return Number(y.id===px)-Number(x.id===px);
+          });
+          for(const edge of edges){
+            if(seen.has(edge.id))continue;
+            const path=[...entry.path,{nodeId:edge.id,edgeId:edge.edgeId}];
+            if(edge.id===to)return path;
+            seen.add(edge.id);queue.push({id:edge.id,path});
           }
-          ordered.push(next);done.add(next.id);
-          for(const to of outgoing.get(next.id))inDegree.set(to,inDegree.get(to)-1);
         }
-        return ordered;
+        // Separate disconnected projects cannot be linked by invented edges.
+        return [{nodeId:to,edgeId:""}];
       }
-      function append(nodeId,edgeId=""){
-        if(!path.length){path.push({nodeId,edgeId});return;}
-        const previous=path[path.length-1].nodeId;
-        path.push({nodeId,edgeId:edgeId||temporalLink(previous,nodeId)});
-      }
-      function walk(itemId,incoming="",depth=0){
-        if(visited.has(itemId)||!model.nodeById.has(itemId))return;
-        visited.add(itemId);append(itemId,incoming);
-        for(const child of orderedSiblings(children.get(itemId)||[])){
-          if(visited.has(child.id))continue;
-          const before=path.length;
-          walk(child.id,containmentLink(itemId,child.id),depth+1);
-          // Once a nested branch finishes, visually return to its immediate
-          // parent before moving to the next sibling. Do not revisit the root
-          // between root-level siblings.
-          if(depth>0 && path.length>before)append(itemId,containmentLink(itemId,child.id));
+      const steps=[];
+      if(layoutMode==="parallel"){
+        const waves=new Map();
+        for(const id of sorted){
+          const level=levels.get(id);
+          if(!waves.has(level))waves.set(level,[]);
+          waves.get(level).push(id);
+        }
+        for(const [,ids] of [...waves].sort((a,b)=>a[0]-b[0])){
+          const edges=model.links.filter(link=>ids.includes(link.target.id)
+            && active.has(link.source.id)
+            && ["TI","contains"].includes(link.relation.relationType)).map(link=>link.relation.id);
+          steps.push({nodeIds:ids,edgeIds:edges});
+        }
+      } else {
+        let previous="";
+        for(const id of sorted){
+          const nextSteps=previous ? route(previous,id) : [{nodeId:id,edgeId:""}];
+          for(const entry of nextSteps){
+            if(entry.nodeId===previous)continue;
+            steps.push({nodeIds:[entry.nodeId],edgeIds:entry.edgeId?[entry.edgeId]:[]});
+            previous=entry.nodeId;
+          }
         }
       }
-      const roots=orderedSiblings(options.items.filter(item=>
-        !item.parentId || !byId.has(item.parentId)));
-      let top=byId.get(id),ancestors=new Set();
-      while(top?.parentId && byId.has(top.parentId) && !ancestors.has(top.id)){
-        ancestors.add(top.id);top=byId.get(top.parentId);
+      return steps;
+    }
+
+    function animateNext() {
+      if(!animationState || animationState.paused)return;
+      if(animationState.index>=animationState.steps.length){
+        animationState.paused=true;
+        return;
       }
-      if(top){
-        const index=roots.findIndex(root=>root.id===top.id);
-        if(index>0)roots.push(...roots.splice(0,index));
+      const step=animationState.steps[animationState.index++];
+      nodeElements.forEach(el=>el.classList.remove("propagation-current"));
+      for(const id of step.nodeIds){
+        const el=nodeElements.get(id);
+        el?.classList.add("propagation-active","propagation-current");
+        if(hasFlowBlocker(id))el?.classList.add("propagation-stop");
+        if(el){
+          let label=el.querySelector(".prd4-traversal-label");
+          if(!label){
+            label=document.createElementNS("http://www.w3.org/2000/svg","text");
+            label.setAttribute("class","prd4-traversal-label");
+            label.setAttribute("x",String(model.nodeById.get(id).radius+19));
+            label.setAttribute("y","-14");
+            el.appendChild(label);
+          }
+          label.textContent=String(animationState.index);
+        }
       }
-      for(const root of roots)walk(root.id);
-      for(const item of options.items)walk(item.id);
-      if (!path.length && model.nodeById.has(id)) path.push({nodeId:id});
-      path.forEach((entry,index) => {
-        propagationTimers.push(setTimeout(() => {
-          nodeElements.forEach((element) => element.classList.remove("propagation-current"));
-          nodeElements.get(entry.nodeId)?.classList.add("propagation-active","propagation-current");
-          if (entry.edgeId) edgeElements.get(entry.edgeId)?.classList.add("propagation-active");
-          if ((() => { const blockedItem = model.nodeById.get(entry.nodeId)?.item; return blockedItem?.blocked === true && !["done","cancelled"].includes(blockedItem.status); })()) nodeElements.get(entry.nodeId)?.classList.add("propagation-stop");
-        },index * 430));
-      });
-      propagationTimers.push(setTimeout(() => {
-        nodeElements.forEach((element) => element.classList.remove("propagation-active","propagation-current","propagation-stop"));
-        edgeElements.forEach((element) => element.classList.remove("propagation-active"));
-        propagationTimers = [];
-      },path.length * 430 + 1800));
+      for(const id of step.edgeIds)edgeElements.get(id)?.classList.add("propagation-active");
+      if(animationState.stopAtBlocked && step.nodeIds.some(hasFlowBlocker)){
+        animationState.paused=true;
+        return;
+      }
+      propagationTimers.push(setTimeout(animateNext,550));
+    }
+
+    function propagate(id,mode="sequential",stopAtBlocked=false) {
+      if(!model.nodeById.has(id))return false;
+      if(animationState?.paused && animationState.root===id
+         && animationState.mode===mode && animationState.stopAtBlocked===stopAtBlocked
+         && animationState.index<animationState.steps.length){
+        animationState.paused=false;animateNext();return true;
+      }
+      clearAnimation();
+      const byId=new Map(options.items.map(item=>[item.id,item]));
+      let root=byId.get(id),seen=new Set();
+      while(root?.parentId && byId.has(root.parentId)&&!seen.has(root.id)){
+        seen.add(root.id);root=byId.get(root.parentId);
+      }
+      if(!root)return false;
+      animationState={root:id,mode,stopAtBlocked,paused:false,index:0,
+        steps:animationPath(root.id,mode)};
+      animateNext();
       return true;
+    }
+
+    function pause() {
+      if(!animationState)return;
+      animationState.paused=true;
+      propagationTimers.forEach(clearTimeout);propagationTimers=[];
+    }
+    function restart() {
+      if(!animationState)return;
+      const {root,mode,stopAtBlocked}=animationState;
+      animationState=null;
+      return propagate(root,mode,stopAtBlocked);
     }
 
     function fit(initial = false) {
@@ -521,7 +599,7 @@ const FluxosGraph = (() => {
     if (options.initialTransform) { transform = { ...options.initialTransform }; draw(); }
     else fit(true);
     select(selectedId);
-    return { fit, zoom, select, selectMany, propagate, destroy: () => { propagationTimers.forEach(clearTimeout); document.removeEventListener("keydown",onDeleteKey); observer.disconnect(); }, model, getTransform: () => ({ ...transform }) };
+    return { fit, zoom, select, selectMany, propagate, pause, restart, destroy: () => { propagationTimers.forEach(clearTimeout); document.removeEventListener("keydown",onDeleteKey); observer.disconnect(); }, model, getTransform: () => ({ ...transform }) };
   }
 
   return { layout, mount, connectedGroups, projectRoot };
