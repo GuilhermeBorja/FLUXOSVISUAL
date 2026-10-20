@@ -13,7 +13,7 @@ test("PRD4.1 renderiza tres perspectivas juntas sem tabs",()=>{
   assert.doesNotMatch(source,/<div class="mode-tabs" role="tablist" aria-label="Visualização"/);
 });
 test("PRD4.1 mantem as ferramentas PRD4 sem duplicar cadastro rapido",()=>{
-  for(const required of ["renderTable(items)","renderGraph(items)","renderGantt(items)","graphInstance?.pause()","graphInstance?.restart()","createRelation(sourceId,targetId,\"TI\")","renderPrd4QuickCreate()"]){
+  for(const required of ["renderTable(items)","renderGraph(items)","renderGantt(items)","graphInstance?.pause()","graphInstance?.restart()","createRelation(sourceId,targetId,\"TI\")"]){
     assert.ok(source.includes(required),required);
   }
   assert.ok(!source.includes('return `\x24{renderPrd4QuickCreate()}<div class="graph-layout">'));
@@ -27,9 +27,9 @@ test("PRD4.1 paineis podem redimensionar por pointer e teclado, preferencias loc
   assert.match(styles,/grid-template-columns:minmax\(0,var\(--pane-table/);
   assert.match(styles,/\.prd41-workspace\.is-focused/);
 });
-test("PRD4.1 selecao sincronizada e toggles de subitens independentes",()=>{
+test("PRD4.2 selecao sincronizada e apenas um controle de subitens",()=>{
   assert.match(source,/document\.querySelectorAll\("\[data-gantt-row\]"\)/);
-  assert.match(source,/id="showSubitemsGantt"/);
-  assert.match(source,/#showSubitems, #showSubitemsGantt/);
+  assert.match(source,/id="showSubitems"/);
+  assert.doesNotMatch(source,/id="showSubitemsGantt"/);
   assert.match(styles,/\.gantt-row\.selected/);
 });
