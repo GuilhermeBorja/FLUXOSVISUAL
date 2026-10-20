@@ -1145,31 +1145,77 @@ function itemFormFields(item, create = false) {
     ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state||user.state,createdBy:item.createdBy||user.id})===true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Demonstração: até 256 KB por arquivo e 1 MB no total. Os arquivos ficam neste navegador.</small></label>' : ""}`;
 }
 
-function renderQuickStepRows(titles) {
+function prd5ParseIndentedItems(text) {
+  const lines = String(text || "").replace(/\r/g,"").split("\n");
+  const nodes = [], ancestors = [];
+  for (let lineIndex=0;lineIndex<lines.length;lineIndex++) {
+    const raw = lines[lineIndex];
+    if (!raw.trim()) continue;
+    const indent = (raw.match(/^[\t ]*/) || [""])[0].replace(/ {4}/g,"\t");
+    if (indent.includes(" ")) throw new Error("Use Tab (ou grupos de quatro espaços) para a hierarquia. Linha "+(lineIndex+1)+".");
+    const depth = indent.length;
+    if (!nodes.length && depth !== 0) throw new Error("O primeiro subitem deve começar sem indentação.");
+    if (nodes.length && depth > nodes[nodes.length-1].depth+1) throw new Error("A linha "+(lineIndex+1)+" pulou um nível. Indente um nível por vez.");
+    const title=raw.slice((raw.match(/^[\t ]*/) || [""])[0].length).trim();
+    if (!title || title.length>240) throw new Error("Nome vazio ou maior que 240 caracteres na linha "+(lineIndex+1)+".");
+    const parentIndex=depth ? ancestors[depth-1] : -1;
+    if (depth && !Number.isInteger(parentIndex)) throw new Error("Hierarquia inválida na linha "+(lineIndex+1)+".");
+    nodes.push({title,depth,parentIndex,lineIndex});
+    ancestors[depth]=nodes.length-1;
+    ancestors.length=depth+1;
+    if(nodes.length>100)throw new Error("Limite de 100 subitens por operação.");
+  }
+  return nodes;
+}
+
+function prd5IndentKeydown(event){
+  if(event.key!=="Tab"||event.altKey||event.ctrlKey||event.metaKey)return;
+  event.preventDefault();
+  const input=event.currentTarget,value=input.value,selectionStart=input.selectionStart,selectionEnd=input.selectionEnd;
+  const from=value.lastIndexOf("\n",Math.max(0,selectionStart-1))+1;
+  const endLine=value.indexOf("\n",selectionEnd);
+  const to=endLine<0?value.length:endLine;
+  const block=value.slice(from,to);
+  const lines=block.split("\n");
+  const adjusted=lines.map(line=>{
+    if(!event.shiftKey)return "\t"+line;
+    return line.startsWith("\t")?line.slice(1):line.startsWith("    ")?line.slice(4):line;
+  }).join("\n");
+  input.value=value.slice(0,from)+adjusted+value.slice(to);
+  input.selectionStart=from+(selectionStart===selectionEnd?adjusted.length:0);
+  input.selectionEnd=from+adjusted.length;
+  input.dispatchEvent(new Event("input",{bubbles:true}));
+}
+
+function renderQuickStepRows(text) {
   const root=document.querySelector("#quickStepRows");if(!root)return;
-  const previous=[...root.querySelectorAll(".quick-step-row")].map(row=>({
-    title:row.querySelector('[data-step-title]')?.value||"",
-    type:row.querySelector('[data-step-type]')?.value||"task",
-    owner:row.querySelector('[data-step-owner]')?.value||currentUser().id,
-    duration:row.querySelector('[data-step-duration]')?.value||"1"
-  }));
-  const rows=titles.map(title=>title.trim()).filter(Boolean).slice(0,100);
+  const previous=new Map([...root.querySelectorAll(".quick-step-row")].map(row=>[
+    Number(row.dataset.stepIndex),
+    {type:row.querySelector("[data-step-type]")?.value||"task",owner:row.querySelector("[data-step-owner]")?.value||""}
+  ]));
+  const summary=document.querySelector("#prd43StepCount"),sequence=document.querySelector("#prd43Sequence");
+  let rows;
+  try {rows=prd5ParseIndentedItems(text);}
+  catch(error){
+    root.innerHTML='<div class="prd5-indent-error" role="alert">'+escapeHtml(error.message)+"</div>";
+    if(summary)summary.textContent="Corrija a indentação antes de salvar.";
+    if(sequence){sequence.checked=false;sequence.disabled=true;}
+    return;
+  }
   const defaultOwner=document.querySelector('#createItemForm [name="ownerId"]')?.value||currentUser().id;
-  root.innerHTML=rows.map((title,index)=>{
-    const saved=previous[index],value=saved?.title && saved.title!==title ? title : saved?.title||title;
-    return `<div class="quick-step-row prd43-step-row" data-step-index="${index}">
-      <span class="prd43-step-number">${index+1}</span>
-      <label>Atividade<input name="stepTitle_${index}" data-step-title value="${escapeHtml(value)}" maxlength="240" required aria-label="Atividade ${index+1}"/></label>
-      <label>Tipo<select name="stepType_${index}" data-step-type aria-label="Tipo da atividade ${index+1}">${itemTypes.map(t=>option(t.id,t.label,(saved?.type||"task")===t.id)).join("")}</select></label>
-      <label>Responsável<select name="stepOwner_${index}" data-step-owner aria-label="Responsável da atividade ${index+1}">${ownerOptions(saved?.owner||defaultOwner)}</select></label>
-      <label>Dias<input type="number" name="stepDuration_${index}" data-step-duration min="1" max="3650" value="${escapeHtml(saved?.duration||"1")}" required aria-label="Duração da atividade ${index+1} em dias"/></label>
+  root.innerHTML=rows.map((entry,index)=>{
+    const saved=previous.get(index);
+    const isParent=rows.some(node=>node.parentIndex===index);
+    return `<div class="quick-step-row prd43-step-row prd5-step-row ${isParent?"has-children":""}" data-step-index="${index}" data-line-index="${entry.lineIndex}" data-step-depth="${entry.depth}" style="--step-depth:${Math.min(entry.depth,10)}">
+      <span class="prd43-step-number" title="Nível ${entry.depth+1}">${entry.depth?"↳":""}${index+1}</span>
+      <label class="prd5-step-name"><span class="sr-only">Nome do subitem ${index+1}</span><input name="stepTitle_${index}" data-step-title value="${escapeHtml(entry.title)}" maxlength="240" required aria-label="Nome do subitem ${index+1}, nível ${entry.depth+1}"/></label>
+      <label><span class="sr-only">Tipo</span><select name="stepType_${index}" data-step-type aria-label="Tipo do subitem ${index+1}">${itemTypes.map(type=>option(type.id,type.label,(saved?.type||"task")===type.id)).join("")}</select></label>
+      <label><span class="sr-only">Responsável</span><select name="stepOwner_${index}" data-step-owner aria-label="Responsável do subitem ${index+1}">${ownerOptions(saved?.owner||defaultOwner)}</select></label>
     </div>`;
   }).join("");
-  const summary=document.querySelector("#prd43StepCount");if(summary)summary.textContent=rows.length?rows.length+" atividades a criar":"Cole ou digite as atividades para adicionar subitens";
-  const sequence=document.querySelector("#prd43Sequence");if(sequence)sequence.disabled=rows.length<2;
-  const extra=document.querySelector('#createItemForm [name="additionalTitles"]');
-  if(extra && rows.length) extra.value="";
-  updateSchedulePreview();
+  const leaves=rows.filter((_,index)=>!rows.some(entry=>entry.parentIndex===index)).length;
+  if(summary)summary.textContent=rows.length?`${rows.length} subitem(s), ${Math.max(...rows.map(row=>row.depth))+1} nível(is) · ${leaves} atividade(s) final(is)`:"Digite ou cole os subitens. Tab cria um nível; Shift+Tab retorna.";
+  if(sequence)sequence.disabled=leaves<2;
 }
 
 function renderAttachments(item,editable) {
@@ -1179,77 +1225,54 @@ function renderAttachments(item,editable) {
 }
 
 function updateSchedulePreview() {
-  const form=document.querySelector("#createItemForm"),output=document.querySelector("#schedulePreview");
-  if(!form||!output)return;
-  const start=String(form.querySelector('[name="plannedStartAt"]')?.value||today());
-  const duration=Number(form.querySelector('[name="plannedDurationDays"]')?.value||1);
-  const rows=[...form.querySelectorAll(".prd43-step-row")];
-  if(!rows.length){output.textContent="Previsão inicial: "+formatDate(inclusiveFinishDate(start,Math.max(1,duration)));return;}
-  const durations=rows.map(row=>Number(row.querySelector('[data-step-duration]')?.value||0));
-  if(durations.some(days=>!Number.isInteger(days)||days<1)){output.textContent="Informe a duração de cada atividade.";return;}
-  const linked=form.querySelector("#prd43Sequence")?.checked;
-  const total=linked?durations.reduce((sum,days)=>sum+days,0):Math.max(...durations);
-  output.textContent=linked?"Sequência TI: "+total+" dias · término projetado "+formatDate(inclusiveFinishDate(start,total)):
-    "Sem sequência TI: atividades independentes · término inicial "+formatDate(inclusiveFinishDate(start,total));
+  const input=document.querySelector("#prd43PasteActivities");
+  if(input)renderQuickStepRows(input.value);
 }
 
 function renderCreatePanel() {
-  const requestedParent = getItem(ui.createParentId);
-  const allowedParents = accessibleItems().filter((item) =>
-    canEditItem(currentUser(),item)
-    && canCreateItem(currentUser(), {...item,createdBy:currentUser().id})
-    && gpoDecision(currentUser(),"create_relation",item) === true);
-  const parent = requestedParent && allowedParents.some(item=>item.id===requestedParent.id) ? requestedParent : null;
-  const ownerId = parent?.ownerId || currentUser().id;
-  const parentLabel = parent ? "Subitem de: " + parent.title : "Item independente (nível principal)";
-  const attachContext = {...(parent||{}),organizationId:parent?.organizationId||currentUser().organizationId,state:parent?.state||currentUser().state,createdBy:currentUser().id};
-  return `${panelHeader("Criar item",parent ? "Novo subitem" : "Novo item")}
-    <form id="createItemForm" class="drawer-body form-stack prd42-create-form">
+  const requestedParent=getItem(ui.createParentId);
+  const allowedParents=accessibleItems().filter(item=>
+    canEditItem(currentUser(),item)&&canCreateItem(currentUser(),{...item,createdBy:currentUser().id})
+    &&gpoDecision(currentUser(),"create_relation",item)===true);
+  const parent=requestedParent&&allowedParents.some(item=>item.id===requestedParent.id)?requestedParent:null;
+  const ownerId=parent?.ownerId||currentUser().id;
+  const parentLabel=parent?"Subitem de: "+parent.title:"Item independente (nível principal)";
+  const attachContext={...(parent||{}),organizationId:parent?.organizationId||currentUser().organizationId,state:parent?.state||currentUser().state,createdBy:currentUser().id};
+  return `${panelHeader("Criar item",parent?"Novo subitem":"Novo item")}
+    <form id="createItemForm" class="drawer-body form-stack prd42-create-form prd5-create-form">
       <div class="prd42-create-context">
         <strong id="prd42ParentHelp">${escapeHtml(parentLabel)}</strong>
-        <label>Onde criar?
-          <select name="parentId" id="prd42ParentSelect">
-            ${option("","Nível principal — item independente",!parent)}
-            ${allowedParents.map(item=>option(item.id,"Dentro de " + item.title,item.id===parent?.id)).join("")}
-          </select>
-        </label>
-        <small>O vínculo hierárquico é definido aqui e não depende do item selecionado para consulta.</small>
+        <label>Onde criar?<select name="parentId" id="prd42ParentSelect">
+          ${option("","Nível principal — item independente",!parent)}
+          ${allowedParents.map(item=>option(item.id,"Dentro de "+item.title,item.id===parent?.id)).join("")}
+        </select></label>
       </div>
-      <label>Nome do item<input name="title" autocomplete="off" maxlength="240" placeholder="O que precisa ser feito?" required autofocus/></label>
-      <div class="form-row">
+      <div class="prd5-create-top">
+        <label class="prd5-root-name">Nome do item<input name="title" autocomplete="off" maxlength="240" placeholder="Nome do pacote ou atividade principal" required autofocus/></label>
         <label>Tipo<select name="type">${itemTypes.map(type=>option(type.id,itemTypeConfig(type.id,parent?.organizationId||currentUser().organizationId).label,type.id===(parent?"task":"project"))).join("")}</select></label>
         <label>Responsável<select name="ownerId" required>${ownerOptions(ownerId)}</select></label>
+        <label>Início previsto<input type="date" name="plannedStartAt" value="${escapeHtml(parent?.baselineStartAt||parent?.plannedStartAt||today())}" required/></label>
+        <input type="hidden" name="plannedDurationDays" value="1"/>
       </div>
-      <details class="form-details prd42-create-extras">
-        <summary>Planejamento inicial <span class="secondary">Início e duração do item</span></summary>
-        <div class="form-row">
-          <label>Início previsto<input type="date" name="plannedStartAt" value="${escapeHtml(parent?.baselineStartAt||parent?.plannedStartAt||today())}" required/></label>
-          <label>Duração inicial (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="1" required/></label>
-        </div>
-        <p class="secondary">Valores iniciais editáveis. O planejamento poderá ser ajustado e comparado às metas posteriormente.</p>
-        <div id="schedulePreview" class="schedule-preview" role="status"></div>
-      </details>
-      <details class="form-details prd42-create-extras">
-        <summary>Outros itens independentes no mesmo nível</summary>
-        <label>Mais nomes, um por linha<textarea name="additionalTitles" rows="3" placeholder="Atividade 2&#10;Atividade 3"></textarea></label>
-        <p class="secondary">Cada linha terá o mesmo pai, tipo, responsável e planejamento inicial do item acima.</p>
-      </details>
-      <section class="prd43-create-activities" aria-label="Cadastro de atividades">
-        <div class="prd43-activities-head"><strong>Subitens deste item</strong><span id="prd43StepCount" class="secondary">Cole ou digite as atividades para adicionar subitens</span></div>
-        <label>Lista de atividades (uma por linha)
-          <textarea name="quickSteps" id="prd43PasteActivities" rows="4" placeholder="Regularizar poço&#10;Informar liberação à Atlas&#10;Mobilização da Atlas&#10;Confirmar início da montagem" spellcheck="false"></textarea>
+      <section class="prd43-create-activities prd5-create-activities" aria-label="Cadastro hierárquico de subitens">
+        <div class="prd43-activities-head"><strong>Subitens</strong><span id="prd43StepCount" class="secondary">Digite ou cole os subitens. Tab cria um nível; Shift+Tab retorna.</span></div>
+        <label class="prd5-source-label">Digite a estrutura (um item por linha)
+          <textarea name="quickSteps" id="prd43PasteActivities" rows="10" placeholder="Atividade 1&#10;Atividade 2&#10;    Subitem 2.1&#10;        Etapa 2.1.1&#10;Atividade 3" spellcheck="false" aria-describedby="prd5IndentHelp"></textarea>
+          <small id="prd5IndentHelp">O texto é a origem da hierarquia. Pressione Tab no início da linha para criar subitem e Shift+Tab para voltar um nível.</small>
         </label>
-        <div id="quickStepRows" class="prd43-steps-table" aria-live="polite"></div>
+        <div class="prd5-result-area"><span class="prd5-result-title">Resultado editável <small>Tipo e responsável por item</small></span>
+          <div id="quickStepRows" class="prd43-steps-table" aria-live="polite"></div>
+        </div>
         <label class="prd43-sequence-toggle"><input type="checkbox" name="autoSequence" value="1" id="prd43Sequence" disabled/>
-          Criar sequência automaticamente? <small>Vincular as atividades por TI na ordem informada.</small>
+          Criar sequência TI automaticamente <small>Somente entre atividades finais, na ordem digitada.</small>
         </label>
       </section>
-      <details class="form-details prd42-create-extras">
-        <summary>Descrição e anexos</summary>
-        <label>Descrição<textarea name="description" rows="3" placeholder="Contexto, critérios de conclusão ou observações"></textarea></label>
-        ${gpoDecision(currentUser(),"add_attachment",attachContext)===true?'<label>Anexos<input type="file" name="attachments" multiple/><small>Os arquivos ficam neste navegador, sem servidor.</small></label>':""}
+      <details class="form-details prd42-create-extras prd5-create-details">
+        <summary>Descrição e anexos (opcional)</summary>
+        <label>Descrição<textarea name="description" rows="3" placeholder="Contexto ou critérios de conclusão"></textarea></label>
+        ${gpoDecision(currentUser(),"add_attachment",attachContext)===true?'<label>Anexos<input type="file" name="attachments" multiple/><small>Armazenamento local do navegador.</small></label>':""}
       </details>
-      <div class="drawer-actions prd42-create-actions"><span class="secondary prd43-one-save-hint">Um único salvamento cria todo o projeto.</span>
+      <div class="drawer-actions prd42-create-actions"><span class="secondary prd43-one-save-hint">Um único salvamento cria toda a hierarquia.</span>
         <button class="button primary" type="submit">${icon("check")}Criar ${parent?"subitem":"item"}</button>
         <button class="button quiet" type="button" data-action="close-panel">Cancelar</button>
       </div>
@@ -1937,9 +1960,18 @@ function bindPanel() {
       } catch (error) { panelFailure(error); }
     }
   };
-  root.querySelector('[name="quickSteps"]')?.addEventListener("input",(event)=>renderQuickStepRows(event.target.value.split("\n")));
-  root.querySelector("#prd43Sequence")?.addEventListener("change",updateSchedulePreview);
-  root.querySelector("#quickStepRows")?.addEventListener("input",(event)=>{if(event.target.matches('[data-step-duration]'))updateSchedulePreview();});
+  const prd5TextInput=root.querySelector("#prd43PasteActivities");
+  prd5TextInput?.addEventListener("input",event=>renderQuickStepRows(event.target.value));
+  prd5TextInput?.addEventListener("keydown",prd5IndentKeydown);
+  root.querySelector("#quickStepRows")?.addEventListener("input",event=>{
+    if(!event.target.matches("[data-step-title]")||!prd5TextInput)return;
+    const row=event.target.closest("[data-line-index]");
+    const index=Number(row?.dataset.lineIndex);
+    const lines=prd5TextInput.value.split("\n");
+    if(!Number.isInteger(index)||index<0||index>=lines.length)return;
+    lines[index]=((lines[index].match(/^[\\t ]*/)||[""])[0])+event.target.value;
+    prd5TextInput.value=lines.join("\n");
+  });
   root.querySelector("#prd42ParentSelect")?.addEventListener("change",(event)=>{
     const parent = getItem(event.target.value);
     const hint = root.querySelector("#prd42ParentHelp");
@@ -1983,46 +2015,51 @@ function bindPanel() {
     saveState(); notify(message); render();
   });
   submitHandler("createItemForm", async (form) => {
-    const input=itemInput(form);
-    const quickSteps=String(form.get("quickSteps")||"").split("\n").map(value=>value.trim()).filter(Boolean);
-    const additionalTitles=String(form.get("additionalTitles")||"").split("\n").map(value=>value.trim()).filter(Boolean);
-    if(quickSteps.length && additionalTitles.length)throw new Error("Escolha subitens ou outros itens no mesmo nível.");
-    if(quickSteps.length>100 || additionalTitles.length>99)throw new Error("Limite de 100 atividades por operação.");
+    const input=itemInput(form),steps=prd5ParseIndentedItems(String(form.get("quickSteps")||""));
     const sequence=form.get("autoSequence")==="1";
     const snapshot=JSON.stringify(state);
     let item;
-    try {
+    try{
       item=createItem(input);
-      const children=[];
-      for(let index=0;index<quickSteps.length;index++){
-        const title=String(form.get(`stepTitle_${index}`)||quickSteps[index]).trim();
-        const duration=Number(form.get(`stepDuration_${index}`));
+      const created=[];
+      for(let index=0;index<steps.length;index++){
+        const step=steps[index];
         const ownerId=String(form.get(`stepOwner_${index}`)||input.ownerId);
-        const owner=state.users.find(user=>user.id===ownerId && !user.disabled);
+        const owner=state.users.find(entry=>entry.id===ownerId&&!entry.disabled);
         const type=String(form.get(`stepType_${index}`)||"task");
-        if(!title)throw new Error(`Informe o nome do subitem ${index+1}.`);
-        if(!owner)throw new Error(`Selecione o responsável pelo subitem ${index+1}.`);
-        if(!Number.isInteger(duration)||duration<1||duration>3650)throw new Error(`Informe a duração do subitem ${index+1} (1 a 3650 dias).`);
+        if(!owner)throw new Error("Selecione o responsável do subitem "+(index+1)+".");
+        if(!itemTypes.some(entry=>entry.id===type))throw new Error("Tipo inválido no subitem "+(index+1)+".");
+        const parentId=step.parentIndex<0?item.id:created[step.parentIndex]?.id;
+        if(!parentId)throw new Error("A hierarquia do subitem "+(index+1)+" está incompleta.");
         const start=input.plannedStartAt||today();
-        const child=createItem({...input,title,type,ownerId,organizationId:owner.organizationId,
+        const child=createItem({...input,title:step.title,type,ownerId,organizationId:owner.organizationId,
           sectorId:owner.sectorId,state:owner.state,status:"backlog",weight:1,progressPercent:0,
-          parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration,
-          dueAt:inclusiveFinishDate(start,duration)});
-        children.push(child);
+          parentId,description:"",plannedStartAt:start,plannedDurationDays:1,
+          dueAt:inclusiveFinishDate(start,1)});
+        created.push(child);
       }
-      if(sequence && children.length>1) {
-        for(let index=1;index<children.length;index++) createRelation(children[index-1].id,children[index].id,"TI");
+      if(sequence){
+        const hasChildren=new Set(steps.map(entry=>entry.parentIndex).filter(index=>index>=0));
+        const leaves=created.filter((_,index)=>!hasChildren.has(index));
+        for(let index=1;index<leaves.length;index++)createRelation(leaves[index-1].id,leaves[index].id,"TI");
       }
-      if(children.length){syncParentSummary(item.id);item.baselineStartAt=item.plannedStartAt;item.baselineDueAt=item.dueAt;}
-      for(const title of additionalTitles)createItem({...input,title,status:"backlog",progressPercent:0});
+      if(created.length){
+        const parents=[item,...created].filter(entry=>state.items.some(child=>child.parentId===entry.id&&!child.archivedAt));
+        for(const parent of parents.reverse())syncParentSummary(parent.id);
+        item.baselineStartAt=item.plannedStartAt;
+        item.baselineDueAt=item.dueAt;
+      }
       await addAttachments(item.id,form.getAll("attachments"));
+      if(created.length){
+        ui.showSubitems=true;ui.collapsed||=new Set();
+        for(const entry of [item,...created])ui.collapsed.delete(entry.id);
+      }
     }catch(error){
       const restored=JSON.parse(snapshot);for(const key of Object.keys(state))delete state[key];Object.assign(state,restored);
       throw error;
     }
-    if(quickSteps.length){ui.showSubitems=true;ui.collapsed ||= new Set();ui.collapsed.delete(item.id);}
     ui.selectedItemId=item.id;ui.panel="item";ui.panelTab="details";saveState();
-    notify(`Criado: ${item.title}${quickSteps.length?" + "+quickSteps.length+" subitens":""}${sequence&&quickSteps.length>1?" · "+(quickSteps.length-1)+" relações TI":""}.`);
+    notify("Criado: "+item.title+(steps.length?" + "+steps.length+" subitens":"")+(sequence?" · TI entre atividades finais":"")+".");
     render();
   });
   submitHandler("updateItemForm", async (form) => {
