@@ -56,7 +56,7 @@ function ownerElapsedLabel(item) {
 
 function activityDurationLabel(item) {
   const minutes = activityDurationMinutes(item);
-  if (minutes === null) return state.relations.some((relation) => relation.targetId === item.id && ["TI","II","TT","IF"].includes(relation.relationType)) ? "Aguardando dependências" : "Não iniciada";
+  if (minutes === null) return state.relations.some((relation) => relation.targetId === item.id && relation.relationType === "TI") ? "Aguardando dependências" : "Não iniciada";
   return durationFromMinutes(minutes);
 }
 
@@ -84,13 +84,14 @@ function buildLabel() {
 
 function signalLabel(item) {
   if (isBlocked(item)) return "Bloqueado";
+  if (item?.inheritedBlockedFrom?.length) return statusDisplayLabel(item)+" · impedimento";
   if (isOverdue(item)) return "Atrasado";
   return statusDisplayLabel(item);
 }
 
 const statusDefaults = {
   backlog:{icon:"list-todo",color:"#687780"}, ready:{icon:"circle-play",color:"#287d62"},
-  in_progress:{icon:"loader-circle",color:"#2679a5"}, waiting:{icon:"clock-3",color:"#b58a2a"},
+  in_progress:{icon:"loader-circle",color:"#2679a5"}, waiting:{icon:"clock-3",color:"#b58a2a"}, blocked:{icon:"ban",color:"#c2474d"},
   under_review:{icon:"stamp",color:"#7561a8"},
   correction:{icon:"wrench",color:"#b56c2a"}, done:{icon:"check-circle-2",color:"#287d62"},
   cancelled:{icon:"circle-x",color:"#687780"}
@@ -104,7 +105,7 @@ function statusOption(status, selected = false) { return `<option value="${escap
 
 function statusBadge(item) {
   const delta = dueDeltaDays(item), config=statusConfig(item.status);
-  const blockedMark = isBlocked(item) ? `<span class="overdue-mark blocked-mark" title="${escapeHtml(item.blockedReason || "Bloqueado")}">· bloqueado</span>` : "";
+  const blockedMark = item.inheritedBlockedFrom?.length ? `<span class="overdue-mark blocked-mark" title="Impedimento herdado: ${escapeHtml(item.inheritedBlockedFrom.map(id=>getItem(id)?.title||id).join(", "))}">· impedimento herdado</span>` : "";
   const indicator = isOverdue(item) ? `<span class="overdue-mark" title="Prazo vencido há ${Math.abs(delta)} dias">· ${Math.abs(delta)}d atraso</span>` : isAtRisk(item) ? `<span class="overdue-mark" title="Prazo a ${delta} dias; limite de risco ${Number(state.riskThresholdDays) || 3} dias">· risco ${delta}d</span>` : "";
   return `<span class="status-badge ${signalOf(item)}" style="--status-color:${escapeHtml(config.color)}"><span class="status-symbol">${icon(config.icon)}</span>${escapeHtml(statusDisplayLabel(item))}${blockedMark}${indicator}</span>`;
 }
@@ -407,7 +408,7 @@ function scheduleAnalysis(items) {
   if (!tasks.length) tasks = items.filter((item) => item.status !== "cancelled");
   if (!tasks.length) return {valid:true,reliable:false,startDate:today(),finishDate:"",durationDays:0,rows:[],message:"Não há atividades ativas para calcular a previsão."};
   const taskIds = new Set(tasks.map((item) => item.id));
-  const temporalTypes = new Set(["TI","II","TT","IF"]);
+  const temporalTypes = new Set(["TI"]);
   const dependencies = relationsFor(items).filter((relation) => temporalTypes.has(relation.relationType) && taskIds.has(relation.sourceId) && taskIds.has(relation.targetId));
   const sortedDates = tasks.map((item) => item.plannedStartAt).filter(Boolean).sort();
   const startDate = sortedDates[0] || today();
@@ -532,7 +533,11 @@ function renderGraph(items) {
   const legend = [{signal:"red",label:"Bloqueado / atraso"},{signal:"yellow",label:"Aguardando / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Planejado / cancelado"}];
   return `<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar">
     <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map((entry) => option(entry.id,entry.label,ui.grouping === entry.id)).join("")}</select></label>
-    <button class="button quiet" data-action="propagate">${icon("workflow")}Animar propagação</button>
+    <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
+    <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
+    <button class="button quiet" data-action="propagate">${icon("play")}Reproduzir</button>
+    <button class="button quiet" data-action="pause-animation">${icon("pause")}Pausar</button>
+    <button class="button quiet" data-action="restart-animation">${icon("rotate-ccw")}Reiniciar</button>
     <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
     </div><div id="graphCanvas" class="graph-canvas">${items.length ? "" : emptyMarkup()}</div>
     <div class="graph-legend" aria-label="Legenda do farol">${legend.map((entry) => '<button type="button" class="' + entry.signal + (ui.graphHighlight === entry.signal ? ' active' : '') + '" data-highlight-signal="' + entry.signal + '" aria-pressed="' + (ui.graphHighlight === entry.signal) + '"><b></b>' + entry.label + '</button>').join("")}${ui.graphHighlight ? '<button type="button" class="button quiet" data-highlight-signal="all">Limpar destaque</button>' : ''}</div></div></div>`;
@@ -565,7 +570,15 @@ function mountGraph(items) {
       dependencies: (item) => state.relations.filter((relation) => relation.targetId === item.id && ["TI","II","TT","IF"].includes(relation.relationType)).map((relation) => getItem(relation.sourceId)?.title).filter(Boolean).join(", ") || "Nenhuma",
     },
     onSelect: (id) => openItem(id),
-    onRelation: (relation) => { ui.panelTab = "relations"; openItem(relation.targetId, true); },
+    onRelation: (relation) => { ui.selectedRelationId=relation.id; notify("Relação selecionada. Pressione Delete para excluir."); },
+    onCreateRelation: (sourceId,targetId)=>{
+      try { createRelation(sourceId,targetId,"TI"); saveState();notify("Precedência TI criada.");render(); }
+      catch(error){notify(error.message,"error");}
+    },
+    onDeleteRelation: (id)=>{
+      try {const rel=state.relations.find(r=>r.id===id);if(!rel||rel.relationType!=="TI")throw new Error("Selecione uma TI para remover.");removeRelation(id);saveState();notify("Relação TI removida.");render();}
+      catch(error){notify(error.message,"error");}
+    },
     onPositions: (positions) => { ui.positions[layoutKey()] = positions; state.graphPositions = ui.positions; saveState(); },
     onZoom: (value) => { const label = document.querySelector("#zoomLabel"); if (label) label.textContent = `${value}%`; },
   });
@@ -693,12 +706,12 @@ function itemFormFields(item, create = false) {
   const sectors = state.sectors.filter((sector) => sector.organizationId === organizationId);
   return `<label>Nome<input name="title" value="${escapeHtml(item.title)}" required maxlength="240" placeholder="Ex.: Contratação de novo ADM"/></label>
     <div class="form-row"><label>Tipo<select name="type">${itemTypes.map((type)=>option(type.id,itemTypeConfig(type.id,organizationId).label,(item.type||"task")===type.id)).join("")}</select></label>${create ? "" : `<label>Status<select name="status" ${item.type==="approval" || summaryGroup ? "disabled" : ""}>${statusChoices(item.status || "backlog").map((status)=>statusOption(status,(item.status||"backlog")===status.id)).join("")}</select></label>`}</div>
-    <label>Responsável<select name="ownerId">${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select></label>
+    <label>Responsável<select name="ownerId" required>${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select></label>
     ${create ? `<label>Início esperado<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt || today())}" required/></label>` : `<div class="schedule-summary"><span>Início previsto<strong>${dateCell(item.plannedStartAt)}</strong></span><span>Término previsto<strong>${dateCell(item.dueAt)}</strong></span><span>Início baseline<strong>${dateCell(item.baselineStartAt || item.plannedStartAt)}</strong></span><span>Término baseline<strong>${dateCell(item.baselineDueAt || item.dueAt)}</strong></span></div>`}
     <label>Duração planejada (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="${escapeHtml(create && item.plannedDurationDays === undefined ? "" : item.plannedDurationDays ?? 0)}" ${summaryGroup || completed ? "disabled" : ""} ${create ? "" : "required"}/></label>
     ${!create && summaryGroup ? `<label>Repactuar término do grupo<input type="date" name="replannedDueAt" value="${escapeHtml(item.replannedDueAt || "")}" min="${escapeHtml(item.baselineStartAt || item.plannedStartAt || today())}"/><small>A baseline original é preservada; a repactuação será registrada separadamente.</small></label>` : ""}
     ${create ? "" : `<div class="form-row"><label>Peso da atividade<input type="number" name="weight" min="0.1" step="0.1" value="${escapeHtml(item.weight ?? 1)}" ${summaryGroup ? "disabled title=\"O peso é aplicado às atividades finais\"" : ""} required/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent ?? 0)}" placeholder="0" ${summaryGroup ? "disabled title=\"Progresso herdado dos subitens ativos\"" : ""}/><small>${summaryGroup ? "Resumo calculado a partir das atividades finais." : ""}</small></label></div>`}
-    ${create ? "" : `<div class="form-row blocked-row"><label class="checkbox-row"><input type="checkbox" name="blocked" ${item.blocked ? "checked" : ""}/> Bloqueado</label><label>Motivo do bloqueio<input type="text" name="blockedReason" maxlength="240" value="${escapeHtml(item.blockedReason || "")}"/><small>Indicador: o status operacional do item não muda.</small></label></div>`}
+    ${create ? "" : `<label>Motivo do bloqueio (opcional)<input name="blockedReason" maxlength="240" value="${escapeHtml(item.blockedReason || "")}" placeholder="Se necessário, detalhe o impedimento"/></label>`}
     <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description)}</textarea></label>
      </details>
     ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state || user.state,createdBy:item.createdBy || user.id}) === true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Demonstração: até 256 KB por arquivo e 1 MB no total. Os arquivos ficam apenas neste navegador, sem armazenamento no servidor.</small></label>' : ""}`;
@@ -708,7 +721,7 @@ function renderQuickStepRows(titles) {
   const root=document.querySelector("#quickStepRows");if(!root)return;
   const saved=[...root.querySelectorAll(".quick-step-row")].map(row=>Object.fromEntries([...row.querySelectorAll("select,input")].map(field=>[field.name,field.value])));
   const rows=titles.map(t=>t.trim()).filter(Boolean).slice(0,100);
-  const kinds=relationTypes.filter(t=>["TI","II","TT","IF","blocks","approves"].includes(t.id));
+  const kinds=relationTypes.filter(t=>t.id==="TI");
   root.innerHTML=rows.map((title,i)=>'<div class="quick-step-row"><strong>'+(i+1)+'. '+escapeHtml(title)+'</strong><label>Tipo<select name="stepType_'+i+'">'+itemTypes.map(t=>option(t.id,t.label,(saved[i]?.["stepType_"+i]||"substage")===t.id)).join("")+'</select></label><label>Responsável<select name="stepOwner_'+i+'">'+ownerOptions(saved[i]?.["stepOwner_"+i]||currentUser().id)+'</select></label>'+(i?'<label>Relação com anterior<select name="stepRelation_'+i+'">'+kinds.map(t=>option(t.id,t.label,(saved[i]?.["stepRelation_"+i]||"TI")===t.id)).join("")+'</select></label>':'<span class="secondary">Primeiro subitem</span>')+'<label>Duração (dias)<input name="stepDuration_'+i+'" type="number" min="1" step="1" value="'+escapeHtml(saved[i]?.["stepDuration_"+i]||"")+'" required/></label></div>').join("");
   const duration=document.querySelector('#createItemForm [name="plannedDurationDays"]');
   if(duration){duration.required=!rows.length;duration.disabled=!!rows.length;duration.closest("label").hidden=!!rows.length;}
@@ -774,7 +787,8 @@ function renderItemPanel(item) {
   const editable = canEditItem(currentUser(), item);
   const relations = relationsFor(accessibleItems()).filter((rel) => rel.sourceId === item.id || rel.targetId === item.id);
   const events = historyEventsFor(item);
-  const tabs = [{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"relations",label:"Relações (" + relations.length + ")"},{id:"history",label:"Histórico (" + events.length + ")"}];
+  const tabs = [{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"history",label:"Histórico (" + events.length + ")"}];
+  if(ui.panelTab==="relations")ui.panelTab="details";
   if (item.type === "approval") tabs.push({id:"approval",label:"Aprovação"});
   let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title, (canEditItem(currentUser(),item) ? '<button class="button quiet" data-action="archive-item">' + icon("archive") + 'Arquivar</button>' : '') + (canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""));
   html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + ' · ' + elapsedLabel(item) + ' total</span></div>';
@@ -783,7 +797,7 @@ function renderItemPanel(item) {
     ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Registro da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button><button class="button quiet" type="button" data-action="new-subitem">' + icon("plus") + 'Subitem</button></div></form>' + renderAttachments(item,true) + renderChildren(item)
     : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item);
   if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
-  if (ui.panelTab === "relations") html += renderRelations(item,relations,editable);
+
   if (ui.panelTab === "history") html += renderHistory(events,item.id);
   if (ui.panelTab === "approval" && item.type === "approval") html += renderApprovalPanel(item);
   return html + '</div>';
@@ -1158,7 +1172,9 @@ function bindWorkspace() {
     else if (action === "toggle-bulk") { ui.bulkOpen = !ui.bulkOpen; render(); }
     else if (action === "zoom-in") graphInstance?.zoom(1.2);
     else if (action === "zoom-out") graphInstance?.zoom(1/1.2);
-    else if (action === "propagate") { const id=ui.selectedItemId || scopedItems().find(item=>!item.parentId)?.id || scopedItems()[0]?.id;if(!id||!graphInstance?.propagate(id))notify("Nenhum item disponível para animar.","error"); }
+    else if (action === "propagate") { const id=ui.selectedItemId || scopedItems().find(item=>!item.parentId)?.id || scopedItems()[0]?.id; if(!id||!graphInstance?.propagate(id,document.querySelector("#animationLayout")?.value||"sequential",document.querySelector("#animationMode")?.value==="blocker"))notify("Nenhum item disponível para animar.","error"); }
+    else if(action==="pause-animation")graphInstance?.pause();
+    else if(action==="restart-animation")graphInstance?.restart();
     else if (action === "fit-graph") graphInstance?.fit();
     else if (action === "reset-layout") { delete ui.positions[layoutKey()]; state.graphPositions = ui.positions; ui.graphTransform = null; saveState(); render(); }
   };
@@ -1549,7 +1565,7 @@ function itemInput(form) {
   const owner = state.users.find((entry) => entry.id === ownerValue);
   const parent = getItem(String(form.get("parentId") || ui.createParentId || existing?.parentId || ""));
   const result = {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:ownerValue,plannedStartAt:String(form.get("plannedStartAt") ?? existing?.plannedStartAt ?? (parent?.baselineStartAt || parent?.plannedStartAt || "")),dueAt:String(form.get("dueAt") ?? existing?.dueAt ?? ""),plannedDurationDays:Number(form.get("plannedDurationDays") ?? existing?.plannedDurationDays ?? 0),replannedDueAt:String(form.get("replannedDueAt") ?? existing?.replannedDueAt ?? ""),weight:Number(form.get("weight") ?? existing?.weight ?? 1),description:String(form.get("description") || existing?.description || ""),organizationId:owner?.organizationId || parent?.organizationId || existing?.organizationId || currentUser().organizationId,sectorId:owner?.sectorId || parent?.sectorId || existing?.sectorId || currentUser().sectorId,state:owner?.state || parent?.state || existing?.state || currentUser().state,parentId:String(form.get("parentId") || existing?.parentId || "")};
-  if (form.id === "updateItemForm") { result.blocked = form.get("blocked") === "on"; result.blockedReason = String(form.get("blockedReason") || "").trim(); }
+  if (form.id === "updateItemForm") { result.blockedReason = String(form.get("blockedReason") || "").trim(); }
   const progress = form.get("progressPercent");
   if (progress !== null && String(progress).trim() !== "") result.progressPercent = Number(progress);
   else if (!existing) result.progressPercent = 0;
