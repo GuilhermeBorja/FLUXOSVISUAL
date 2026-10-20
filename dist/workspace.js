@@ -60,10 +60,25 @@ function activityDurationLabel(item) {
   return durationFromMinutes(minutes);
 }
 
-function progressCell(item) {
-  if (item.progressPercent === null || item.progressPercent === undefined) return '<span class="progress-unavailable" title="O grupo não possui atividades elegíveis com peso válido">— sem cálculo</span>';
-  const value = Math.max(0, Math.min(100, Number(item.progressPercent || 0)));
-  return `<div class="progress-cell" role="img" aria-label="${value}% concluído"><span class="progress-track"><span style="width:${value}%"></span></span><strong>${value}%</strong></div>`;
+function prd43ProgressBasis(item){
+  const leaves=[],seen=new Set(),queue=[item.id];let hasChildren=false;
+  while(queue.length){
+    const root=queue.shift();
+    for(const child of state.items){
+      if(child.parentId!==root||child.archivedAt||seen.has(child.id))continue;
+      seen.add(child.id);hasChildren=true;
+      const kids=state.items.some(grand=>grand.parentId===child.id&&!grand.archivedAt);
+      if(kids)queue.push(child.id);else if(child.status!=="cancelled")leaves.push(child);
+    }
+  }
+  if(!hasChildren)return "";
+  const weight=leaves.reduce((sum,leaf)=>sum+Math.max(0,Number(leaf.weight??1)||0),0);
+  return leaves.length+" atividade"+(leaves.length===1?"":"s")+" final"+(leaves.length===1?"":"is")+" · média ponderada (peso total "+weight.toLocaleString("pt-BR")+")";
+}
+function progressCell(item){
+  if(item.progressPercent==null)return '<span class="progress-unavailable" title="Sem atividades elegíveis para consolidar">—</span>';
+  const value=Math.max(0,Math.min(100,Number(item.progressPercent||0))),basis=prd43ProgressBasis(item);
+  return `<div class="progress-cell prd43-progress-cell" role="img" title="${escapeHtml(basis||"Percentual informado para a atividade")}" aria-label="${value}% concluído${basis?" · "+escapeHtml(basis):""}"><span class="progress-track"><span style="width:${value}%"></span></span><strong>${value}%</strong></div>`;
 }
 
 function plannedLabel(item) {
@@ -335,11 +350,11 @@ function render() {
       ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
       <section class="workspace-controls" aria-label="Visualização e filtros">
-        <div class="prd41-mode-label" aria-label="Visualização unificada">${icon("panels-top-left")} Trabalho <small>Sintética · Analítica · Gantt</small></div>
+        <span class="sr-only">Sintética, Analítica e Gantt integrados</span>
         <div class="view-filters">
           <label class="search-box">${icon("search")}<input id="searchInput" type="search" placeholder="Buscar item ou responsável" value="${escapeHtml(state.filters.query)}" aria-label="Buscar item ou responsável"/></label>
           <select id="scopeSelect" aria-label="Projeto ou processo"><option value="all">Todos os processos</option>${projectOptions().map((item) => option(item.id, item.title, ui.scopeId === item.id)).join("")}</select>
-          <label class="prd42-subitems-global" title="Aplicar a tabela e ao Gantt"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/> Subitens</label>
+          <button type="button" class="button quiet prd43-level-toggle" id="showSubitems" data-action="toggle-subitems" aria-pressed="${ui.showSubitems}" title="Expandir ou recolher níveis da hierarquia">${icon(ui.showSubitems?"list-collapse":"list-tree")}${ui.showSubitems?"Recolher níveis":"Expandir níveis"}</button>
           <button class="button quiet ${ui.filtersOpen ? "active" : ""}" data-action="filters" aria-expanded="${ui.filtersOpen}">${icon("sliders-horizontal")}Filtros${filterCount() ? `<span class="count-badge">${filterCount()}</span>` : ""}</button>
         </div>
       </section>
@@ -1167,7 +1182,7 @@ function renderItemPanel(item) {
     (canAddChild ? '<button class="button quiet" data-action="new-subitem">' + icon("plus") + 'Criar subitem</button>' : "")
     + (editable ? '<button class="button quiet" data-action="archive-item">' + icon("archive") + 'Arquivar</button>' : "")
     + (canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""));
-  html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + ' · ' + elapsedLabel(item) + ' total</span></div>';
+  html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + '</span>' + (prd43ProgressBasis(item)?'<small class="prd43-progress-basis">'+escapeHtml(prd43ProgressBasis(item))+' · '+Math.round(Number(item.progressPercent||0))+'% consolidado</small>':"") + '</div>';
   html += '<div class="panel-tabs" role="tablist" aria-label="Detalhes do item">' + tabs.map((tab) => '<button role="tab" aria-selected="' + (ui.panelTab === tab.id) + '" class="' + (ui.panelTab === tab.id ? "active" : "") + '" data-panel-tab="' + tab.id + '">' + tab.label + '</button>').join("") + '</div><div class="drawer-body">';
   if (ui.panelTab === "details") html += editable
     ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualização · data e comentário</summary><div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Comentário da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button></div></form>' + renderAttachments(item,true) + renderChildren(item)
@@ -1227,7 +1242,7 @@ function eventValue(event, value) {
 
 function renderHistory(events, rootItemId = "") {
   const sorted = [...events].sort((a,b) => new Date(b.effectiveAt) - new Date(a.effectiveAt) || new Date(b.createdAt) - new Date(a.createdAt));
-  return `<ol class="event-timeline">${sorted.map((event) => `<li><span class="event-dot"></span><div class="event-heading"><strong>${escapeHtml(eventLabels[event.eventType] || event.eventType)}</strong>${event.itemId !== rootItemId ? `<span class="event-origin">${escapeHtml(getItem(event.itemId)?.title || "Item arquivado")}</span>` : ""}<time>${formatDateTime(event.effectiveAt)}</time></div>${event.fromValue || event.toValue ? `<p class="event-values"><span><b>Antes:</b> ${escapeHtml(eventValue(event,event.fromValue))}</span><span>→</span><span><b>Depois:</b> ${escapeHtml(eventValue(event,event.toValue))}</span></p>` : ""}${event.comment ? `<p>${escapeHtml(event.comment)}</p>` : ""}<small>${escapeHtml(event.actorNameSnapshot || userName(event.userId))} · ${escapeHtml(event.organizationNameSnapshot || "Sem empresa")} / ${escapeHtml(event.sectorNameSnapshot || "Sem setor")} ${event.stateSnapshot ? "· " + escapeHtml(event.stateSnapshot) : ""} · Registrado ${formatDateTime(event.createdAt)}</small></li>`).join("")}</ol>`;
+  return `<ol class="event-timeline">${sorted.map((event) => `<li class="${event.eventType==='status_changed'?'prd43-event-status':''}" style="${event.eventType==='status_changed'?'--prd43-event-color:'+statusConfig(event.toValue).color:''}"><span class="event-dot"></span><div class="event-heading"><strong>${escapeHtml(eventLabels[event.eventType] || event.eventType)}</strong>${event.itemId !== rootItemId ? `<span class="event-origin">${escapeHtml(getItem(event.itemId)?.title || "Item arquivado")}</span>` : ""}<time>${formatDateTime(event.effectiveAt)}</time></div>${event.fromValue || event.toValue ? `<p class="event-values"><span><b>Antes:</b> ${escapeHtml(eventValue(event,event.fromValue))}</span><span>→</span><span><b>Depois:</b> ${escapeHtml(eventValue(event,event.toValue))}</span></p>` : ""}${event.comment ? `<p>${escapeHtml(event.comment)}</p>` : ""}<small>${escapeHtml(event.actorNameSnapshot || userName(event.userId))} · ${escapeHtml(event.organizationNameSnapshot || "Sem empresa")} / ${escapeHtml(event.sectorNameSnapshot || "Sem setor")} ${event.stateSnapshot ? "· " + escapeHtml(event.stateSnapshot) : ""} · Registrado ${formatDateTime(event.createdAt)}</small></li>`).join("")}</ol>`;
 }
 
 function renderApprovalPanel(item) {
@@ -1313,7 +1328,7 @@ function renderGpo() {
   state.items.filter((entry) => entry.type === "project").forEach((entry) => scopes.push({type:"project",id:entry.id,label:"Projeto · " + itemContextLabel(entry)}));
   state.items.forEach((entry) => scopes.push({type:"item",id:entry.id,label:"Item · " + itemContextLabel(entry)}));
   let html = '<section class="panel-section"><h3>Gestão de Permissões Organizacionais</h3><p class="muted">O GPO é a única origem de autorização neste protótipo. Escopo mais específico prevalece; em empate, negar prevalece. Sem regra aplicável, o acesso é negado.</p>';
-  html += '<section class="panel-section"><h3>Perfis reutilizáveis</h3><form id="permissionProfileForm" class="form-row"><label>Nome do perfil<input name="name" required maxlength="80" placeholder="Ex.: Coordenador"/></label><button class="button primary" type="submit">Criar perfil</button></form><div class="admin-list">' + (state.permissionProfiles || []).map((profile)=>'<div class="admin-entry"><span><strong>' + escapeHtml(profile.name) + '</strong><small>' + (state.permissionRules || []).filter((rule)=>rule.subjectType==="profile" && rule.subjectId===profile.id).length + ' regras vinculadas</small></span></div>').join("") + '</div></section>';
+
   html += '<form id="gpoRuleForm" class="form-stack"><label>Usuário ou perfil<select name="subject" required>';
   html += state.users.filter((entry) => !entry.disabled).map((entry) => '<option value="user:' + escapeHtml(entry.id) + '">' + escapeHtml(entry.name) + ' · ' + escapeHtml(orgName(entry.organizationId)) + '</option>').join("");
   html += (state.permissionProfiles || []).map((profile) => '<option value="profile:' + escapeHtml(profile.id) + '">Perfil · ' + escapeHtml(profile.name) + '</option>').join("");
@@ -1512,6 +1527,7 @@ function bindWorkspace() {
       requestAnimationFrame(prd43DrawGanttRelations);
       return;
     }
+    if (button.dataset.action==="toggle-subitems") {ui.showSubitems=!ui.showSubitems;ui.collapsed=new Set();render();return;}
     if (button.dataset.action==="select-gantt-ti") {prd43ShowGanttRelation(button.dataset.ganttTi);return;}
     if (button.dataset.action==="prd43-close-ti") {prd43ShowGanttRelation("");return;}
     if (button.dataset.action==="prd43-update-ti") {
@@ -1686,7 +1702,7 @@ function bindWorkspace() {
   });
   document.querySelector("#scopeSelect").addEventListener("change", (event) => { ui.scopeId = event.target.value; ui.graphTransform = null; render(); });
   document.querySelectorAll("[data-filter]").forEach((select) => select.addEventListener("change", (event) => { state.filters[event.target.dataset.filter] = event.target.value; saveState(); render(); }));
-  document.querySelector("#showSubitems")?.addEventListener("change", (event) => { ui.showSubitems = event.target.checked; ui.collapsed = new Set(); render(); });
+
   document.querySelector("#riskThresholdDays")?.addEventListener("change", (event) => {
     const value = Number(event.target.value);
     if (!Number.isInteger(value) || value < 1 || value > 60) { notify("Defina o limite de risco entre 1 e 60 dias.","error"); render(); return; }
