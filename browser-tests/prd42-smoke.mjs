@@ -29,7 +29,7 @@ try{
   // Deliberately select an existing item: global Novo item must NOT inherit it as parent.
   const firstExisting=await page.locator("[data-row]").first().getAttribute("data-row");
   await page.locator('[data-row="'+firstExisting+'"] [data-select]').first().click();
-  await page.locator("#panelRoot [data-action='close-panel']").click();
+  await page.locator("#panelRoot button[data-action='close-panel']").click();
   await page.locator('[data-action="create"]').click();
   assert.equal(await page.locator("#prd42ParentSelect").inputValue(),"","root creation is explicit");
   assert.match(await page.locator("#prd42ParentHelp").innerText(),/independente/i);
@@ -51,21 +51,21 @@ try{
   assert.equal(child.parentId,root.id);
   assert.equal(child.ownerId,"u_enrique");
   assert.ok(await page.evaluate(id=>state.relations.some(r=>r.relationType==="contains" && r.sourceId===id),root.id));
-  await page.locator("#panelRoot [data-action='close-panel']").click();
+  await page.locator("#panelRoot button[data-action='close-panel']").click();
 
   // Add siblings directly from the parent row. Bulk mode creates peers, not grandchildren.
   await page.locator('[data-row="'+root.id+'"] [data-create-child]').click();
   assert.equal(await page.locator("#prd42ParentSelect").inputValue(),root.id);
   await page.locator('#createItemForm [name="title"]').fill("Mobilização Atlas");
   await page.locator('#createItemForm details.prd42-create-extras').filter({hasText:"Criar outros itens no mesmo nível"}).locator("summary").click();
-  await page.locator('#createItemForm [name="additionalTitles"]').fill("Informar liberação à Atlas\\nInformar início da montagem");
+  await page.locator('#createItemForm [name="additionalTitles"]').fill("Informar liberação à Atlas\nInformar início da montagem");
   await page.locator('#createItemForm button[type="submit"]').click();
   const newChildren=await page.evaluate(id=>state.items.filter(x=>x.parentId===id).map(x=>({id:x.id,title:x.title,parentId:x.parentId})),root.id);
   assert.equal(newChildren.length,4,"first subitem + three peers in one parent");
   assert.ok(newChildren.every(x=>x.parentId===root.id));
 
   // A parent retains a calculated schedule, while its own editable targets and owner can change.
-  await page.locator("#panelRoot [data-action='close-panel']").click();
+  await page.locator("#panelRoot button[data-action='close-panel']").click();
   await page.locator('[data-row="'+root.id+'"] [data-select]').first().click();
   const parentForm=page.locator("#updateItemForm");
   assert.ok(await parentForm.locator('[name="targetDurationDays"]').count()===1);
@@ -88,7 +88,7 @@ try{
   assert.equal(after.duration,before.duration);
 
   // Selected item and scroll offsets persist through rerenders.
-  await page.locator("#panelRoot [data-action='close-panel']").click();
+  await page.locator("#panelRoot button[data-action='close-panel']").click();
   const scrollBefore=await page.locator(".prd41-pane--gantt .gantt-scroll").evaluate(el=>{el.scrollLeft=120;return el.scrollLeft;});
   assert.ok(scrollBefore>20);
   await page.locator('[data-pane-focus="graph"]').click();
