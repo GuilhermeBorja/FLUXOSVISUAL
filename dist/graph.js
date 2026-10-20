@@ -135,13 +135,13 @@ const FluxosGraph = (() => {
     container.innerHTML = `
       <svg class="graph-svg" role="group" aria-label="Grafo de processos e suas relações">
         <defs>
-          <marker id="graph-arrow" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L9,0L0,4" fill="#a0a7b1"/></marker>
+          <marker id="graph-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,1 L10,5 L0,9 Z" fill="#286d73"/></marker>
           <marker id="graph-arrow-reverse" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,-4L9,0L0,4" fill="#168b82"/></marker>
           <marker id="graph-arrow-red" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L9,0L0,4" fill="#cf4047"/></marker>
         </defs>
         <g class="graph-scene">
           <g class="graph-groups">${model.groups.map((group) => `<g data-group="${esc(group.id)}"><rect rx="8"/><text class="group-label">${esc(group.name)}</text><text class="group-count">${group.nodes.length} itens</text></g>`).join("")}</g>
-          <g class="graph-edges">${model.links.map((link) => `<g data-edge="${esc(link.relation.id)}" class="graph-edge ${link.relation.relationType === "contains" ? "hierarchy" : ""} ${link.relation.relationType === "blocks" ? "blocking" : ""}" role="button" tabindex="0" aria-label="${esc(link.source.item.title)} ${esc(options.labels.relation(link.relation.relationType))} ${esc(link.target.item.title)}"><title>${esc(options.labels.relation(link.relation.relationType))}${link.relation.lagDays ? ` · defasagem ${link.relation.lagDays}d` : ""}</title><path class="edge-hit"/><path class="edge-path" marker-end="url(#${link.relation.relationType === "blocks" ? "graph-arrow-red" : "graph-arrow"})"/><text class="edge-label" text-anchor="middle">${esc(link.relation.relationType === "contains" ? "contém" : link.relation.relationType === "blocks" ? "bloqueia" : link.relation.relationType === "approves" ? "aprova" : link.relation.relationType === "relates_to" ? "conecta" : link.relation.relationType)}${link.relation.lagDays ? ` ${link.relation.lagDays > 0 ? "+" : ""}${link.relation.lagDays}d` : ""}</text></g>`).join("")}</g>
+          <g class="graph-edges">${model.links.map((link) => `<g data-edge="${esc(link.relation.id)}" class="graph-edge ${link.relation.relationType === "contains" ? "hierarchy" : ""} ${link.relation.relationType === "blocks" ? "blocking" : ""}" role="button" tabindex="0" aria-label="${esc(link.source.item.title)} ${esc(options.labels.relation(link.relation.relationType))} ${esc(link.target.item.title)}"><title>${esc(options.labels.relation(link.relation.relationType))}${link.relation.lagDays ? ` · defasagem ${link.relation.lagDays}d` : ""}</title><path class="edge-hit"/><path class="edge-path" ${link.relation.relationType==="contains"?"":'marker-end="url(#graph-arrow)"'}/><text class="edge-label" text-anchor="middle">${esc(link.relation.relationType === "contains" ? "contém" : link.relation.relationType === "blocks" ? "bloqueia" : link.relation.relationType === "approves" ? "aprova" : link.relation.relationType === "relates_to" ? "conecta" : link.relation.relationType)}${link.relation.lagDays ? ` ${link.relation.lagDays > 0 ? "+" : ""}${link.relation.lagDays}d` : ""}</text></g>`).join("")}</g>
           <path class="prd4-link-preview" visibility="hidden" />
           <g class="graph-nodes">${model.nodes.map((node) => {
             const color = colors[options.labels.signal(node.item)] || colors.gray;
@@ -158,7 +158,11 @@ const FluxosGraph = (() => {
               <text class="node-owner" text-anchor="middle" y="${node.radius + 107}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
               <text class="node-status" text-anchor="middle" y="${node.radius + 131}" fill="${esc(statusColor)}">${esc(options.labels.status(node.item))}</text>
               <text class="node-due" text-anchor="middle" y="${node.radius + 148}">Prazo: ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
-              <circle class="graph-connector" cx="${node.radius + 13}" cy="0" r="11" aria-label="Arraste para conectar" />
+              ${options.labels.hasChildren?.(node.item)?`<g class="graph-collapse-toggle" data-graph-expand="${esc(node.id)}" role="button" tabindex="0" aria-label="${options.labels.isCollapsed?.(node.item)?"Expandir":"Recolher"} subitens de ${esc(node.item.title)}" title="${options.labels.isCollapsed?.(node.item)?"Expandir":"Recolher"} níveis deste item">
+                <rect x="${node.radius + 3}" y="-36" width="23" height="23" rx="6"/>
+                <text x="${node.radius+14.5}" y="-20" text-anchor="middle">${options.labels.isCollapsed?.(node.item)?"+":"−"}</text>
+              </g>`:""}
+              ${options.labels.hasChildren?.(node.item)?"":`<circle class="graph-connector" cx="${node.radius + 13}" cy="0" r="11" aria-label="Arraste para conectar" />`}
             </g>`;
           }).join("")}</g>
         </g>
@@ -477,7 +481,9 @@ const FluxosGraph = (() => {
     }
 
     svg.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
+      if(event.button!==0)return;
+      const expand=event.target.closest("[data-graph-expand]");
+      if(expand){event.preventDefault();event.stopPropagation();options.onToggleCollapse?.(expand.dataset.graphExpand);return;}
       const point = localPoint(event);
       pointers.set(event.pointerId, point);
       svg.setPointerCapture(event.pointerId);
@@ -581,6 +587,12 @@ const FluxosGraph = (() => {
         } else select("");
       }
     }
+    svg.addEventListener("keydown",event=>{
+      const toggle=event.target.closest("[data-graph-expand]");
+      if(toggle && (event.key==="Enter"||event.key===" ")){
+        event.preventDefault();options.onToggleCollapse?.(toggle.dataset.graphExpand);
+      }
+    });
     svg.addEventListener("pointerup", (event) => finish(event));
     svg.addEventListener("pointercancel", (event) => finish(event, true));
     svg.addEventListener("wheel", (event) => {
