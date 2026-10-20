@@ -47,6 +47,10 @@ import {
   CornerDownRight,
   CornerUpLeft,
   Paperclip,
+  Play,
+  Pause,
+  Maximize2,
+  Minimize2,
 } from "lucide";
 
 const icons = {
@@ -55,6 +59,7 @@ const icons = {
   ZoomIn, ZoomOut, Link2, Trash2, Check, MoreHorizontal, Users, Building2, CircleHelp,
   FolderKanban, Layers2, ListTree, SquareCheck, Stamp, CircleAlert, PackageCheck,
   Flag, FileText, Pencil, ArrowUp, ArrowDown, CornerDownRight, CornerUpLeft, Paperclip,
+  Play, Pause, Maximize2, Minimize2,
 };
 
 export function mountIcons() {
