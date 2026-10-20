@@ -76,13 +76,18 @@ try{
   const origin=page.locator('[data-gantt-handle="'+a+'"]');
   await origin.scrollIntoViewIfNeeded();
   const rect=await origin.boundingBox();
-  const targetRect=await page.locator('[data-gantt-row="'+c+'"] .gantt-track').boundingBox();
+  const targetRect=await page.locator('[data-gantt-row="'+c+'"] .gantt-item').boundingBox();
   await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);
   await page.mouse.down();
   await page.mouse.move(targetRect.x+Math.min(85,targetRect.width/3),targetRect.y+targetRect.height/2,{steps:9});
   await page.mouse.up();
   const extra=await page.evaluate(({a,c})=>state.relations.find(r=>r.relationType==="TI"&&r.sourceId===a&&r.targetId===c)?.id||"",{a,c});
-  assert.ok(extra,"drag creates additional TI");
+  const info=await page.evaluate(()=>({
+    notice:document.querySelector("#noticeRoot")?.innerText||"",
+    activeHandles:document.querySelectorAll("[data-gantt-handle]").length,
+    links:document.querySelectorAll("[data-gantt-ti]").length
+  }));
+  assert.ok(extra,"drag creates additional TI: "+JSON.stringify(info)+" errors="+errors.join("; "));
   await page.locator('[data-gantt-ti="'+extra+'"]').dispatchEvent("click");
   assert.equal(await page.locator("#prd43GanttRelationEditor").isVisible(),true);
   await page.locator("#prd43TiTarget").selectOption(d);
