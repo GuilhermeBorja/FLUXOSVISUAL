@@ -1,10 +1,10 @@
 const FluxosGraph = (() => {
   const colors = {
-    red: { fill: "#ffeded", stroke: "#cf4047" },
-    green: { fill: "#e4f6eb", stroke: "#26905a" },
-    blue: { fill: "#e8f1ff", stroke: "#3879ca" },
-    yellow: { fill: "#fff5d8", stroke: "#c69b2d" },
-    gray: { fill: "#f0f1f3", stroke: "#939aa5" },
+    red: { fill: "#ffe7e9", stroke: "#b42332" },
+    green: { fill: "#cce8d5", stroke: "#115e38" },
+    blue: { fill: "#c4edd8", stroke: "#238254" },
+    yellow: { fill: "#fff0b8", stroke: "#9f6a00" },
+    gray: { fill: "#ebeff2", stroke: "#596872" },
   };
 
   function projectRoot(item, byId) {
@@ -63,17 +63,17 @@ const FluxosGraph = (() => {
     let columnX = 0;
     [...groups.values()].forEach((group, index) => {
       if (index % 2 === 0) {
-        if (index) rowY += rowHeight + 180;
+        if (index) rowY += rowHeight + 220;
         columnX = 0;
         rowHeight = 0;
       }
-      const size = Math.max(450, Math.ceil(Math.sqrt(group.nodes.length)) * 210);
+      const size = Math.max(510, Math.ceil(Math.sqrt(group.nodes.length)) * 290);
       group.center = { x: columnX + size / 2, y: rowY + size / 2 };
-      columnX += size + 150;
+      columnX += size + 190;
       rowHeight = Math.max(rowHeight, size);
       group.nodes.forEach((node, nodeIndex) => {
         const angle = nodeIndex * Math.PI * 2 / Math.max(group.nodes.length, 1) - Math.PI / 2;
-        const radius = node.isRoot ? 0 : 130 + group.nodes.length * 11;
+        const radius = node.isRoot ? 0 : 165 + Math.min(group.nodes.length * 15, 185);
         node.x = group.center.x + Math.cos(angle) * radius;
         node.y = group.center.y + Math.sin(angle) * radius;
         const stored = saved?.[node.id];
@@ -91,10 +91,10 @@ const FluxosGraph = (() => {
       // Simulate once: a stable workspace preserves the user's manual arrangement.
       const simulation = d3.forceSimulation(nodes).stop()
         .force("link", d3.forceLink(links).id((node) => node.id)
-          .distance((link) => link.relation.relationType === "contains" ? 235 : 205)
+           .distance((link) => link.relation.relationType === "contains" ? 275 : 250)
           .strength((link) => link.source.groupId !== link.target.groupId ? 0.005 : link.relation.relationType === "contains" ? 0.13 : 0.35))
-        .force("charge", d3.forceManyBody().strength(-470))
-        .force("collision", d3.forceCollide().radius(112).iterations(3))
+         .force("charge", d3.forceManyBody().strength(-720))
+         .force("collision", d3.forceCollide().radius(145).iterations(4))
         .force("x", d3.forceX((node) => groups.get(node.groupId).center.x).strength(0.07))
         .force("y", d3.forceY((node) => groups.get(node.groupId).center.y).strength(0.07));
       simulation.tick(220);
@@ -107,20 +107,20 @@ const FluxosGraph = (() => {
       x: Math.min(...nodes.map((node) => node.x)) - 108,
       y: Math.min(...nodes.map((node) => node.y)) - 86,
       right: Math.max(...nodes.map((node) => node.x)) + 108,
-      bottom: Math.max(...nodes.map((node) => node.y)) + 145,
+      bottom: Math.max(...nodes.map((node) => node.y)) + 207,
     };
   }
 
-  function wrapLabel(title, limit = 19) {
-    const words = title.split(/\s+/);
-    const lines = [""];
-    for (const word of words) {
-      const last = lines.length - 1;
-      if (lines[last] && (lines[last] + " " + word).length > limit) lines.push(word);
-      else lines[last] += (lines[last] ? " " : "") + word;
+  function wrapLabel(title,limit=24){
+    const words=String(title||"").trim().split(/\s+/),lines=[""];
+    for(const word of words){
+      const last=lines.length-1;
+      if(lines[last]&&(lines[last]+" "+word).length>limit)lines.push(word);
+      else lines[last]+=(lines[last]?" ":"")+word;
     }
-    if (lines.length > 2) lines.splice(1, lines.length - 1, lines.slice(1).join(" ").slice(0, limit - 3) + "...");
-    return lines.map((line) => line.length > limit ? line.slice(0, limit - 3) + "..." : line);
+    // Nomes completos sempre acessiveis no title/aria-label. Ate 4 linhas no grafo.
+    if(lines.length>4)lines.splice(3,lines.length-3,lines.slice(3).join(" ").slice(0,limit-1)+"…");
+    return lines.map(line=>line.length>limit?line.slice(0,limit-1)+"…":line);
   }
 
   function mount(container, options) {
@@ -155,9 +155,9 @@ const FluxosGraph = (() => {
               <circle class="node-circle" r="${node.radius}" fill="${color.fill}" stroke="${esc(statusColor)}"/>
               <text class="node-number" text-anchor="middle" y="5" fill="${esc(typeColor)}">${esc(number)}</text>
               <text class="node-title" text-anchor="middle">${lines.map((line, index) => `<tspan x="0" y="${node.radius + 23 + index * 19}">${esc(line)}</tspan>`).join("")}</text>
-              <text class="node-owner" text-anchor="middle" y="${node.radius + 64}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
-              <text class="node-status" text-anchor="middle" y="${node.radius + 103}" fill="${esc(statusColor)}">${esc(options.labels.status(node.item))}</text>
-              <text class="node-due" text-anchor="middle" y="${node.radius + 117}">Prazo: ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
+              <text class="node-owner" text-anchor="middle" y="${node.radius + 107}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
+              <text class="node-status" text-anchor="middle" y="${node.radius + 131}" fill="${esc(statusColor)}">${esc(options.labels.status(node.item))}</text>
+              <text class="node-due" text-anchor="middle" y="${node.radius + 148}">Prazo: ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
               <circle class="graph-connector" cx="${node.radius + 13}" cy="0" r="11" aria-label="Arraste para conectar" />
             </g>`;
           }).join("")}</g>
