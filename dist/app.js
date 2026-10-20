@@ -952,7 +952,9 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
   if (!relationTypes.some((type) => type.id === relationType)) throw new Error("Tipo de relacao invalido.");
   const user = currentUser();
   const targetIsNewlyOwned = target.createdBy === user?.id && canCreateItem(user,target);
-  if (!canEditItem(user, source) || (!canEditItem(user, target) && !targetIsNewlyOwned) || gpoDecision(user, "create_relation", target) !== true) throw new Error("O GPO não permite criar uma relação entre estes itens.");
+  if (!canEditItem(user, source) || (relationType === "contains" && !canEditItem(user,target) && !targetIsNewlyOwned)
+    || gpoDecision(user,"create_relation",source)!==true)
+    throw new Error("Sem permissão para criar esta relação a partir da origem.");
   if (!Number.isFinite(Number(lagDays))) throw new Error("Informe uma defasagem numerica.");
   if (relationType === "contains") {
     const ancestors = new Set();
@@ -973,6 +975,7 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
       relation.relationType === relationType
   );
   if (exists) throw new Error("Essa relacao ja existe.");
+  if(relationType==="TI" && (state.items.some(item=>item.parentId===sourceId && !item.archivedAt) || state.items.some(item=>item.parentId===targetId && !item.archivedAt))) throw new Error("TI somente entre atividades finais.");
   const relation = {
     id: uid("rel"),
     sourceId,
@@ -993,6 +996,7 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
     throw new Error(schedule.message);
   }
   createEvent(targetId, "relation_created", "", relationType, relation.description || `Relação criada a partir de ${getItem(sourceId)?.title}.`);
+  if(relationType==="TI")recalculateBlocking();
   return relation;
 }
 
@@ -1280,6 +1284,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
 
 function validateItemInput(input, existing = null) {
   if (!input.title?.trim()) throw new Error("Informe o nome do item.");
+  if (!input.ownerId) throw new Error("Selecione um responsável.");
   // O motivo do impedimento e opcional na PRD4.
   if (!itemTypes.some((type) => type.id === input.type)) throw new Error("Tipo de item inválido.");
   if (input.status !== undefined && !statusCatalog.some((status) => status.id === input.status)) throw new Error("Status inválido.");
@@ -1314,7 +1319,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   }
   validateItemInput(input,item);
   if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro das regras GPO.");
-  const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && entry.status !== "cancelled");
+  const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && !entry.archivedAt);
   if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
@@ -1495,6 +1500,8 @@ function removeRelation(id) {
   createEvent(relation.targetId,"relation_removed",relation.relationType,"",`Relação com ${getItem(relation.sourceId).title} removida.`);
   archiveRecord("archivedRelations",relation);
   state.relations = state.relations.filter((entry) => entry.id !== id);
+  recalculatePlannedDates();
+  recalculateBlocking();
 }
 
 function requireDeletionPermission(item = null) {
@@ -1761,7 +1768,7 @@ function recalculateBlocking(effectiveAt=nowIso()){
     }
   }
   for(const item of items){
-    const next=[...sources.get(item.id)].sort(),prior=item.inheritedBlockedFrom||[];
+    const next=[...sources.get(item.id)].filter(source=>source!==item.id).sort(),prior=item.inheritedBlockedFrom||[];
     if(next.join("|")!==prior.join("|")){
       createEvent(item.id,"blocker_sources_changed",prior.join(", "),next.join(", "),"Impedimentos herdados recalculados automaticamente.",effectiveAt);
       item.inheritedBlockedFrom=next;
@@ -1776,7 +1783,7 @@ function recalculateBlocking(effectiveAt=nowIso()){
       item.blockedByPropagation=false;item.statusBeforeInheritedBlock="";
       createEvent(item.id,"status_changed",previous,item.status,"Desbloqueio herdado: status restaurado.",effectiveAt);
     }
-    if(!next.length)item.manualBlockOverride=false;
+    if(!next.length){item.manualBlockOverride=false; if(item.status!=="blocked")item.blockedByPropagation=false;}
   }
 }
 
