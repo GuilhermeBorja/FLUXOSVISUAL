@@ -1,4 +1,4 @@
-name: Deploy PRD4.1 FLUXOSVISUAL
+name: Deploy PRD4.2 FLUXOSVISUAL
 on:
   push:
     branches: [PRD3]
@@ -17,11 +17,11 @@ jobs:
       deployed_sha: ${{ steps.source.outputs.sha }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout PRD4.1 for Pages
+      - name: Checkout PRD4.2 for Pages
         uses: actions/checkout@v4
         with:
-          ref: PRD4.1
-      - name: Record deployed PRD4.1 commit
+          ref: PRD4.2
+      - name: Record deployed PRD4.2 commit
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Setup Node.js
@@ -33,21 +33,21 @@ jobs:
         run: npm ci
       - name: Build project
         # GitHub runner reserves GITHUB_SHA / GITHUB_REF_NAME even when a
-        # different branch is checked out; read the actual PRD4 git checkout.
+        # different branch is checked out; read the actual checked-out git commit.
         run: env -u GITHUB_SHA -u GITHUB_REF_NAME npm run build
       - name: Check project
         run: npm run check
       - name: Run regression tests
         run: npm test
-      - name: Check integrated workspace contract
-        run: node --test tests/prd41.test.mjs
+      - name: Check integrated workspace and parent target contracts
+        run: node --test tests/prd41.test.mjs tests/prd42.test.mjs
       - name: Install browser test runner
         run: npm install --no-save playwright@1.56.0 && npx playwright install --with-deps chromium
-      - name: Run browser smoke tests
+      - name: Run PRD4.2 browser journeys
         run: |
           nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &
           timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
-          node browser-tests/prd41-smoke.mjs
+          node browser-tests/prd42-smoke.mjs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
@@ -61,7 +61,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy PRD4.1 to GitHub Pages
+      - name: Deploy PRD4.2 to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
       - name: Verify published version
@@ -71,7 +71,7 @@ jobs:
         run: |
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error "${SITE_URL}version.js?verify=${EXPECTED_BUILD}-${attempt}" | grep -F "${EXPECTED_BUILD:0:7}"; then
-              echo "Published PRD4.1 commit ${EXPECTED_BUILD} at ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
+              echo "Published PRD4.2 commit ${EXPECTED_BUILD} at ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 5
