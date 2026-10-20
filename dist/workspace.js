@@ -766,7 +766,13 @@ function prd43BindGantt(){
       svg.append(ghost);handle.setPointerCapture(event.pointerId);
       const move=e=>{
         if(e.pointerId!==event.pointerId)return;
-        const p={x:e.clientX-root.left,y:e.clientY-root.top};
+        // Permitir arrastar para uma atividade fora da regiao inicialmente visivel.
+        const pane=content.closest(".prd41-pane-body"),scroll=content.closest(".gantt-scroll");
+        const bounds=pane?.getBoundingClientRect(),horizontal=scroll?.getBoundingClientRect();
+        if(bounds&&pane){if(e.clientY>bounds.bottom-30)pane.scrollTop+=22;else if(e.clientY<bounds.top+30)pane.scrollTop-=22;}
+        if(horizontal&&scroll){if(e.clientX>horizontal.right-25)scroll.scrollLeft+=18;else if(e.clientX<horizontal.left+25)scroll.scrollLeft-=18;}
+        const adjustedRoot=content.getBoundingClientRect();
+        const p={x:e.clientX-adjustedRoot.left,y:e.clientY-adjustedRoot.top};
         ghost.setAttribute("d",`M${start.x} ${start.y} L${p.x} ${p.y}`);
         content.querySelectorAll(".prd43-gantt-row.is-link-target").forEach(row=>row.classList.remove("is-link-target"));
         const target=prd43GanttDropTarget(e.clientX,e.clientY);
