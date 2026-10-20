@@ -2,6 +2,23 @@
 
 Protótipo navegável para explorar a gestão de projetos, atividades, relações e aprovações. A branch `PRD3` reúne as melhorias funcionais desta rodada e publica a demonstração no [GitHub Pages](https://guilhermeborja.github.io/FLUXOSVISUAL/).
 
+## PRD5 — Gantt estruturado e grafo analítico
+
+**Branch de desenvolvimento:** [PRD5](https://github.com/GuilhermeBorja/FLUXOSVISUAL/tree/PRD5).
+**Demonstração (GitHub Pages):** https://guilhermeborja.github.io/FLUXOSVISUAL/
+
+A PRD5 parte da PRD4.3 e consolida a área de Sintética com o Gantt. O workspace apresenta duas áreas principais: **Gantt estruturado** com hierarquia, responsável, status, avanço, datas, ações e barras/conexões TI; e **Grafo Analítico**.
+
+O cadastro de novos itens preserva a fonte digitada e interpreta tabulações ou grupos de quatro espaços como níveis de subitens (relações Contém). A prévia à direita permite alterar nome, tipo e responsável; a edição do nome sincroniza o texto de origem. A sequência TI opcional conecta somente folhas. Para manter compatibilidade com o modelo que exige duração em atividades, novos subitens nascem com duração técnica inicial de 1 dia; datas e durações continuam editáveis após o cadastro, sem campo de duração no lançamento principal.
+
+Histórico de itens: filtros de usuário, empresa e setor. Após cadastrar empresa ou setor, o contexto visual é atualizado sem recarga manual. Os formulários priorizam dados operacionais e mantêm informações complementares recolhidas.
+
+**Publicação:** a workflow `.github/workflows/deploy.yml` publica a branch PRD5 no GitHub Pages mediante validação do build, testes Node e smoke de navegador. O endereço de Pages do repositório é compartilhado entre versões e pode estar na versão anterior até a conclusão do deploy.
+
+**Observação:** dados persistidos localmente no navegador. Nenhuma migração destrutiva de dados está incluída.
+
+---
+
 ## Como testar
 
 1. Abra o [aplicativo publicado](https://guilhermeborja.github.io/FLUXOSVISUAL/).
