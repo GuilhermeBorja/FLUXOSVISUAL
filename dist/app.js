@@ -1498,11 +1498,14 @@ function removeFlowTemplate(id) {
 
 function removeRelation(id) {
   const relation = state.relations.find((entry) => entry.id === id);
-  const target = relation && getItem(relation.targetId);
-  const rule = target ? gpoDecision(currentUser(), "delete_relation", target) : false;
-  if (rule !== true) throw new Error("Sua regra GPO não permite remover relações neste escopo.");
   if (!relation) throw new Error("Relação não encontrada.");
-  if (!canEditItem(currentUser(),getItem(relation.sourceId)) || !canEditItem(currentUser(),getItem(relation.targetId))) throw new Error("Sem permissão para remover esta relação.");
+  const source=getItem(relation.sourceId),target=getItem(relation.targetId);
+  if(relation.relationType==="TI"){
+    if(!canEditItem(currentUser(),source))throw new Error("Somente quem pode editar a origem pode remover esta TI.");
+  }else{
+    if(gpoDecision(currentUser(),"delete_relation",target)!==true || !canEditItem(currentUser(),source) || !canEditItem(currentUser(),target))
+      throw new Error("Sem permissão para alterar esta relação hierárquica.");
+  }
   if (relation.relationType === "contains") getItem(relation.targetId).parentId = "";
   createEvent(relation.targetId,"relation_removed",relation.relationType,"",`Relação com ${getItem(relation.sourceId).title} removida.`);
   archiveRecord("archivedRelations",relation);

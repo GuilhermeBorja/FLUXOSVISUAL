@@ -571,6 +571,7 @@ function renderGraph(items) {
     <button class="button quiet" data-action="propagate">${icon("play")}Reproduzir</button>
     <button class="button quiet" data-action="pause-animation">${icon("pause")}Pausar</button>
     <button class="button quiet" data-action="restart-animation">${icon("rotate-ccw")}Reiniciar</button>
+    ${ui.lastDeletedRelation ? `<button class="button quiet" data-action="undo-relation">${icon("undo-2")}Desfazer TI</button>` : ""}
     <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
     </div><div id="graphCanvas" class="graph-canvas">${items.length ? "" : emptyMarkup()}</div>
     <div class="graph-legend" aria-label="Legenda do farol">${legend.map((entry) => '<button type="button" class="' + entry.signal + (ui.graphHighlight === entry.signal ? ' active' : '') + '" data-highlight-signal="' + entry.signal + '" aria-pressed="' + (ui.graphHighlight === entry.signal) + '"><b></b>' + entry.label + '</button>').join("")}${ui.graphHighlight ? '<button type="button" class="button quiet" data-highlight-signal="all">Limpar destaque</button>' : ''}</div></div></div>`;
@@ -609,7 +610,7 @@ function mountGraph(items) {
       catch(error){notify(error.message,"error");}
     },
     onDeleteRelation: (id)=>{
-      try {const rel=state.relations.find(r=>r.id===id);if(!rel||rel.relationType!=="TI")throw new Error("Selecione uma TI para remover.");removeRelation(id);saveState();notify("Relação TI removida.");render();}
+      try {const rel=state.relations.find(r=>r.id===id);if(!rel||rel.relationType!=="TI")throw new Error("Selecione uma TI para remover.");ui.lastDeletedRelation={sourceId:rel.sourceId,targetId:rel.targetId};removeRelation(id);saveState();notify("Relação TI removida. Use Desfazer para recuperá-la.");render();}
       catch(error){notify(error.message,"error");}
     },
     onPositions: (positions) => { ui.positions[layoutKey()] = positions; state.graphPositions = ui.positions; saveState(); },
@@ -1135,7 +1136,7 @@ function bindWorkspace() {
           plannedDurationDays:Number(data.get("plannedDurationDays")||0),status:"backlog"});
         first||=item;
       }
-      ui.selectedItemId=first?.id||"";saveState();notify(names.length+" item(ns) criado(s).");render();
+      saveState();notify(names.length+" item(ns) criado(s).");render();
     }catch(error){const restored=JSON.parse(saved);for(const key of Object.keys(state))delete state[key];Object.assign(state,restored);notify(error.message,"error");}
   };
   app.onclick = (event) => {
@@ -1228,6 +1229,14 @@ function bindWorkspace() {
     else if (action === "zoom-in") graphInstance?.zoom(1.2);
     else if (action === "zoom-out") graphInstance?.zoom(1/1.2);
     else if (action === "propagate") { const id=ui.selectedItemId || scopedItems().find(item=>!item.parentId)?.id || scopedItems()[0]?.id; if(!id||!graphInstance?.propagate(id,document.querySelector("#animationLayout")?.value||"sequential",document.querySelector("#animationMode")?.value==="blocker"))notify("Nenhum item disponível para animar.","error"); }
+    else if(action==="undo-relation"){
+      try{
+        const old=ui.lastDeletedRelation;
+        if(!old)throw new Error("Não há relação para recuperar.");
+        createRelation(old.sourceId,old.targetId,"TI");ui.lastDeletedRelation=null;
+        saveState();notify("Relação TI restaurada.");render();
+      }catch(error){notify(error.message,"error");}
+    }
     else if(action==="pause-animation")graphInstance?.pause();
     else if(action==="restart-animation")graphInstance?.restart();
     else if (action === "fit-graph") graphInstance?.fit();
