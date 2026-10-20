@@ -15,7 +15,7 @@ try{
  const form=page.locator("#createItemForm");
  await form.locator('[name="title"]').fill("PRD5 EAP");
  await form.locator("#prd43PasteActivities").fill("A\nB\n\tC\n\t\tD\nE");
- assert.equal(await form.locator(".prd5-step-row").count(),5);
+ assert.equal(await form.locator(".prd5-step-row").count(),5,JSON.stringify(await page.evaluate(()=>({raw:document.querySelector("#prd43PasteActivities")?.value,rows:document.querySelectorAll(".prd5-step-row").length,error:document.querySelector(".prd5-indent-error")?.textContent,parsed:(()=>{try{return prd5ParseIndentedItems(document.querySelector("#prd43PasteActivities")?.value)}catch(e){return e.message}})()}))));
  await form.locator('button[type="submit"]').click();
  await page.locator("#updateItemForm").waitFor();
  const shape=await page.evaluate(()=>{
