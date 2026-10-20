@@ -1136,6 +1136,10 @@ function updateRelation(id, input) {
   if (!canEditItem(user, getItem(relation.sourceId)) || !canEditItem(user, getItem(relation.targetId)) || !canEditItem(user, source) || !canEditItem(user, target)) throw new Error("O GPO não permite alterar esta relação ou seus itens.");
   if (gpoDecision(user, "edit_relation", target) !== true) throw new Error("O GPO não permite alterar relações neste escopo.");
   if (!Number.isFinite(Number(input.lagDays))) throw new Error("Informe uma defasagem numérica.");
+  if (input.relationType === "TI" &&
+      (state.items.some(item=>item.parentId===source.id&&!item.archivedAt) ||
+       state.items.some(item=>item.parentId===target.id&&!item.archivedAt)))
+    throw new Error("TI somente entre atividades finais.");
   if (input.relationType === "contains") {
     let cursor = source; const seen = new Set();
     while (cursor && !seen.has(cursor.id)) {
