@@ -916,12 +916,29 @@ function itemFormFields(item, create = false) {
 
 function renderQuickStepRows(titles) {
   const root=document.querySelector("#quickStepRows");if(!root)return;
-  const saved=[...root.querySelectorAll(".quick-step-row")].map(row=>Object.fromEntries([...row.querySelectorAll("select,input")].map(field=>[field.name,field.value])));
-  const rows=titles.map(t=>t.trim()).filter(Boolean).slice(0,100);
-  const kinds=relationTypes.filter(t=>t.id==="TI");
-  root.innerHTML=rows.map((title,i)=>'<div class="quick-step-row"><strong>'+(i+1)+'. '+escapeHtml(title)+'</strong><label>Tipo<select name="stepType_'+i+'">'+itemTypes.map(t=>option(t.id,t.label,(saved[i]?.["stepType_"+i]||"substage")===t.id)).join("")+'</select></label><label>Responsável<select name="stepOwner_'+i+'">'+ownerOptions(saved[i]?.["stepOwner_"+i]||currentUser().id)+'</select></label>'+(i?'<label>Relação com anterior<select name="stepRelation_'+i+'">'+kinds.map(t=>option(t.id,t.label,(saved[i]?.["stepRelation_"+i]||"TI")===t.id)).join("")+'</select></label>':'<span class="secondary">Primeiro subitem</span>')+'<label>Duração (dias)<input name="stepDuration_'+i+'" type="number" min="1" step="1" value="'+escapeHtml(saved[i]?.["stepDuration_"+i]||"")+'" required/></label></div>').join("");
-  const duration=document.querySelector('#createItemForm [name="plannedDurationDays"]');
-  if(duration){duration.required=!rows.length;duration.disabled=!!rows.length;duration.closest("label").hidden=!!rows.length;}
+  const previous=[...root.querySelectorAll(".quick-step-row")].map(row=>({
+    title:row.querySelector('[data-step-title]')?.value||"",
+    type:row.querySelector('[data-step-type]')?.value||"task",
+    owner:row.querySelector('[data-step-owner]')?.value||currentUser().id,
+    duration:row.querySelector('[data-step-duration]')?.value||"1"
+  }));
+  const rows=titles.map(title=>title.trim()).filter(Boolean).slice(0,100);
+  const defaultOwner=document.querySelector('#createItemForm [name="ownerId"]')?.value||currentUser().id;
+  root.innerHTML=rows.map((title,index)=>{
+    const saved=previous[index],value=saved?.title && saved.title!==title ? title : saved?.title||title;
+    return `<div class="quick-step-row prd43-step-row" data-step-index="${index}">
+      <span class="prd43-step-number">${index+1}</span>
+      <label>Atividade<input name="stepTitle_${index}" data-step-title value="${escapeHtml(value)}" maxlength="240" required aria-label="Atividade ${index+1}"/></label>
+      <label>Tipo<select name="stepType_${index}" data-step-type aria-label="Tipo da atividade ${index+1}">${itemTypes.map(t=>option(t.id,t.label,(saved?.type||"task")===t.id)).join("")}</select></label>
+      <label>Responsável<select name="stepOwner_${index}" data-step-owner aria-label="Responsável da atividade ${index+1}">${ownerOptions(saved?.owner||defaultOwner)}</select></label>
+      <label>Dias<input type="number" name="stepDuration_${index}" data-step-duration min="1" max="3650" value="${escapeHtml(saved?.duration||"1")}" required aria-label="Duração da atividade ${index+1} em dias"/></label>
+    </div>`;
+  }).join("");
+  const summary=document.querySelector("#prd43StepCount");if(summary)summary.textContent=rows.length?rows.length+" atividades a criar":"Cole ou digite as atividades para adicionar subitens";
+  const sequence=document.querySelector("#prd43Sequence");if(sequence)sequence.disabled=rows.length<2;
+  const extra=document.querySelector('#createItemForm [name="additionalTitles"]');
+  if(extra && rows.length) extra.value="";
+  updateSchedulePreview();
 }
 
 function renderAttachments(item,editable) {
@@ -985,7 +1002,7 @@ function renderCreatePanel() {
         <label>Responsável<select name="ownerId" required>${ownerOptions(ownerId)}</select></label>
       </div>
       <details class="form-details prd42-create-extras">
-        <summary>Planejamento inicial <span class="secondary">Início e duração</span></summary>
+        <summary>Planejamento inicial <span class="secondary">Início e duração do item</span></summary>
         <div class="form-row">
           <label>Início previsto<input type="date" name="plannedStartAt" value="${escapeHtml(parent?.baselineStartAt||parent?.plannedStartAt||today())}" required/></label>
           <label>Duração inicial (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="1" required/></label>
@@ -994,22 +1011,26 @@ function renderCreatePanel() {
         <div id="schedulePreview" class="schedule-preview" role="status"></div>
       </details>
       <details class="form-details prd42-create-extras">
-        <summary>Criar outros itens no mesmo nível</summary>
+        <summary>Outros itens independentes no mesmo nível</summary>
         <label>Mais nomes, um por linha<textarea name="additionalTitles" rows="3" placeholder="Atividade 2&#10;Atividade 3"></textarea></label>
         <p class="secondary">Cada linha terá o mesmo pai, tipo, responsável e planejamento inicial do item acima.</p>
       </details>
-      <details class="form-details prd42-create-extras">
-        <summary>Inserir etapas dentro do novo item (avançado)</summary>
-        <label>Etapas, uma por linha<textarea name="quickSteps" rows="3" placeholder="Preparar documentação&#10;Validar informações"></textarea></label>
-        <div id="quickStepRows" class="quick-step-list" aria-live="polite"></div>
-        <p class="secondary">As etapas criadas aqui serão filhas do novo item e poderão ter responsáveis, durações e relações TI próprias.</p>
-      </details>
+      <section class="prd43-create-activities" aria-label="Cadastro de atividades">
+        <div class="prd43-activities-head"><strong>Subitens deste item</strong><span id="prd43StepCount" class="secondary">Cole ou digite as atividades para adicionar subitens</span></div>
+        <label>Lista de atividades (uma por linha)
+          <textarea name="quickSteps" id="prd43PasteActivities" rows="4" placeholder="Regularizar poço&#10;Informar liberação à Atlas&#10;Mobilização da Atlas&#10;Confirmar início da montagem" spellcheck="false"></textarea>
+        </label>
+        <div id="quickStepRows" class="prd43-steps-table" aria-live="polite"></div>
+        <label class="prd43-sequence-toggle"><input type="checkbox" name="autoSequence" value="1" id="prd43Sequence" disabled/>
+          Criar sequência automaticamente? <small>Vincular as atividades por TI na ordem informada.</small>
+        </label>
+      </section>
       <details class="form-details prd42-create-extras">
         <summary>Descrição e anexos</summary>
         <label>Descrição<textarea name="description" rows="3" placeholder="Contexto, critérios de conclusão ou observações"></textarea></label>
         ${gpoDecision(currentUser(),"add_attachment",attachContext)===true?'<label>Anexos<input type="file" name="attachments" multiple/><small>Os arquivos ficam neste navegador, sem servidor.</small></label>':""}
       </details>
-      <div class="drawer-actions prd42-create-actions">
+      <div class="drawer-actions prd42-create-actions"><span class="secondary prd43-one-save-hint">Um único salvamento cria todo o projeto.</span>
         <button class="button primary" type="submit">${icon("check")}Criar ${parent?"subitem":"item"}</button>
         <button class="button quiet" type="button" data-action="close-panel">Cancelar</button>
       </div>
