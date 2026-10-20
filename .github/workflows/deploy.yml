@@ -48,6 +48,7 @@ jobs:
           nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &
           timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
           node browser-tests/prd43-smoke.mjs
+          node browser-tests/prd43-responsive.mjs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
