@@ -1652,3 +1652,24 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 #panelRoot #createItemForm .prd5-result-area{grid-column:1;grid-row:3}
 #panelRoot #createItemForm .prd43-sequence-toggle{grid-column:1;grid-row:4}
 }
+
+/* PRD5 toolbar visual correction - aligned icon buttons and no clipping */
+.prd5-two-pane .prd44-pane-heading{height:42px!important;min-height:42px!important;padding:5px 10px!important;position:relative;z-index:30;overflow:visible!important}
+.prd5-two-pane .prd44-pane-heading>strong{font-size:12px!important;line-height:22px}
+.prd5-two-pane .prd44-pane-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:6px!important;max-width:calc(100% - 135px);height:32px;flex-wrap:nowrap!important}
+.prd5-two-pane .prd44-pane-actions>.prd44-small-control,
+.prd5-two-pane .prd44-pane-actions>.prd41-focus-button,
+.prd5-two-pane .prd44-pane-options>summary{display:inline-flex!important;position:relative!important;align-items:center!important;justify-content:center!important;flex:0 0 30px!important;min-width:30px!important;width:30px!important;height:30px!important;min-height:30px!important;padding:0!important;margin:0!important;box-sizing:border-box!important;border:1px solid #d4dfe3!important;border-radius:6px!important;background:#fff!important;color:#365966!important;line-height:1!important;cursor:pointer}
+.prd5-two-pane .prd44-pane-actions svg,.prd5-two-pane .prd44-pane-actions .lucide{display:block!important;width:16px!important;height:16px!important;flex:none!important;stroke-width:2!important}
+.prd5-two-pane .prd44-pane-actions>button:hover,.prd5-two-pane .prd44-pane-options>summary:hover{background:#eef6f4!important;border-color:#83b6ad!important}
+.prd5-two-pane .prd44-pane-actions>button:focus-visible,.prd5-two-pane .prd44-pane-options>summary:focus-visible{outline:2px solid #1c8078;outline-offset:2px}
+.prd5-two-pane .prd44-pane-options{display:block!important;flex:none!important;margin:0!important;padding:0!important;min-height:30px}
+.prd5-two-pane .prd44-pane-options>summary{list-style:none!important}
+.prd5-two-pane .prd44-pane-options>summary::-webkit-details-marker{display:none}
+.prd5-two-pane .prd44-pane-options[open]>.prd44-options-menu{top:36px!important;right:0!important;z-index:100!important}
+.prd5-two-pane .prd5-gantt-actions{display:flex!important;align-items:center;justify-content:center;gap:5px}
+.prd5-two-pane .prd5-gantt-edit,.prd5-two-pane .prd5-gantt-more>summary{width:28px!important;height:28px!important;min-width:28px!important;box-sizing:border-box;display:grid!important;place-items:center;border-radius:6px}
+.prd5-two-pane .prd5-gantt-actions svg{width:15px!important;height:15px!important;display:block}
+.prd5-two-pane .prd5-bulk-check{display:flex;align-items:center;justify-content:center;width:17px;height:28px;flex:none}
+.prd5-two-pane .prd5-bulk-check input{width:15px;height:15px;margin:0}
+.prd5-two-pane .prd5-gantt-more[open] .prd5-gantt-menu{z-index:150}
