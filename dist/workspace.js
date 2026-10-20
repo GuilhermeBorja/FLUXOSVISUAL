@@ -834,23 +834,48 @@ function ownerOptions(selected) {
 function itemFormFields(item, create = false) {
   const user = currentUser();
   const completed = !create && completeStatus(item.status);
-  const summaryGroup = !create && state.items.some((entry) => entry.parentId === item.id && entry.status !== "cancelled");
+  const summaryGroup = !create && state.items.some(entry=>entry.parentId===item.id && !entry.archivedAt);
   const organizationId = item.organizationId || user.organizationId;
-  const sectorId = item.sectorId || user.sectorId;
-  const organizations = editableOrganizations();
-  if (!organizations.some((org) => org.id === organizationId) && !create) { const existingOrganization = state.organizations.find((org) => org.id === organizationId); if (existingOrganization) organizations.push(existingOrganization); }
-  const sectors = state.sectors.filter((sector) => sector.organizationId === organizationId);
-  return `<label>Nome<input name="title" value="${escapeHtml(item.title)}" required maxlength="240" placeholder="Ex.: Contratação de novo ADM"/></label>
-    <div class="form-row"><label>Tipo<select name="type">${itemTypes.map((type)=>option(type.id,itemTypeConfig(type.id,organizationId).label,(item.type||"task")===type.id)).join("")}</select></label>${create ? "" : `<label>Status<select name="status" ${item.type==="approval" || summaryGroup ? "disabled" : ""}>${statusChoices(item.status || "backlog").map((status)=>statusOption(status,(item.status||"backlog")===status.id)).join("")}</select></label>`}</div>
-    <label>Responsável<select name="ownerId" required>${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select></label>
-    ${create ? `<label>Início esperado<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt || today())}" required/></label>` : `<div class="schedule-summary"><span>Início projetado<strong>${dateCell(item.plannedStartAt)}</strong></span><span>Término projetado<strong>${dateCell(item.dueAt)}</strong></span><span>Início da meta<strong>${dateCell(item.baselineStartAt || item.plannedStartAt)}</strong></span><span>Término da meta<strong>${dateCell(item.baselineDueAt || item.dueAt)}</strong></span></div>`}
-    <label>Duração planejada (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="${escapeHtml(create && item.plannedDurationDays === undefined ? "" : item.plannedDurationDays ?? 0)}" ${summaryGroup || completed ? "disabled" : ""} ${create ? "" : "required"}/></label>
-    ${!create && summaryGroup ? `<label>Repactuar término do grupo<input type="date" name="replannedDueAt" value="${escapeHtml(item.replannedDueAt || "")}" min="${escapeHtml(item.baselineStartAt || item.plannedStartAt || today())}"/><small>A baseline original é preservada; a repactuação será registrada separadamente.</small></label>` : ""}
-    ${create ? "" : `<div class="form-row"><label>Peso da atividade<input type="number" name="weight" min="0.1" step="0.1" value="${escapeHtml(item.weight ?? 1)}" ${summaryGroup ? "disabled title=\"O peso é aplicado às atividades finais\"" : ""} required/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent ?? 0)}" placeholder="0" ${summaryGroup ? "disabled title=\"Progresso herdado dos subitens ativos\"" : ""}/><small>${summaryGroup ? "Resumo calculado a partir das atividades finais." : ""}</small></label></div>`}
-    ${create ? "" : `<label>Motivo do bloqueio (opcional)<input name="blockedReason" maxlength="240" value="${escapeHtml(item.blockedReason || "")}" placeholder="Se necessário, detalhe o impedimento"/></label>`}
-    <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description)}</textarea></label>
-     </details>
-    ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state || user.state,createdBy:item.createdBy || user.id}) === true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Demonstração: até 256 KB por arquivo e 1 MB no total. Os arquivos ficam apenas neste navegador, sem armazenamento no servidor.</small></label>' : ""}`;
+  const canChangeOwner = create || gpoDecision(user,"change_owner",item) === true;
+  const canChangeDates = create || gpoDecision(user,"change_duration",item) === true;
+  const targetStart = item.targetStartAt || item.baselineStartAt || item.plannedStartAt || today();
+  const targetEnd = item.targetDueAt || item.baselineDueAt || item.dueAt || targetStart;
+  const targetDuration = inclusiveDurationDays(targetStart,targetEnd);
+  return `<label>Nome<input name="title" value="${escapeHtml(item.title||"")}" required maxlength="240" placeholder="Nome da atividade"/></label>
+    <div class="form-row">
+      <label>Tipo<select name="type">${itemTypes.map(type=>option(type.id,itemTypeConfig(type.id,organizationId).label,(item.type||"task")===type.id)).join("")}</select></label>
+      ${create?"":`<label>Status${summaryGroup?" · calculado":""}<select name="status" ${item.type==="approval" || summaryGroup?"disabled":""}>${statusChoices(item.status||"backlog").map(status=>statusOption(status,(item.status||"backlog")===status.id)).join("")}</select></label>`}
+    </div>
+    <label>Responsável<select name="ownerId" required ${canChangeOwner?"":"disabled"}>${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select>${canChangeOwner?"":'<small class="secondary">Seu perfil não permite alterar o responsável deste item.</small>'}</label>
+    ${create ? `<label>Início esperado<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt||today())}" required/></label>` : `<div class="schedule-summary prd42-projection-summary">
+      <span>Início projetado<strong>${dateCell(item.plannedStartAt)}</strong></span>
+      <span>Término projetado<strong>${dateCell(item.dueAt)}</strong></span>
+      <span>Baseline original<strong>${dateCell(item.baselineDueAt||item.dueAt)}</strong></span>
+      <span>Progresso<strong>${Math.round(Number(item.progressPercent||0))}%</strong></span>
+    </div>`}
+    ${summaryGroup ? `<fieldset class="prd42-target-meta">
+      <legend>Meta do item pai</legend>
+      <p class="secondary">A meta é editável e independe da duração projetada dos filhos. A baseline original fica preservada no histórico.</p>
+      <div class="form-row">
+        <label>Início-meta vigente<input type="date" name="targetStartAt" value="${escapeHtml(targetStart)}" ${canChangeDates?"":"disabled"} required/></label>
+        <label>Duração-meta (dias corridos)<input type="number" name="targetDurationDays" min="1" step="1" value="${Math.max(1,targetDuration)}" ${canChangeDates?"":"disabled"} required/></label>
+      </div>
+      <label>Término-meta vigente<input type="date" name="targetDueAt" value="${escapeHtml(targetEnd)}" ${canChangeDates?"":"disabled"} required/></label>
+      ${canChangeDates?"":'<small class="secondary">Seu perfil não permite alterar metas neste escopo.</small>'}
+    </fieldset>
+    <div class="prd42-derived-note">Duração projetada pelos filhos: <strong>${item.plannedDurationDays||0} dias</strong>. Alterar a meta não modifica o cronograma dos descendentes.</div>
+    <details class="form-details prd42-replan-details">
+      <summary>Reprogramar a projeção dos filhos (avançado)</summary>
+      <label>Nova data projetada de conclusão do grupo<input type="date" name="replannedDueAt" value="${escapeHtml(item.replannedDueAt||"")}" ${canChangeDates?"":"disabled"}/></label>
+      <small>Operação diferente de editar a meta: esta repactuação desloca automaticamente as previsões dos filhos.</small>
+    </details>` : `<label>Duração planejada (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="${escapeHtml(create && item.plannedDurationDays===undefined ? "" : item.plannedDurationDays??0)}" ${completed||!canChangeDates?"disabled":""} ${create?"":"required"}/></label>`}
+    ${!create&&!summaryGroup ? `<div class="form-row">
+      <label>Peso da atividade<input type="number" name="weight" min="0.1" step="0.1" value="${escapeHtml(item.weight??1)}" ${gpoDecision(user,"change_weight",item)===true?"":"disabled"} required/></label>
+      <label>Avanço (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent??0)}"/></label>
+    </div>` : ""}
+    ${!create&&!summaryGroup ? `<label>Motivo do bloqueio (opcional)<input name="blockedReason" maxlength="240" value="${escapeHtml(item.blockedReason||"")}" placeholder="Informe o impedimento, se necessário"/></label>` : ""}
+    <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description||"")}</textarea></label></details>
+    ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state||user.state,createdBy:item.createdBy||user.id})===true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Demonstração: até 256 KB por arquivo e 1 MB no total. Os arquivos ficam neste navegador.</small></label>' : ""}`;
 }
 
 function renderQuickStepRows(titles) {
