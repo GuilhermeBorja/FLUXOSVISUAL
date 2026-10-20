@@ -17,6 +17,7 @@ test("PRD5: aceita quatro espacos e rejeita saltos",()=>{
 });
 test("PRD5: formulario remove cadastro repetido e duracao visivel",()=>{
  assert.doesNotMatch(workspace,/Mais nomes, um por linha|Outros itens independentes no mesmo nível|data-step-duration/);
+ assert.doesNotMatch(workspace.slice(workspace.indexOf("function renderCreatePanel()"),workspace.indexOf("function historyEventsFor(")),/name="parentId"|name="title"|name="plannedDurationDays"/);
  assert.match(workspace,/id="prd43PasteActivities"/);
  assert.match(workspace,/data-step-depth/);
  assert.match(workspace,/function prd5IndentKeydown/);
