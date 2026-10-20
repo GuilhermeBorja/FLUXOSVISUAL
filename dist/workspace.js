@@ -1201,10 +1201,12 @@ function prd5IndentKeydown(event){
 
 function renderQuickStepRows(text) {
   const root=document.querySelector("#quickStepRows");if(!root)return;
-  const previous=new Map([...root.querySelectorAll(".quick-step-row")].map(row=>[
-    Number(row.dataset.stepIndex),
-    {type:row.querySelector("[data-step-type]")?.value||"task",owner:row.querySelector("[data-step-owner]")?.value||""}
-  ]));
+  const previous=[...root.querySelectorAll(".quick-step-row")].map(row=>({
+    index:Number(row.dataset.stepIndex),title:row.querySelector("[data-step-title]")?.value||"",
+    depth:Number(row.dataset.stepDepth||0),type:row.querySelector("[data-step-type]")?.value||"task",
+    owner:row.querySelector("[data-step-owner]")?.value||""
+  }));
+  const used=new Set();
   const summary=document.querySelector("#prd43StepCount"),sequence=document.querySelector("#prd43Sequence");
   let rows;
   try {rows=prd5ParseIndentedItems(text);}
@@ -1216,7 +1218,12 @@ function renderQuickStepRows(text) {
   }
   const defaultOwner=currentUser().id;
   root.innerHTML=rows.map((entry,index)=>{
-    const saved=previous.get(index);
+    // Vincule propriedades à linha lógica, não à posição, quando houver inserções.
+    // Em títulos repetidos, preserve primeiro a ocorrência mais próxima ainda não usada.
+    const candidates=previous.map((entry,j)=>({entry,j})).filter(({entry,j})=>!used.has(j)&&entry.title===rows[index].title&&entry.depth===rows[index].depth);
+    candidates.sort((a,b)=>Math.abs(a.entry.index-index)-Math.abs(b.entry.index-index));
+    const chosen=candidates[0];if(chosen)used.add(chosen.j);
+    const saved=chosen?.entry;
     const isParent=rows.some(node=>node.parentIndex===index);
     return `<div class="quick-step-row prd43-step-row prd5-step-row ${isParent?"has-children":""}" data-step-index="${index}" data-line-index="${entry.lineIndex}" data-step-depth="${entry.depth}" style="--step-depth:${Math.min(entry.depth,10)}">
       <span class="prd43-step-number" title="Nível ${entry.depth+1}">${entry.depth?"↳":""}${index+1}</span>
