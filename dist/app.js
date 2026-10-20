@@ -439,8 +439,8 @@ function seedState() {
   const doorsRisk = createSeedItem(base, {
     id: "item_doors_risk",
     title: "Clausulas leoninas DMK",
-    type: "blocker",
-    status: "waiting",
+    type: "task",
+    status: "blocked",
     blocked: true,
     blockedReason: "Cláusulas contratuais aguardam ciência ou ajuste.",
     ownerId: "u_virginia",
@@ -451,7 +451,7 @@ function seedState() {
   });
   createSeedRelation(base, doors.id, doorsApproval.id, "contains");
   createSeedRelation(base, doors.id, doorsRisk.id, "contains");
-  createSeedRelation(base, doorsRisk.id, doorsApproval.id, "blocks");
+  createSeedRelation(base, doorsRisk.id, doorsApproval.id, "TI");
 
   base.permissionRules = base.users.flatMap((user) => defaultGpoRules(user));
   base.typeSettings = {};
@@ -464,7 +464,7 @@ function createSeedItem(base, input) {
     id: input.id || uid("item"),
     title: input.title,
     type: input.type || "task",
-    status: Number(input.progressPercent ?? 0) > 0 && !["done","cancelled"].includes(input.status || "backlog") ? "in_progress" : input.status || "backlog",
+    status: input.blocked === true ? "blocked" : (Number(input.progressPercent ?? 0) > 0 && !["done","cancelled"].includes(input.status || "backlog") ? "in_progress" : input.status || "backlog"),
     blocked: input.blocked === true,
     blockedReason: input.blocked === true ? String(input.blockedReason || "") : "",
     priority: input.priority || "media",
