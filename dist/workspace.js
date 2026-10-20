@@ -1389,6 +1389,43 @@ function renderOrganizationRegistry() {
   }).join("")}</div>`;
 }
 
+function prd43InlineDeletion(kind,id){
+  if(!["item","relation","attachment"].includes(kind))return false;
+  if(kind==="item"&&state.items.some(child=>child.parentId===id&&!child.archivedAt))return false;
+  document.querySelectorAll(".prd43-inline-confirm").forEach(el=>el.remove());
+  const button=[...document.querySelectorAll("[data-delete-kind]")].find(el=>el.dataset.deleteKind===kind&&el.dataset.deleteId===id);
+  const where=button?.parentElement||document.querySelector("#noticeRoot");
+  if(!where)return false;
+  const title=kind==="item"?getItem(id)?.title:kind==="relation"?"a relação TI":"o anexo";
+  const confirm=document.createElement("span");
+  confirm.className="prd43-inline-confirm";confirm.setAttribute("role","group");confirm.setAttribute("aria-label","Confirmar exclusão");
+  confirm.innerHTML=`<span>Excluir ${escapeHtml(title||"registro")}?</span>
+    <button type="button" class="button danger" data-action="prd43-confirm-delete" data-delete-kind="${escapeHtml(kind)}" data-delete-id="${escapeHtml(id)}">Excluir</button>
+    <button type="button" class="button quiet" data-action="prd43-cancel-delete">Cancelar</button>`;
+  where.append(confirm);
+  confirm.querySelector('[data-action="prd43-confirm-delete"]')?.focus();
+  return true;
+}
+function prd43ConfirmInline(button){
+  if(button.dataset.action==="prd43-cancel-delete"){
+    document.querySelectorAll(".prd43-inline-confirm").forEach(el=>el.remove());return true;
+  }
+  if(button.dataset.action!=="prd43-confirm-delete")return false;
+  const kind=button.dataset.deleteKind,id=button.dataset.deleteId;
+  try{
+    let message="Registro excluído.",undo=null;
+    if(kind==="item"){const item=getItem(id);removeItem(id,{cascade:false,keepChildren:false});undo={type:"restore-item",itemId:id};message="Item excluído: "+item.title+".";}
+    else if(kind==="relation"){const rel=state.relations.find(entry=>entry.id===id);
+      if(!rel)throw new Error("Relação não encontrada.");
+      undo=rel.relationType==="TI"?{type:"delete-ti",relation:{sourceId:rel.sourceId,targetId:rel.targetId,lagDays:rel.lagDays,description:rel.description}}:null;
+      removeRelation(id);message="Relação removida.";}
+    else if(kind==="attachment"){removeAttachment(id);message="Anexo removido.";}
+    if(ui.selectedItemId===id){ui.selectedItemId="";ui.panel="";}
+    saveState();ui.prd43Undo=undo;notify(message);render();
+  }catch(error){notify(error.message,"error");}
+  return true;
+}
+
 function openDeletion(kind,id) {
   try {
     if (kind === "item") requireDeletionPermission(getItem(id));
@@ -1408,6 +1445,7 @@ function openDeletion(kind,id) {
       const item = attachment && getItem(attachment.itemId);
       if (!item || gpoDecision(currentUser(),"delete_attachment",item) !== true) throw new Error("O GPO não permite excluir este anexo.");
     } else throw new Error("Selecione um cadastro válido.");
+    if(prd43InlineDeletion(kind,id))return;
     returnFocus = document.activeElement;
     ui.deletionReturn = {panel:ui.panel,selectedItemId:ui.selectedItemId,panelTab:ui.panelTab};
     ui.deletion = {kind,id,cascade:true}; ui.panel = "delete"; renderPanel();
@@ -1466,6 +1504,7 @@ function bindWorkspace() {
   app.onclick = (event) => {
     const button = event.target.closest("button,[data-action]");
     if (!button || button.closest("#panelRoot")) return;
+    if(prd43ConfirmInline(button))return;
     if(button.dataset.prd4Focus){openItem(button.dataset.prd4Focus);return;}
     if (button.dataset.paneFocus) {
       prd41FocusedPane = prd41FocusedPane === button.dataset.paneFocus ? "" : button.dataset.paneFocus;
@@ -1733,6 +1772,7 @@ function bindPanel() {
     const button = event.target.closest("button,[data-action]"); if (!button) return;
     event.stopPropagation();
     const action = button.dataset.action;
+    if(prd43ConfirmInline(button))return;
     if (action === "close-panel") { closePanel(); return; }
     if (action === "archive-item") { try { const count=archiveItem(ui.selectedItemId); ui.selectedItemId=""; ui.panel=""; ui.scopeId="all"; saveState(); notify(count + " item(ns) arquivado(s)."); render(); } catch(error) { panelFailure(error); } return; }
     if (button.dataset.restoreItem) { try { const count=restoreArchivedItem(button.dataset.restoreItem); saveState(); notify(count + " item(ns) restaurado(s)."); renderPanel(false); } catch(error) { panelFailure(error); } return; }
