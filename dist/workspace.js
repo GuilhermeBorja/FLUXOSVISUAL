@@ -240,7 +240,7 @@ function prd41SavePaneWidths() {
 function prd41ApplyPaneLayout() {
   const container = document.querySelector(".prd41-workspace");
   if (!container || !prd41PaneWidths) return;
-  if(container.classList.contains("prd5-two-pane")){container.classList.toggle("is-focused",!!prd41FocusedPane);container.dataset.focus=prd41FocusedPane||"all";container.querySelectorAll(".prd41-pane").forEach(el=>el.classList.toggle("is-focus-target",el.dataset.pane===prd41FocusedPane));container.querySelectorAll("[data-pane-focus]").forEach(el=>{const selected=el.dataset.paneFocus===prd41FocusedPane;el.setAttribute("aria-pressed",String(selected));el.setAttribute("title",selected?"Restaurar painéis":"Maximizar painel");el.setAttribute("aria-label",selected?"Restaurar painéis":"Maximizar "+el.dataset.paneFocus);el.innerHTML=icon(selected?"minimize-2":"maximize-2");});requestAnimationFrame(prd43DrawGanttRelations);return;}
+  if(container.classList.contains("prd5-two-pane")){container.classList.toggle("is-focused",!!prd41FocusedPane);container.dataset.focus=prd41FocusedPane||"all";container.querySelectorAll(".prd41-pane").forEach(el=>el.classList.toggle("is-focus-target",el.dataset.pane===prd41FocusedPane));container.querySelectorAll("[data-pane-focus]").forEach(el=>{const selected=el.dataset.paneFocus===prd41FocusedPane;el.setAttribute("aria-pressed",String(selected));el.setAttribute("title",selected?"Restaurar painéis":"Maximizar painel");el.setAttribute("aria-label",selected?"Restaurar painéis":"Maximizar "+el.dataset.paneFocus);el.innerHTML=icon(selected?"minimize-2":"maximize-2");});mountIcons();requestAnimationFrame(prd43DrawGanttRelations);return;}
   const values = prd41PaneWidths;
   container.style.setProperty("--pane-table", values.table + "fr");
   container.style.setProperty("--pane-graph", values.graph + "fr");
@@ -745,7 +745,6 @@ function renderGantt(items) {
   const ties=relationsFor(items).filter(rel=>rel.relationType==="TI"&&visible.has(rel.sourceId)&&visible.has(rel.targetId));
   let html=`<div class="gantt-card prd43-gantt">
     <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
-  if(analysis.message)html+=`<div class="prd43-gantt-info" title="${escapeHtml(analysis.message)}">${escapeHtml(analysis.message)}</div>`;
   if(!rows.length)return html+emptyMarkup()+"</div>";
   html+=`<div class="prd5-gantt-bulk-toolbar"><button class="button quiet" data-action="toggle-bulk" type="button">Editar selecionados (${ui.bulkSelected?.size||0})</button>${ui.bulkOpen&&ui.bulkSelected?.size?renderBulkEditor():""}</div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
     <div class="gantt-axis"><span>Atividade / responsável</span><span class="prd5-axis-status">Status</span><span class="prd5-axis-progress">Avanço</span><span class="prd5-axis-dates">Início / término</span><span class="prd5-axis-actions">Editar</span><div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
