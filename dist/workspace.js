@@ -1216,14 +1216,23 @@ function renderQuickStepRows(text) {
     if(sequence){sequence.checked=false;sequence.disabled=true;}
     return;
   }
+  // Primeiro vincula linhas idênticas, independente de sua posição no editor.
+  // Somente depois tenta herdar o item no mesmo índice quando um título é renomeado.
+  const assigned=new Map();
+  rows.forEach((entry,index)=>{
+    const candidates=previous.map((old,j)=>({old,j}))
+      .filter(({old,j})=>!used.has(j)&&old.title===entry.title&&old.depth===entry.depth)
+      .sort((a,b)=>Math.abs(a.old.index-index)-Math.abs(b.old.index-index));
+    if(candidates.length){assigned.set(index,candidates[0].old);used.add(candidates[0].j);}
+  });
+  rows.forEach((entry,index)=>{
+    if(assigned.has(index))return;
+    const position=previous.findIndex((old,j)=>!used.has(j)&&old.index===index&&old.depth===entry.depth);
+    if(position>=0){assigned.set(index,previous[position]);used.add(position);}
+  });
   const defaultOwner=currentUser().id;
   root.innerHTML=rows.map((entry,index)=>{
-    // Vincule propriedades à linha lógica, não à posição, quando houver inserções.
-    // Em títulos repetidos, preserve primeiro a ocorrência mais próxima ainda não usada.
-    const candidates=previous.map((entry,j)=>({entry,j})).filter(({entry,j})=>!used.has(j)&&entry.title===rows[index].title&&entry.depth===rows[index].depth);
-    candidates.sort((a,b)=>Math.abs(a.entry.index-index)-Math.abs(b.entry.index-index));
-    const chosen=candidates[0];if(chosen)used.add(chosen.j);
-    const saved=chosen?.entry;
+    const saved=assigned.get(index);
     const isParent=rows.some(node=>node.parentIndex===index);
     return `<div class="quick-step-row prd43-step-row prd5-step-row ${isParent?"has-children":""}" data-step-index="${index}" data-line-index="${entry.lineIndex}" data-step-depth="${entry.depth}" style="--step-depth:${Math.min(entry.depth,10)}">
       <span class="prd43-step-number" title="Nível ${entry.depth+1}">${entry.depth?"↳":""}${index+1}</span>
