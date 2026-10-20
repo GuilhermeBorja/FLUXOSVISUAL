@@ -897,17 +897,61 @@ function updateSchedulePreview() {
 }
 
 function renderCreatePanel() {
-  const parent = getItem(ui.createParentId);
-  const editable = accessibleItems().filter((item) => canEditItem(currentUser(), item));
-  const defaults = parent ? { type:"substage", parentId:parent.id, ownerId:parent.ownerId, organizationId:parent.organizationId, sectorId:parent.sectorId, state:parent.state, plannedStartAt:parent.baselineStartAt || parent.plannedStartAt || today() } : { type:"project" };
-  const previewDate=inclusiveFinishDate(defaults.plannedStartAt || today(),defaults.plannedDurationDays || 0);
-  return `${panelHeader(parent ? "Novo subitem" : "Cadastro", parent ? `Adicionar a ${parent.title}` : "Novo item")}
-    <form id="createItemForm" class="drawer-body form-stack">
-      ${itemFormFields(defaults, true)}
-      <details class="form-details" ${parent ? "open" : ""}><summary>Vincular a um item</summary><label>Item pai<select name="parentId">${option("","Sem item pai",!parent)}${editable.map((item) => option(item.id,item.title,item.id === parent?.id)).join("")}</select></label></details>
-      <details class="form-details"><summary>Criar múltiplos subitens</summary><label>Uma etapa por linha<textarea name="quickSteps" rows="4" placeholder="Elaborar escopo da vaga&#10;Publicar nos locais&#10;Receber todos os currículos"></textarea></label><div id="quickStepRows" class="quick-step-list" aria-live="polite"></div></details>
-      <div id="schedulePreview" class="schedule-preview" role="status">Previsão final: ${formatDate(previewDate)}</div>
-      <div class="drawer-actions"><button class="button primary" type="submit">${icon("check")}Criar item</button><button class="button quiet" type="button" data-action="close-panel">Cancelar</button></div>
+  const requestedParent = getItem(ui.createParentId);
+  const allowedParents = accessibleItems().filter((item) =>
+    canEditItem(currentUser(),item)
+    && canCreateItem(currentUser(), {...item,createdBy:currentUser().id})
+    && gpoDecision(currentUser(),"create_relation",item) === true);
+  const parent = requestedParent && allowedParents.some(item=>item.id===requestedParent.id) ? requestedParent : null;
+  const ownerId = parent?.ownerId || currentUser().id;
+  const parentLabel = parent ? "Subitem de: " + parent.title : "Item independente (nível principal)";
+  const attachContext = {...(parent||{}),organizationId:parent?.organizationId||currentUser().organizationId,state:parent?.state||currentUser().state,createdBy:currentUser().id};
+  return `${panelHeader("Criar item",parent ? "Novo subitem" : "Novo item")}
+    <form id="createItemForm" class="drawer-body form-stack prd42-create-form">
+      <div class="prd42-create-context">
+        <strong id="prd42ParentHelp">${escapeHtml(parentLabel)}</strong>
+        <label>Onde criar?
+          <select name="parentId" id="prd42ParentSelect">
+            ${option("","Nível principal — item independente",!parent)}
+            ${allowedParents.map(item=>option(item.id,"Dentro de " + item.title,item.id===parent?.id)).join("")}
+          </select>
+        </label>
+        <small>O vínculo hierárquico é definido aqui e não depende do item selecionado para consulta.</small>
+      </div>
+      <label>Nome do item<input name="title" autocomplete="off" maxlength="240" placeholder="O que precisa ser feito?" required autofocus/></label>
+      <div class="form-row">
+        <label>Tipo<select name="type">${itemTypes.map(type=>option(type.id,itemTypeConfig(type.id,parent?.organizationId||currentUser().organizationId).label,type.id===(parent?"task":"project"))).join("")}</select></label>
+        <label>Responsável<select name="ownerId" required>${ownerOptions(ownerId)}</select></label>
+      </div>
+      <details class="form-details prd42-create-extras">
+        <summary>Planejamento inicial <span class="secondary">Início e duração</span></summary>
+        <div class="form-row">
+          <label>Início previsto<input type="date" name="plannedStartAt" value="${escapeHtml(parent?.baselineStartAt||parent?.plannedStartAt||today())}" required/></label>
+          <label>Duração inicial (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="1" required/></label>
+        </div>
+        <p class="secondary">Valores iniciais editáveis. O planejamento poderá ser ajustado e comparado às metas posteriormente.</p>
+        <div id="schedulePreview" class="schedule-preview" role="status"></div>
+      </details>
+      <details class="form-details prd42-create-extras">
+        <summary>Criar outros itens no mesmo nível</summary>
+        <label>Mais nomes, um por linha<textarea name="additionalTitles" rows="3" placeholder="Atividade 2&#10;Atividade 3"></textarea></label>
+        <p class="secondary">Cada linha terá o mesmo pai, tipo, responsável e planejamento inicial do item acima.</p>
+      </details>
+      <details class="form-details prd42-create-extras">
+        <summary>Inserir etapas dentro do novo item (avançado)</summary>
+        <label>Etapas, uma por linha<textarea name="quickSteps" rows="3" placeholder="Preparar documentação&#10;Validar informações"></textarea></label>
+        <div id="quickStepRows" class="quick-step-list" aria-live="polite"></div>
+        <p class="secondary">As etapas criadas aqui serão filhas do novo item e poderão ter responsáveis, durações e relações TI próprias.</p>
+      </details>
+      <details class="form-details prd42-create-extras">
+        <summary>Descrição e anexos</summary>
+        <label>Descrição<textarea name="description" rows="3" placeholder="Contexto, critérios de conclusão ou observações"></textarea></label>
+        ${gpoDecision(currentUser(),"add_attachment",attachContext)===true?'<label>Anexos<input type="file" name="attachments" multiple/><small>Os arquivos ficam neste navegador, sem servidor.</small></label>':""}
+      </details>
+      <div class="drawer-actions prd42-create-actions">
+        <button class="button primary" type="submit">${icon("check")}Criar ${parent?"subitem":"item"}</button>
+        <button class="button quiet" type="button" data-action="close-panel">Cancelar</button>
+      </div>
     </form>`;
 }
 
