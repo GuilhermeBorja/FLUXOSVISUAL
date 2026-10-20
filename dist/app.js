@@ -1,4 +1,4 @@
-const STORAGE_KEY = "fluxosVisualState.v2";
+const STORAGE_KEY = "fluxosVisualState.prd4";
 
 const statusCatalog = [
   { id: "backlog", label: "Lista de pendências" },
@@ -904,7 +904,7 @@ function createItem(input) {
     status: input.blocked === true ? "blocked" : (input.status || "backlog"),
     blocked: false,
     blockedReason: input.blocked === true ? String(input.blockedReason || "").trim() : "",
-    blockedAt: input.blocked === true ? nowIso() : "",
+    blockedAt: input.blocked === true || input.status === "blocked" ? nowIso() : "",
     priority: input.priority || "media",
     ownerId: input.ownerId,
     createdBy: user.id,
@@ -1367,6 +1367,13 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if(changed && item.blockedByPropagation && item.status!=="blocked") {
     item.blockedByPropagation=false;item.statusBeforeInheritedBlock="";item.manualBlockOverride=true;
   }
+  if(input.blockedReason!==undefined && item.blockedReason!==String(input.blockedReason)){
+    createEvent(id,"blocked_reason_changed",item.blockedReason||"",String(input.blockedReason),"Motivo do impedimento atualizado.",effectiveAt);
+    item.blockedReason=String(input.blockedReason);changed=true;
+  }
+  if(changed && item.status==="blocked" && input.status==="blocked" && item.blockedByPropagation){
+    item.blockedByPropagation=false;item.manualBlockOverride=false;
+  }
   if (changed) {
     item.updatedAt = nowIso(); item.lastChangeAt = effectiveAt;
     recalculateBlocking(effectiveAt);
@@ -1726,8 +1733,16 @@ function recalculatePlannedDates() {
   }
   for (const item of items) {
     if (items.some((child) => child.parentId === item.id && child.status !== "cancelled")) continue;
-    item.plannedStartAt = starts.get(item.id) || item.baselineStartAt || item.plannedStartAt || today();
-    item.dueAt = inclusiveFinishDate(item.plannedStartAt,durations.get(item.id));
+    const nextStart=starts.get(item.id)||item.baselineStartAt||item.plannedStartAt||today();
+    const nextEnd=inclusiveFinishDate(nextStart,durations.get(item.id));
+    if(item.plannedStartAt!==nextStart){
+      createEvent(item.id,"start_changed",item.plannedStartAt||"",nextStart,"Recalculo automatico da previsao TI.");
+      item.plannedStartAt=nextStart;
+    }
+    if(item.dueAt!==nextEnd){
+      createEvent(item.id,"due_changed",item.dueAt||"",nextEnd,"Recalculo automatico da previsao TI.");
+      item.dueAt=nextEnd;
+    }
   }
   const depthOf = (item) => { let depth=0, cursor=item, seen=new Set(); while (cursor?.parentId && !seen.has(cursor.parentId)) { seen.add(cursor.parentId); cursor=byId.get(cursor.parentId); if (cursor) depth++; } return depth; };
   const groups = items.filter((item) => items.some((child) => child.parentId === item.id && child.status !== "cancelled")).sort((a,b)=>depthOf(a)-depthOf(b));
@@ -1738,7 +1753,12 @@ function recalculatePlannedDates() {
     if (!latest || !descendants.length) continue;
     const delta = (new Date(group.replannedDueAt+"T12:00:00")-new Date(latest+"T12:00:00"))/86400000;
     if (!Number.isFinite(delta)) continue;
-    for (const leaf of descendants) { leaf.plannedStartAt=datePlusDays(leaf.plannedStartAt,delta); leaf.dueAt=datePlusDays(leaf.dueAt,delta); }
+    for(const leaf of descendants){
+      const nextStart=datePlusDays(leaf.plannedStartAt,delta),nextEnd=datePlusDays(leaf.dueAt,delta);
+      if(leaf.plannedStartAt!==nextStart)createEvent(leaf.id,"start_changed",leaf.plannedStartAt,nextStart,"Repactuacao automatica.");
+      if(leaf.dueAt!==nextEnd)createEvent(leaf.id,"due_changed",leaf.dueAt,nextEnd,"Repactuacao automatica.");
+      leaf.plannedStartAt=nextStart;leaf.dueAt=nextEnd;
+    }
   }
   const summaryGroups = [...groups].sort((a,b)=>depthOf(b)-depthOf(a));
   for (const group of summaryGroups) syncParentSummary(group.id);
@@ -1756,7 +1776,7 @@ function recalculateBlocking(effectiveAt=nowIso()){
       outgoing.get(rel.sourceId).push(rel.targetId);
   }
   const sources=new Map(items.map(item=>[item.id,new Set()]));
-  const queue=items.filter(item=>item.status==="blocked" && !item.inheritedBlockedFrom?.length)
+  const queue=items.filter(item=>item.status==="blocked" && !item.blockedByPropagation)
     .map(item=>({id:item.id,source:item.id}));
   const seen=new Set();
   while(queue.length){
@@ -1767,24 +1787,29 @@ function recalculateBlocking(effectiveAt=nowIso()){
       queue.push({id:target,source});
     }
   }
+  const changedParentIds=new Set();
   for(const item of items){
     const next=[...sources.get(item.id)].filter(source=>source!==item.id).sort(),prior=item.inheritedBlockedFrom||[];
     if(next.join("|")!==prior.join("|")){
       createEvent(item.id,"blocker_sources_changed",prior.join(", "),next.join(", "),"Impedimentos herdados recalculados automaticamente.",effectiveAt);
       item.inheritedBlockedFrom=next;
+      if(item.parentId)changedParentIds.add(item.parentId);
     }
     const eligible=!["done","cancelled","in_progress","under_review","correction"].includes(item.status);
     if(next.length && eligible && item.status!=="blocked" && !item.manualBlockOverride && item.id!==next[0]){
       item.statusBeforeInheritedBlock=item.status;
       const previous=item.status;item.status="blocked";item.blockedByPropagation=true;
       createEvent(item.id,"status_changed",previous,"blocked","Bloqueio herdado automaticamente.",effectiveAt);
+      if(item.parentId)changedParentIds.add(item.parentId);
     } else if(!next.length && item.blockedByPropagation && item.status==="blocked"){
       const previous=item.status;item.status=item.statusBeforeInheritedBlock||"backlog";
       item.blockedByPropagation=false;item.statusBeforeInheritedBlock="";
       createEvent(item.id,"status_changed",previous,item.status,"Desbloqueio herdado: status restaurado.",effectiveAt);
+      if(item.parentId)changedParentIds.add(item.parentId);
     }
     if(!next.length){item.manualBlockOverride=false; if(item.status!=="blocked")item.blockedByPropagation=false;}
   }
+  for(const parentId of changedParentIds)syncParentSummary(parentId,effectiveAt);
 }
 
 // Run the one-time calendar migration after all state and function dependencies are initialized.
