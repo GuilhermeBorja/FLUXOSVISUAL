@@ -943,3 +943,19 @@ body.panel-open { overflow: hidden; }
 .synth-table .row-actions .icon-button{width:27px;height:29px;min-height:29px;padding:4px;flex-shrink:0}
 .synth-table .row-actions .lucide{width:15px;height:15px}
 .synth-table .column-hidden{display:none!important}
+
+/* PRD4: criacao de TI diretamente pela Analitica, sem movimentar o no. */
+.graph-node .graph-connector { fill:#14867e;stroke:#fff;stroke-width:3;cursor:crosshair;filter:drop-shadow(0 1px 3px #0003); }
+.graph-node .graph-connector:hover { fill:#0c605c;stroke-width:4; }
+.prd4-link-preview { fill:none;stroke:#168b82;stroke-width:3;stroke-dasharray:7 5;pointer-events:none; }
+.graph-edge.prd4-edge-selected .edge-path {stroke:#147b78;stroke-width:5;stroke-dasharray:6 3;}
+.graph-node .node-due {fill:var(--muted);font-size:12px;pointer-events:none;}
+.prd4-quick-create {background:var(--surface,#fff);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;max-width:100%;}
+.prd4-quick-top {display:flex;flex-wrap:wrap;align-items:end;gap:8px;}
+.prd4-quick-top label {display:flex;flex:1 1 125px;flex-direction:column;gap:4px;font-size:12px;min-width:105px;}
+.prd4-quick-top label:first-child {flex:2 1 190px;}
+.prd4-quick-top input,.prd4-quick-top select {width:100%;min-width:0;max-width:100%;}
+.prd4-quick-create details {margin-top:8px;}
+.prd4-quick-create details label {display:block;}
+.prd4-quick-create details textarea {width:100%;margin-top:5px;}
+@media(max-width:760px){.prd4-quick-top label{flex:1 1 42%;}.prd4-quick-top button{width:100%;}}

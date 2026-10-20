@@ -141,6 +141,7 @@ const FluxosGraph = (() => {
         <g class="graph-scene">
           <g class="graph-groups">${model.groups.map((group) => `<g data-group="${esc(group.id)}"><rect rx="8"/><text class="group-label">${esc(group.name)}</text><text class="group-count">${group.nodes.length} itens</text></g>`).join("")}</g>
           <g class="graph-edges">${model.links.map((link) => `<g data-edge="${esc(link.relation.id)}" class="graph-edge ${link.relation.relationType === "contains" ? "hierarchy" : ""} ${link.relation.relationType === "blocks" ? "blocking" : ""}" role="button" tabindex="0" aria-label="${esc(link.source.item.title)} ${esc(options.labels.relation(link.relation.relationType))} ${esc(link.target.item.title)}"><title>${esc(options.labels.relation(link.relation.relationType))}${link.relation.lagDays ? ` · defasagem ${link.relation.lagDays}d` : ""}</title><path class="edge-hit"/><path class="edge-path" marker-end="url(#${link.relation.relationType === "blocks" ? "graph-arrow-red" : "graph-arrow"})"/><text class="edge-label" text-anchor="middle">${esc(link.relation.relationType === "contains" ? "contém" : link.relation.relationType === "blocks" ? "bloqueia" : link.relation.relationType === "approves" ? "aprova" : link.relation.relationType === "relates_to" ? "conecta" : link.relation.relationType)}${link.relation.lagDays ? ` ${link.relation.lagDays > 0 ? "+" : ""}${link.relation.lagDays}d` : ""}</text></g>`).join("")}</g>
+          <path class="prd4-link-preview" visibility="hidden" />
           <g class="graph-nodes">${model.nodes.map((node) => {
             const color = colors[options.labels.signal(node.item)] || colors.gray;
             const typeColor = options.labels.typeColor ? options.labels.typeColor(node.item) : color.stroke;
@@ -154,17 +155,16 @@ const FluxosGraph = (() => {
               <text class="node-number" text-anchor="middle" y="5" fill="${esc(typeColor)}">${esc(number)}</text>
               <text class="node-title" text-anchor="middle">${lines.map((line, index) => `<tspan x="0" y="${node.radius + 23 + index * 19}">${esc(line)}</tspan>`).join("")}</text>
               <text class="node-owner" text-anchor="middle" y="${node.radius + 64}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
-              <text class="node-duration" text-anchor="middle" y="${node.radius + 84}">Resp. ${esc(options.labels.ownerTimer ? options.labels.ownerTimer(node.item) : options.labels.duration(node.item))}</text>
               <text class="node-status" text-anchor="middle" y="${node.radius + 103}" fill="${esc(statusColor)}">${esc(options.labels.status(node.item))}</text>
-              <text class="node-ideal-start" text-anchor="middle" y="${node.radius + 123}">Início ideal ${esc(options.labels.idealStart ? options.labels.idealStart(node.item) : "—")}</text>
-              <text class="node-ideal-end" text-anchor="middle" y="${node.radius + 143}">Término ideal ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
-              <text class="node-baseline" text-anchor="middle" y="${node.radius + 163}">Baseline ${esc(options.labels.baseline ? options.labels.baseline(node.item) : "—")}</text>
+              <text class="node-due" text-anchor="middle" y="${node.radius + 117}">Prazo: ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
+              <circle class="graph-connector" cx="${node.radius + 13}" cy="0" r="11" aria-label="Arraste para conectar" />
             </g>`;
           }).join("")}</g>
         </g>
       </svg>`;
     const svg = container.querySelector("svg");
     const scene = svg.querySelector(".graph-scene");
+    const connectionPreview = svg.querySelector(".prd4-link-preview");
     const nodeElements = new Map([...svg.querySelectorAll("[data-node]")].map((element) => [element.dataset.node, element]));
     const edgeElements = new Map([...svg.querySelectorAll("[data-edge]")].map((element) => [element.dataset.edge, element]));
     const groupElements = new Map([...svg.querySelectorAll("[data-group]")].map((element) => [element.dataset.group, element]));
@@ -173,6 +173,8 @@ const FluxosGraph = (() => {
     const pointers = new Map();
     let selectedId = options.selectedId;
     let propagationTimers = [];
+    let selectedRelationId = "";
+    let animationState = null;
 
     function draw() {
       scene.setAttribute("transform", `translate(${transform.x},${transform.y}) scale(${transform.scale})`);
@@ -389,7 +391,10 @@ const FluxosGraph = (() => {
       const target = event.target.closest("[data-node]");
       const edge = event.target.closest("[data-edge]");
       const group = !target && event.target.closest("[data-group]");
-      if (target) {
+      if (target?.querySelector && event.target.closest(".graph-connector")) {
+        gesture={kind:"link",id:target.dataset.node,start:point,moved:false};
+        connectionPreview.setAttribute("visibility","visible");
+      } else if (target) {
         const id = target.dataset.node;
         // Controlled PRD3 magnetism attempt: the selected node follows the pointer;
         // linked nodes respond proportionally by graph distance without force re-simulation.
@@ -430,6 +435,11 @@ const FluxosGraph = (() => {
         const newScale = Math.max(0.12, Math.min(2.5, gesture.transform.scale * Math.hypot(b.x - a.x, b.y - a.y) / Math.max(gesture.distance, 1)));
         const ratio = newScale / gesture.transform.scale;
         transform = { scale: newScale, x: (a.x + b.x) / 2 - (gesture.center.x - gesture.transform.x) * ratio, y: (a.y + b.y) / 2 - (gesture.center.y - gesture.transform.y) * ratio };
+      } else if(gesture.kind==="link") {
+        const source=model.nodeById.get(gesture.id);
+        const x=(point.x-transform.x)/transform.scale,y=(point.y-transform.y)/transform.scale;
+        connectionPreview.setAttribute("d",`M${source.x+source.radius+13},${source.y} L${x},${y}`);
+        if(Math.hypot(point.x-gesture.start.x,point.y-gesture.start.y)>4)gesture.moved=true;
       } else {
         const dx = point.x - gesture.start.x;
         const dy = point.y - gesture.start.y;
@@ -454,12 +464,21 @@ const FluxosGraph = (() => {
       const completed = gesture;
       gesture = null;
       svg.classList.remove("dragging");
-      if (completed?.kind === "nodes" || completed?.kind === "group") {
+      if(completed?.kind==="link") {
+        connectionPreview.setAttribute("visibility","hidden");
+        if(!cancelled){
+          const point=localPoint(event), x=(point.x-transform.x)/transform.scale,y=(point.y-transform.y)/transform.scale;
+          const destination=[...model.nodeById.values()].find(node=>node.id!==completed.id && Math.hypot(node.x-x,node.y-y)<=node.radius+15);
+          if(destination) options.onCreateRelation?.(completed.id,destination.id);
+        }
+      } else if (completed?.kind === "nodes" || completed?.kind === "group") {
         if (completed.moved) savePositions();
         else if (!cancelled && completed.kind === "nodes") { select(completed.id); options.onSelect(completed.id); }
       } else if (completed?.kind === "pan" && !completed.moved && !cancelled) {
         if (completed.edgeId) {
           const link = model.links.find((candidate) => candidate.relation.id === completed.edgeId);
+          selectedRelationId=link.relation.id;
+          edgeElements.forEach((element,id)=>element.classList.toggle("prd4-edge-selected",id===selectedRelationId));
           options.onRelation(link.relation);
         } else select("");
       }
@@ -476,7 +495,7 @@ const FluxosGraph = (() => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         if (nodeElement) { select(nodeElement.dataset.node); options.onSelect(nodeElement.dataset.node); }
-        else if (edge) options.onRelation(model.links.find((link) => link.relation.id === edge.dataset.edge).relation);
+        else if (edge) {selectedRelationId=edge.dataset.edge;edgeElements.forEach((element,id)=>element.classList.toggle("prd4-edge-selected",id===selectedRelationId));options.onRelation(model.links.find((link) => link.relation.id === edge.dataset.edge).relation);}
       } else if (nodeElement && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault();
         const node = model.nodeById.get(nodeElement.dataset.node);
@@ -486,12 +505,23 @@ const FluxosGraph = (() => {
         savePositions();
       }
     });
+    const onDeleteKey=(event)=>{
+      if(!["Delete","Backspace"].includes(event.key)||!selectedRelationId)return;
+      const focused=document.activeElement;
+      if(focused?.matches?.("input,textarea,select,[contenteditable=true]"))return;
+      const rel=model.links.find(link=>link.relation.id===selectedRelationId)?.relation;
+      if(rel?.relationType==="TI"){
+        event.preventDefault();options.onDeleteRelation?.(selectedRelationId);
+        selectedRelationId="";
+      }
+    };
+    document.addEventListener("keydown",onDeleteKey);
     const observer = new ResizeObserver(() => draw());
     observer.observe(container);
     if (options.initialTransform) { transform = { ...options.initialTransform }; draw(); }
     else fit(true);
     select(selectedId);
-    return { fit, zoom, select, selectMany, propagate, destroy: () => { propagationTimers.forEach(clearTimeout); observer.disconnect(); }, model, getTransform: () => ({ ...transform }) };
+    return { fit, zoom, select, selectMany, propagate, destroy: () => { propagationTimers.forEach(clearTimeout); document.removeEventListener("keydown",onDeleteKey); observer.disconnect(); }, model, getTransform: () => ({ ...transform }) };
   }
 
   return { layout, mount, connectedGroups, projectRoot };
