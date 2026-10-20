@@ -68,6 +68,37 @@ try{
   await page.waitForTimeout(120);
   await page.locator('[data-action="pause-animation"]').click();
   await page.locator('[data-action="restart-animation"]').click();
+  // Com o grafo maximizado, a criacao e a exclusao real de TI continuam disponiveis.
+  const ids=await page.evaluate(()=>{
+    const base={type:"task",status:"backlog",ownerId:"u_luis",organizationId:"org_castro",sectorId:"sec_pmo",state:"PE",plannedStartAt:"2026-10-20",plannedDurationDays:2};
+    const root=createItem({...base,type:"process",title:"PRD4.1 Fluxo verificacao"});
+    const first=createItem({...base,title:"PRD4.1 Origem",parentId:root.id});
+    const second=createItem({...base,title:"PRD4.1 Destino",parentId:root.id});
+    ui.scopeId=root.id;ui.selectedItemId="";ui.showSubitems=true;render();
+    return {first:first.id,second:second.id};
+  });
+  await page.locator('[data-node="'+ids.first+'"]').waitFor();
+  await page.locator('[data-node="'+ids.first+'"] .graph-connector').scrollIntoViewIfNeeded();
+  const geometry=await page.evaluate(({first,second})=>{
+    const a=document.querySelector('[data-node="'+first+'"] .graph-connector').getBoundingClientRect();
+    const b=document.querySelector('[data-node="'+second+'"] .node-circle').getBoundingClientRect();
+    return {from:{x:(a.left+a.right)/2,y:(a.top+a.bottom)/2},to:{x:(b.left+b.right)/2,y:(b.top+b.bottom)/2}};
+  },ids);
+  await page.mouse.move(geometry.from.x,geometry.from.y);
+  await page.mouse.down();
+  await page.mouse.move(geometry.to.x,geometry.to.y,{steps:12});
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const relationId=await page.evaluate(({first,second})=>state.relations.find(r=>r.sourceId===first && r.targetId===second && r.relationType==="TI")?.id||"",ids);
+  assert.ok(relationId,"drag connector inside unified workspace creates a TI");
+  const edge=page.locator('[data-edge="'+relationId+'"]');
+  await edge.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Delete");
+  assert.equal(await page.evaluate(id=>state.relations.some(r=>r.id===id),relationId),false);
+  await page.locator('[data-pane-focus="graph"]').click();
+  assert.equal(await page.locator(".prd41-pane--gantt").isVisible(),true);
+
   assert.deepEqual(errors,[],"No runtime browser errors");
-  console.log("PRD4.1 smoke: 3 panes, drag/keyboard resize, persistence, focus, synced selection, creation, graph controls OK");
+  console.log("PRD4.1 smoke: 3 panes, drag/keyboard resize, persistence, focus, synced selection, creation, TI connector and Delete, graph controls OK");
 } finally {await browser.close();}
