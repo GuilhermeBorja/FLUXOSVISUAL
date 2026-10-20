@@ -79,6 +79,17 @@ try {
   });
   assert.ok(layout.buttonBottom<=768&&layout.buttonTop>=0,"save visible without drawer scroll: "+JSON.stringify(layout));
   assert.ok(layout.drawerScroll<=3&&layout.formScroll<=3,"no form-level scrolling: "+JSON.stringify(layout));
+  await page.setViewportSize({width:390,height:768});
+  await page.waitForTimeout(100);
+  const mobile=await page.evaluate(()=>{
+    const drawer=document.querySelector(".drawer"),form=document.querySelector("#createItemForm"),button=form.querySelector('[type=submit]');
+    return {saveBottom:button.getBoundingClientRect().bottom,drawerScroll:drawer.scrollHeight-drawer.clientHeight,
+      formScroll:form.scrollHeight-form.clientHeight,groups:[...form.querySelectorAll(".prd42-create-extras")].filter(el=>getComputedStyle(el).display!=="none").length};
+  });
+  assert.ok(mobile.saveBottom<=768,"mobile Save stays visible: "+JSON.stringify(mobile));
+  assert.equal(mobile.groups,3,"advanced options remain accessible on mobile");
+  assert.ok(mobile.drawerScroll<=3 && mobile.formScroll<=3,"no mobile form scrolling: "+JSON.stringify(mobile));
+  await page.setViewportSize({width:1366,height:768});
   await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 
   // Reabrir todos os ramos para validar a conexão no próprio Gantt.
