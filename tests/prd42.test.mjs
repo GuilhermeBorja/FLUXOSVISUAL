@@ -59,7 +59,7 @@ test("PRD4.2: cadastro indica pai explicitamente sem herdar selecao da tela",()=
 });
 test("PRD4.2: indicadores compactos e grafo completo com controles acessiveis",()=>{
   assert.match(workspace,/class="prd42-summary"/);
-  assert.match(workspace,/class="prd42-graph-options"/);
+  assert.match(workspace,/class="prd44-pane-options"/);
   assert.match(workspace,/id="groupingSelect"/);
   assert.match(workspace,/id="animationLayout"/);
   assert.match(workspace,/id="animationMode"/);
