@@ -60,6 +60,9 @@ try{
   assert.ok(created.children[3].plannedStartAt>created.children[2].plannedStartAt);
   await page.locator('#panelRoot button[data-action="close-panel"]').click();
 
+  // Filtrar a visualizacao para o projeto criado mantem origem e destino acessiveis
+  // na area visivel do navegador, como faria o usuario em um projeto grande.
+  await page.locator("#scopeSelect").selectOption(created.rootId);
   // Gantt displays TI lines and supports direct edit.
   await page.locator('[data-pane-focus="gantt"]').click();
   await page.waitForTimeout(180);
