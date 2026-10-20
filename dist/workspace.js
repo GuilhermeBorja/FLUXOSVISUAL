@@ -175,6 +175,7 @@ function render() {
           <button class="button primary" data-action="create" ${canCreateItem(user) ? "" : 'disabled title="Seu perfil GPO não permite criar itens neste contexto."'}>${icon("plus")}Novo item</button>
         </div>
       </section>
+      ${renderPrd4Overview(items)}
       ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
       <section class="workspace-controls" aria-label="Visualização e filtros">
@@ -527,6 +528,21 @@ function renderGraphTree(items) {
   const owners = [...new Set(items.map((item) => item.ownerId).filter(Boolean))].sort((a,b)=>userName(a).localeCompare(userName(b),"pt-BR"));
   const ownerFilters = '<section class="graph-owner-filters"><h4>Responsáveis</h4>' + owners.map((id)=>'<button type="button" data-highlight-owner="' + escapeHtml(id) + '" aria-pressed="' + (ui.graphOwnerHighlight===id) + '" class="' + (ui.graphOwnerHighlight===id ? 'active' : '') + '">' + escapeHtml(userName(id)) + '</button>').join('') + (ui.graphOwnerHighlight ? '<button type="button" class="clear-owner-filter" data-highlight-owner="">Limpar destaque</button>' : '') + '</section>';
   return '<nav class="graph-tree" aria-label="Árvore de itens">' + ownerFilters + '<h3>Navegar itens<small class="tree-hint">Marque caixas para destacar um conjunto</small></h3><div class="graph-tree-list">' + roots.map((item) => visit(item,0)).join("") + '</div></nav>';
+}
+
+function renderPrd4Overview(items){
+  const roots=items.filter(item=>!item.parentId || !items.some(other=>other.id===item.parentId));
+  const affected=items.filter(item=>item.status==="blocked" || item.inheritedBlockedFrom?.length);
+  const late=items.filter(item=>isOverdue(item));
+  const approvals=items.filter(item=>item.type==="approval" && ["under_review","correction"].includes(item.status));
+  const avg=roots.length?Math.round(roots.reduce((total,item)=>total+Number(item.progressPercent||0),0)/roots.length):0;
+  const options=[{label:"Projetos e processos",value:roots.length,description:avg+"% de avanço médio",focus:roots[0]?.id||""},
+    {label:"Impedimentos",value:affected.length,description:"Atividades a verificar",focus:affected[0]?.id||""},
+    {label:"Atrasos",value:late.length,description:"Prazos vencidos",focus:late[0]?.id||""},
+    {label:"Aprovações",value:approvals.length,description:"Aguardando decisão ou correção",focus:approvals[0]?.id||""}];
+  return `<section class="prd4-summary" aria-label="Visão geral dos processos">${options.map(item=>
+    `<button type="button" class="prd4-summary-card" ${item.focus ? `data-prd4-focus="${escapeHtml(item.focus)}"` : "disabled"}>
+      <strong>${item.value}</strong><span>${item.label}</span><small>${item.description}</small></button>`).join("")}</section>`;
 }
 
 function renderPrd4QuickCreate() {
@@ -1125,6 +1141,7 @@ function bindWorkspace() {
   app.onclick = (event) => {
     const button = event.target.closest("button,[data-action]");
     if (!button || button.closest("#panelRoot")) return;
+    if(button.dataset.prd4Focus){openItem(button.dataset.prd4Focus);return;}
     if (button.dataset.deleteKind) { openDeletion(button.dataset.deleteKind,button.dataset.deleteId); return; }
     if (button.dataset.view) { ui.overviewMode = button.dataset.view; closePanel(); saveState(); render(); return; }
     if (button.dataset.select) {

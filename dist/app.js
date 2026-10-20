@@ -287,7 +287,7 @@ function emptyState() {
     workspaceName:"", organizations:[], sectors:[], users:[], items:[], relations:[], events:[],
     attachments:[], archivedAttachments:[], archivedItems:[], archivedRelations:[], archivedUsers:[],
     archivedOrganizations:[], archivedSectors:[], permissionRules:[], permissionProfiles:[], approvalDecisions:[], templates:[],
-    registryEvents:[], typeSettings:{}, statusSettings:{}, graphPositions:{}, hiddenTableColumns:[], tableColumnWidths:{}, riskThresholdDays:3,
+    registryEvents:[], typeSettings:{}, statusSettings:{}, graphPositions:{}, hiddenTableColumns:["id","created","actualStart","released","completed","elapsed","activityDuration","weight"], tableColumnWidths:{}, riskThresholdDays:3,
     filters:{query:"",status:"all",indicator:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}
   };
 }

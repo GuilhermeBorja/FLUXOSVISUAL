@@ -959,3 +959,16 @@ body.panel-open { overflow: hidden; }
 .prd4-quick-create details label {display:block;}
 .prd4-quick-create details textarea {width:100%;margin-top:5px;}
 @media(max-width:760px){.prd4-quick-top label{flex:1 1 42%;}.prd4-quick-top button{width:100%;}}
+
+/* PRD4: painel gerencial compacto com acesso direto às excecoes. */
+.prd4-summary {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 14px;}
+.prd4-summary-card {text-align:left;border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:var(--surface,#fff);color:inherit;display:flex;flex-direction:column;align-items:start;gap:5px;min-width:0;cursor:pointer;}
+.prd4-summary-card strong {font-size:1.55rem;font-variant-numeric:tabular-nums;line-height:1.1;}
+.prd4-summary-card span {font-size:.87rem;font-weight:600;}
+.prd4-summary-card small {font-size:.75rem;color:var(--muted);line-height:1.35;}
+.prd4-summary-card:hover:not(:disabled) {border-color:var(--accent);box-shadow:0 2px 14px #0000000d;}
+.prd4-summary-card:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+.prd4-summary-card:disabled {cursor:default;opacity:.55;}
+.prd4-traversal-label {font-size:13px;fill:#155d56;font-weight:700;stroke:var(--surface,#fff);stroke-width:3;paint-order:stroke;pointer-events:none;}
+@media(max-width:800px){.prd4-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:420px){.prd4-summary-card{padding:10px;}.prd4-summary-card strong{font-size:1.2rem;}}
