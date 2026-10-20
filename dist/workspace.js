@@ -146,6 +146,123 @@ function mountIcons() {
   if (typeof FluxosVendor !== "undefined") FluxosVendor.mountIcons();
 }
 
+
+/* PRD4.1: uma area com tres perspectivas independentes, sem recriar o grafo ao redimensionar. */
+let prd41PaneWidths = null;
+let prd41PaneUser = "";
+let prd41FocusedPane = "";
+function prd41LoadPaneWidths() {
+  const key = "fluxosVisual.panes.prd41." + currentUser().id;
+  try {
+    const data = JSON.parse(localStorage.getItem(key) || "null");
+    if (data && ["table","graph","gantt"].every(name => Number.isFinite(data[name]) && data[name] >= 12 && data[name] <= 75)
+        && Math.abs(data.table + data.graph + data.gantt - 100) < .2) return data;
+  } catch {}
+  return {table:34,graph:36,gantt:30};
+}
+function prd41SavePaneWidths() {
+  try { localStorage.setItem("fluxosVisual.panes.prd41." + currentUser().id, JSON.stringify(prd41PaneWidths)); } catch {}
+}
+function prd41ApplyPaneLayout() {
+  const container = document.querySelector(".prd41-workspace");
+  if (!container || !prd41PaneWidths) return;
+  const values = prd41PaneWidths;
+  container.style.setProperty("--pane-table", values.table + "fr");
+  container.style.setProperty("--pane-graph", values.graph + "fr");
+  container.style.setProperty("--pane-gantt", values.gantt + "fr");
+  container.classList.toggle("is-focused", !!prd41FocusedPane);
+  container.dataset.focus = prd41FocusedPane || "all";
+  container.querySelectorAll(".prd41-pane").forEach(element => element.classList.toggle("is-focus-target", element.dataset.pane === prd41FocusedPane));
+  container.querySelectorAll("[data-pane-focus]").forEach(button => {
+    const selected = button.dataset.paneFocus === prd41FocusedPane;
+    button.setAttribute("aria-pressed", String(selected));
+    button.setAttribute("title", selected ? "Restaurar tres visualizacoes" : "Maximizar esta visualizacao");
+    button.setAttribute("aria-label", selected ? "Restaurar tres visualizacoes" : "Maximizar " + button.dataset.paneFocus);
+    button.innerHTML = selected ? '<span aria-hidden="true">▣</span>' : '<span aria-hidden="true">□</span>';
+  });
+  container.querySelectorAll("[data-pane-split]").forEach(separator => {
+    const side = separator.dataset.paneSplit === "table-graph" ? "table" : "graph";
+    separator.setAttribute("aria-valuenow", String(Math.round(values[side])));
+  });
+  requestAnimationFrame(() => applyTableColumnLayout());
+}
+function prd41UpdateWidths(split,deltaPx) {
+  if (!prd41PaneWidths) return false;
+  const container = document.querySelector(".prd41-workspace");
+  if (!container || prd41FocusedPane) return false;
+  const available = container.getBoundingClientRect().width - 20;
+  if (available < 1) return false;
+  const first = split === "table-graph" ? "table" : "graph";
+  const second = split === "table-graph" ? "graph" : "gantt";
+  const minimum = {table:215,graph:245,gantt:250};
+  const minA = minimum[first] / available * 100;
+  const minB = minimum[second] / available * 100;
+  const before = prd41PaneWidths[first];
+  const next = Math.min(before + prd41PaneWidths[second] - minB, Math.max(minA,before + deltaPx / available * 100));
+  if (Math.abs(next - before) < .001) return false;
+  prd41PaneWidths[first] = Math.round(next * 10) / 10;
+  prd41PaneWidths[second] = Math.round((prd41PaneWidths[second] + before - prd41PaneWidths[first]) * 10) / 10;
+  prd41ApplyPaneLayout();
+  return true;
+}
+function prd41BindSplitters() {
+  document.querySelectorAll("[data-pane-split]").forEach(separator => {
+    separator.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || prd41FocusedPane) return;
+      event.preventDefault();
+      const container = document.querySelector(".prd41-workspace");
+      if (!container) return;
+      const start = event.clientX;
+      const initial = {...prd41PaneWidths};
+      separator.setPointerCapture(event.pointerId);
+      separator.classList.add("is-dragging");
+      document.body.classList.add("prd41-resizing");
+      const move = e => {
+        if (e.pointerId !== event.pointerId) return;
+        prd41PaneWidths = {...initial};
+        prd41UpdateWidths(separator.dataset.paneSplit, e.clientX - start);
+      };
+      const end = e => {
+        if (e.pointerId !== event.pointerId) return;
+        separator.removeEventListener("pointermove",move);
+        separator.removeEventListener("pointerup",end);
+        separator.removeEventListener("pointercancel",end);
+        separator.classList.remove("is-dragging");
+        document.body.classList.remove("prd41-resizing");
+        if (separator.hasPointerCapture(e.pointerId)) separator.releasePointerCapture(e.pointerId);
+        prd41SavePaneWidths();
+      };
+      separator.addEventListener("pointermove",move);
+      separator.addEventListener("pointerup",end);
+      separator.addEventListener("pointercancel",end);
+    });
+    separator.addEventListener("keydown", event => {
+      if (!["ArrowLeft","ArrowRight","Home"].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === "Home") {
+        prd41PaneWidths = {table:34,graph:36,gantt:30};
+        prd41ApplyPaneLayout();
+      } else prd41UpdateWidths(separator.dataset.paneSplit,event.key === "ArrowRight" ? 24 : -24);
+      prd41SavePaneWidths();
+    });
+  });
+}
+function renderPrd41Workspace(items) {
+  const pane = (id,label,subtitle,content) => `<section class="prd41-pane prd41-pane--${id} ${prd41FocusedPane === id ? "is-focus-target" : ""}" data-pane="${id}" aria-label="${label}">
+    <header class="prd41-pane-heading"><div><strong>${label}</strong><small>${subtitle}</small></div>
+      <button type="button" class="prd41-focus-button" data-pane-focus="${id}" aria-label="Maximizar ${label}" aria-pressed="${prd41FocusedPane === id}">${icon(prd41FocusedPane === id ? "minimize-2" : "maximize-2")}</button></header>
+    <div class="prd41-pane-body">${content}</div></section>`;
+  return `<div class="prd41-workspace-viewport">
+    <div class="prd41-workspace ${prd41FocusedPane ? "is-focused" : ""}" data-focus="${prd41FocusedPane || "all"}" style="--pane-table:${prd41PaneWidths.table}fr;--pane-graph:${prd41PaneWidths.graph}fr;--pane-gantt:${prd41PaneWidths.gantt}fr;">
+      ${pane("table","Sintética","Cadastro e atividades",renderTable(items))}
+      <div class="prd41-splitter" role="separator" tabindex="0" data-pane-split="table-graph" aria-label="Redimensionar Sintética e Analítica" aria-orientation="vertical" aria-valuemin="10" aria-valuemax="80" aria-valuenow="${Math.round(prd41PaneWidths.table)}" title="Arraste para ajustar os painéis; use as setas para ajuste fino"><span aria-hidden="true"></span></div>
+      ${pane("graph","Analítica","Relações e animação",renderGraph(items))}
+      <div class="prd41-splitter" role="separator" tabindex="0" data-pane-split="graph-gantt" aria-label="Redimensionar Analítica e Gantt" aria-orientation="vertical" aria-valuemin="10" aria-valuemax="80" aria-valuenow="${Math.round(prd41PaneWidths.graph)}" title="Arraste para ajustar os painéis; use as setas para ajuste fino"><span aria-hidden="true"></span></div>
+      ${pane("gantt","Gantt","Datas e dependências",renderGantt(items))}
+    </div>
+  </div>`;
+}
+
 function render() {
   if (state.setupComplete === false) { renderMasterSetup(); return; }
   if (graphInstance) { ui.graphTransform = graphInstance.getTransform(); graphInstance.destroy(); graphInstance = null; }
@@ -155,6 +272,7 @@ function render() {
     return;
   }
   const user = currentUser();
+  if (prd41PaneUser !== user.id) { prd41PaneWidths = prd41LoadPaneWidths(); prd41PaneUser = user.id; prd41FocusedPane = ""; }
   const items = scopedItems();
   if (ui.selectedItemId && !canViewItem(user, getItem(ui.selectedItemId))) { ui.selectedItemId = ""; ui.panel = ""; }
   app.innerHTML = `
@@ -179,11 +297,7 @@ function render() {
       ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
       <section class="workspace-controls" aria-label="Visualização e filtros">
-        <div class="mode-tabs" role="tablist" aria-label="Visualização">
-          <button role="tab" id="tableTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "table"}" data-view="table" class="${ui.overviewMode === "table" ? "active" : ""}">${icon("table-2")}Sintética</button>
-          <button role="tab" id="graphTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "graph"}" data-view="graph" class="${ui.overviewMode === "graph" ? "active" : ""}">${icon("network")}Analítica</button>
-          <button role="tab" id="ganttTab" aria-controls="workspaceView" aria-selected="${ui.overviewMode === "gantt"}" data-view="gantt" class="${ui.overviewMode === "gantt" ? "active" : ""}">${icon("table-2")}Gantt</button>
-        </div>
+        <div class="prd41-mode-label" aria-label="Visualização unificada">${icon("panels-top-left")} Área integrada <small>Sintética · Analítica · Gantt</small></div>
         <div class="view-filters">
           <label class="search-box">${icon("search")}<input id="searchInput" type="search" placeholder="Buscar item ou responsável" value="${escapeHtml(state.filters.query)}" aria-label="Buscar item ou responsável"/></label>
           <select id="scopeSelect" aria-label="Projeto ou processo"><option value="all">Todos os processos</option>${projectOptions().map((item) => option(item.id, item.title, ui.scopeId === item.id)).join("")}</select>
@@ -191,15 +305,18 @@ function render() {
         </div>
       </section>
       ${ui.filtersOpen ? renderFilters() : ""}
-      <section id="workspaceView" role="tabpanel" aria-labelledby="${ui.overviewMode === "table" ? "tableTab" : ui.overviewMode === "graph" ? "graphTab" : "ganttTab"}">
-        ${ui.overviewMode === "table" ? renderTable(items) : ui.overviewMode === "graph" ? renderGraph(items) : renderGantt(items)}
+      ${renderPrd4QuickCreate()}
+      <section id="workspaceView" aria-label="Três visualizações sincronizadas">
+        ${renderPrd41Workspace(items)}
       </section>
       <footer class="workspace-footer"><span class="build-label" data-build-label title="Identificação desta versão publicada">${escapeHtml(buildLabel())}</span></footer>
     </main>
     <div id="panelRoot"></div>`;
   bindWorkspace();
   renderPanel(false);
-  if (ui.overviewMode === "graph" && items.length) mountGraph(items);
+  if (items.length) mountGraph(items);
+  prd41BindSplitters();
+  prd41ApplyPaneLayout();
   mountIcons();
 }
 
@@ -383,7 +500,7 @@ function renderTable(items) {
   ui.bulkSelected ||= new Set();
   const rows = tableRows(items);
   const selectedVisible = rows.filter(({item}) => ui.bulkSelected.has(item.id)).length;
-  return `${renderPrd4QuickCreate()}<div class="table-card">
+  return `<div class="table-card">
     <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/>Mostrar subitens</label><label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar visíveis</label><span class="secondary">${selectedVisible} selecionados · ${rows.length} linhas</span><button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Editar em lote</button></div>
     ${ui.bulkOpen && selectedVisible ? renderBulkEditor() : ""}
     ${!rows.length ? emptyMarkup() : `<div class="synth-table-wrap"><table class="synth-table"><thead><tr><th><span class="sr-only">Selecionar</span></th><th>ID</th><th>Nome</th><th>Conclusão</th><th>Responsável</th><th>Criação</th><th>Início projetado</th><th>Início real</th><th>Liberada em</th><th>Término projetado</th><th>Término real</th><th>Duração total</th><th>Duração da atividade</th><th>Peso</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
@@ -480,7 +597,7 @@ function renderGantt(items) {
   });
   const maxDay = Math.max(1,...rows.map((row) => row.startOffset + row.duration + (row.slack || 0)));
   let html = '<div class="gantt-card"><div class="gantt-heading"><div><h2>Cronograma e caminho crítico</h2></div><div><strong>Previsão de término</strong><span>' + escapeHtml(analysis.finishDate ? formatDate(analysis.finishDate) : "—") + '</span></div></div>';
-  html += '<div class="gantt-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ' + (ui.showSubitems ? 'checked' : '') + '/>Mostrar subitens</label>' + (canManageGpo(currentUser()) ? '<label class="risk-setting">Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="' + Math.max(1,Math.min(60,Number(state.riskThresholdDays) || 3)) + '"/></label>' : '') + '</div>';
+  html += '<div class="gantt-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitemsGantt" ' + (ui.showSubitems ? 'checked' : '') + '/>Mostrar subitens</label>' + (canManageGpo(currentUser()) ? '<label class="risk-setting">Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="' + Math.max(1,Math.min(60,Number(state.riskThresholdDays) || 3)) + '"/></label>' : '') + '</div>';
   if (analysis.message) html += '<div class="notice ' + (analysis.valid ? '' : 'error') + '" role="' + (analysis.valid ? 'status' : 'alert') + '">' + escapeHtml(analysis.message) + '</div>';
   if (!rows.length) return html + emptyMarkup() + '</div>';
   html += '<div class="gantt-scroll"><div class="gantt-axis"><span>Item</span><div class="gantt-axis-track">' + [0,25,50,75,100].map((percent)=>'<span style="left:' + percent + '%">' + escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100)))) + '</span>').join("") + '</div></div>';
@@ -495,7 +612,7 @@ function renderGantt(items) {
     const slackWidth = row.slack === null ? 0 : Math.max(0,Math.min(100 - slackLeft,row.slack / maxDay * 100));
     const childToggle = row.children?.length ? '<button class="tree-toggle" data-expand="' + escapeHtml(row.item.id) + '" aria-label="' + (ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'Recolher' : 'Expandir') + ' subitens">' + icon(ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'chevron-down' : 'chevron-right') + '</button>' : '<span class="tree-spacer"></span>';
     const dependencies = incoming.length ? incoming.map(({relation,item}) => '<span class="dependency-chip" title="' + escapeHtml(labelOf(relationTypes,relation.relationType) + ' · ' + item.title) + '">← ' + escapeHtml(relation.relationType + ' · ' + item.title) + '</span>').join('') : '<span class="dependency-none">Sem predecessoras</span>';
-    return '<div class="gantt-row ' + (row.structural ? 'structural' : '') + '" style="--depth:' + Math.min(row.depth || 0,8) + '"><div class="gantt-item-wrap">' + childToggle + '<button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small style="color:' + escapeHtml(statusConfig(row.item.status).color) + '">' + escapeHtml(userName(row.item.ownerId)) + ' · ' + icon(statusConfig(row.item.status).icon) + ' ' + escapeHtml(statusDisplayLabel(row.item)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button></div><div class="gantt-track"><div class="gantt-bar ' + barTone + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga calculada " + row.slack.toFixed(1) + "d")) + '"></div>' + (slackWidth > 0 ? '<div class="gantt-slack" style="left:' + slackLeft + '%;width:' + slackWidth + '%" title="Folga calculada: ' + row.slack.toFixed(1) + ' dias"></div>' : '') + '<span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + dependencies + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
+    return '<div class="gantt-row ' + (row.structural ? 'structural' : '') + (row.item.id === ui.selectedItemId ? ' selected' : '') + '" data-gantt-row="' + escapeHtml(row.item.id) + '" style="--depth:' + Math.min(row.depth || 0,8) + '"><div class="gantt-item-wrap">' + childToggle + '<button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small style="color:' + escapeHtml(statusConfig(row.item.status).color) + '">' + escapeHtml(userName(row.item.ownerId)) + ' · ' + icon(statusConfig(row.item.status).icon) + ' ' + escapeHtml(statusDisplayLabel(row.item)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button></div><div class="gantt-track"><div class="gantt-bar ' + barTone + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga calculada " + row.slack.toFixed(1) + "d")) + '"></div>' + (slackWidth > 0 ? '<div class="gantt-slack" style="left:' + slackLeft + '%;width:' + slackWidth + '%" title="Folga calculada: ' + row.slack.toFixed(1) + ' dias"></div>' : '') + '<span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + dependencies + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
   }).join("");
   return html + '</div></div>';
 }
@@ -564,7 +681,7 @@ function renderPrd4QuickCreate() {
 
 function renderGraph(items) {
   const legend = [{signal:"red",label:"Bloqueado / atraso"},{signal:"yellow",label:"Aguardando / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Planejado / cancelado"}];
-  return `${renderPrd4QuickCreate()}<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar">
+  return `<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar">
     <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map((entry) => option(entry.id,entry.label,ui.grouping === entry.id)).join("")}</select></label>
     <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
     <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
@@ -626,6 +743,7 @@ function openItem(id, keepTab = false) {
   ui.selectedItemId = id; ui.panel = "item"; if (!keepTab) ui.panelTab = "details";
   graphInstance?.select(id);
   document.querySelectorAll("[data-row]").forEach((row) => row.classList.toggle("selected", row.dataset.row === id));
+  document.querySelectorAll("[data-gantt-row]").forEach((row) => row.classList.toggle("selected", row.dataset.ganttRow === id));
   renderPanel();
 }
 
@@ -1143,6 +1261,12 @@ function bindWorkspace() {
     const button = event.target.closest("button,[data-action]");
     if (!button || button.closest("#panelRoot")) return;
     if(button.dataset.prd4Focus){openItem(button.dataset.prd4Focus);return;}
+    if (button.dataset.paneFocus) {
+      prd41FocusedPane = prd41FocusedPane === button.dataset.paneFocus ? "" : button.dataset.paneFocus;
+      prd41ApplyPaneLayout();
+      if (prd41FocusedPane === "graph") requestAnimationFrame(() => graphInstance?.fit());
+      return;
+    }
     if (button.dataset.deleteKind) { openDeletion(button.dataset.deleteKind,button.dataset.deleteId); return; }
     if (button.dataset.view) { ui.overviewMode = button.dataset.view; closePanel(); saveState(); render(); return; }
     if (button.dataset.select) {
@@ -1283,7 +1407,7 @@ function bindWorkspace() {
   });
   document.querySelector("#scopeSelect").addEventListener("change", (event) => { ui.scopeId = event.target.value; ui.graphTransform = null; render(); });
   document.querySelectorAll("[data-filter]").forEach((select) => select.addEventListener("change", (event) => { state.filters[event.target.dataset.filter] = event.target.value; saveState(); render(); }));
-  document.querySelector("#showSubitems")?.addEventListener("change", (event) => { ui.showSubitems = event.target.checked; ui.collapsed = new Set(); render(); });
+  document.querySelectorAll("#showSubitems, #showSubitemsGantt").forEach(toggle => toggle.addEventListener("change", (event) => { ui.showSubitems = event.target.checked; ui.collapsed = new Set(); render(); }));
   document.querySelector("#riskThresholdDays")?.addEventListener("change", (event) => {
     const value = Number(event.target.value);
     if (!Number.isInteger(value) || value < 1 || value > 60) { notify("Defina o limite de risco entre 1 e 60 dias.","error"); render(); return; }
