@@ -1828,7 +1828,6 @@ function bindWorkspace() {
     dragSourceId = "";
     app.querySelectorAll(".drag-source,.drop-target").forEach((entry) => entry.classList.remove("drag-source","drop-target"));
   };
-  document.querySelector('[name="quickSteps"]')?.addEventListener("input",(event) => renderQuickStepRows(event.target.value.split("\n")));
   const search = document.querySelector("#searchInput");
   search.addEventListener("input", () => {
     state.filters.query = search.value; saveState();
@@ -1983,7 +1982,7 @@ function bindPanel() {
     const index=Number(row?.dataset.lineIndex);
     const lines=prd5TextInput.value.split("\n");
     if(!Number.isInteger(index)||index<0||index>=lines.length)return;
-    lines[index]=((lines[index].match(/^[\\t ]*/)||[""])[0])+event.target.value;
+    lines[index]=((lines[index].match(/^[\t ]*/)||[""])[0])+event.target.value;
     prd5TextInput.value=lines.join("\n");
   });
   root.querySelector("#prd42ParentSelect")?.addEventListener("change",(event)=>{
@@ -2180,7 +2179,6 @@ function bindPanel() {
     reopenApproval(ui.selectedItemId,String(form.get("note") || ""),Number(form.get("progressPercent")));
     saveState(); notify("Aprovação reaberta em nova rodada."); renderPanel(false);
   });
-  root.querySelector('#createItemForm [name="quickSteps"]')?.addEventListener("input",event=>renderQuickStepRows(event.target.value.split("\n")));
   root.querySelector("#historyUserFilter")?.addEventListener("change",e=>{ui.historyUserId=e.target.value;renderPanel(false);});
   root.querySelector("#historyOrganizationFilter")?.addEventListener("change",e=>{ui.historyOrganizationId=e.target.value;renderPanel(false);});
   const parentSelect=root.querySelector('#createItemForm [name="parentId"]');
