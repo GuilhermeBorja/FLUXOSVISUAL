@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Build project
+        env:
+          GITHUB_SHA: ${{ steps.source.outputs.sha }}
+          GITHUB_REF_NAME: PRD4
         run: npm run build
       - name: Check project
         run: npm run check
