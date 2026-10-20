@@ -738,23 +738,23 @@ function renderGantt(items) {
   const rows=tableRows(items).map(({item,depth,children})=>{
     if(computed.has(item.id))return {...computed.get(item.id),depth,children};
     const offset=item.plannedStartAt?Math.max(0,(new Date(item.plannedStartAt+"T12:00:00")-new Date(analysis.startDate+"T12:00:00"))/86400000):0;
-    return {item,startOffset:offset,duration:itemDurationDays(item),slack:null,critical:false,structural:true,depth,children};
+    return {item,startOffset:offset,duration:hasPlannedDuration(item)||item.dueAt?itemDurationDays(item):0,slack:null,critical:false,structural:true,depth,children};
   });
-  const maxDay=Math.max(1,...rows.map(row=>row.startOffset+row.duration+(row.slack||0)));
+  const maxDay=Math.max(1,...rows.map(row=>row.startOffset+Number(row.duration||0)+(row.slack||0)));
   const visible=new Set(rows.map(row=>row.item.id));
   const ties=relationsFor(items).filter(rel=>rel.relationType==="TI"&&visible.has(rel.sourceId)&&visible.has(rel.targetId));
   let html=`<div class="gantt-card prd43-gantt">
     <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
   if(analysis.message)html+=`<div class="prd43-gantt-info" title="${escapeHtml(analysis.message)}">${escapeHtml(analysis.message)}</div>`;
   if(!rows.length)return html+emptyMarkup()+"</div>";
-  html+=`<div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
+  html+=`<div class="prd5-gantt-bulk-toolbar"><button class="button quiet" data-action="toggle-bulk" type="button">Editar selecionados (${ui.bulkSelected?.size||0})</button>${ui.bulkOpen&&ui.bulkSelected?.size?renderBulkEditor():""}</div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
     <div class="gantt-axis"><span>Atividade / responsável</span><span class="prd5-axis-status">Status</span><span class="prd5-axis-progress">Avanço</span><span class="prd5-axis-dates">Início / término</span><span class="prd5-axis-actions">Editar</span><div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
   const relationMap=new Map();
   for(const rel of ties){const incoming=relationMap.get(rel.targetId)||{before:[],after:[]};incoming.before.push(rel);relationMap.set(rel.targetId,incoming);
     const outgoing=relationMap.get(rel.sourceId)||{before:[],after:[]};outgoing.after.push(rel);relationMap.set(rel.sourceId,outgoing);}
   html+=rows.map(row=>{
-    const item=row.item, left=Math.max(0,Math.min(100,row.startOffset/maxDay*100)), width=Math.max(1,Math.min(100-left,Math.max(1,row.duration/maxDay*100)));
-    const start=shiftedDate(analysis.startDate,row.startOffset),end=inclusiveFinishDate(start,row.duration);
+    const item=row.item, left=Math.max(0,Math.min(100,row.startOffset/maxDay*100)), width=Math.max(1,Math.min(100-left,Math.max(1,Number(row.duration||0)/maxDay*100)));
+    const start=shiftedDate(analysis.startDate,row.startOffset),end=Number(row.duration||0)>0?inclusiveFinishDate(start,row.duration):"";
     const tone=signalOf(item), tiesFor=relationMap.get(item.id)||{before:[],after:[]};
     const predecessor=tiesFor.before.map(rel=>getItem(rel.sourceId)?.title).filter(Boolean);
     const successor=tiesFor.after.map(rel=>getItem(rel.targetId)?.title).filter(Boolean);
@@ -762,11 +762,16 @@ function renderGantt(items) {
     const canLink=isLeaf&&canEditItem(currentUser(),item)&&gpoDecision(currentUser(),"create_relation",item)===true;
     const critical=Boolean(row.critical&&analysis.valid);
     const toggle=row.children?.length?`<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${ui.showSubitems&&!ui.collapsed?.has(item.id)?"Recolher":"Expandir"} subitens">${icon(ui.showSubitems&&!ui.collapsed?.has(item.id)?"chevron-down":"chevron-right")}</button>`:'<span class="tree-spacer"></span>';
-    return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" style="--depth:${Math.min(row.depth||0,8)}">
+    const mayMove=canChangeHierarchy(currentUser(),item);
+    const siblingActions=mayMove?`<details class="prd5-gantt-more"><summary title="Organizar ou criar" aria-label="Ações de ${escapeHtml(item.title)}">${icon("ellipsis")}</summary><div class="prd5-gantt-menu">
+      <button data-create-child="${escapeHtml(item.id)}" type="button">Adicionar subitem</button>
+      <button data-order-up="${escapeHtml(item.id)}" type="button">Mover para cima</button><button data-order-down="${escapeHtml(item.id)}" type="button">Mover para baixo</button><button data-indent="${escapeHtml(item.id)}" type="button">Indentar</button>
+      ${item.parentId?`<button data-outdent="${escapeHtml(item.id)}" type="button">Recuar</button>`:""}</div></details>`:"";
+    return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)}">
       <div class="gantt-item-wrap">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.ownerId))}${critical?" · crítico":""}</small></button></div>
-      <span class="prd5-gantt-status">${statusBadge(item)}</span><span class="prd5-gantt-progress">${progressCell(item)}</span><span class="prd5-gantt-dates">${dateCell(item.plannedStartAt)}<span>→</span>${dateCell(item.dueAt)}</span><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}" title="Editar item">${icon("pencil")}</button>
+      <span class="prd5-gantt-status">${statusBadge(item)}</span><span class="prd5-gantt-progress">${progressCell(item)}</span><span class="prd5-gantt-dates">${dateCell(item.plannedStartAt)}<span>→</span>${dateCell(item.dueAt)}</span><div class="prd5-gantt-actions"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}" title="Editar item">${icon("pencil")}</button>${siblingActions}<label class="prd5-bulk-check" title="Selecionar para edição em lote"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label></div>
       <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(item.title+" · "+formatDate(start)+" a "+formatDate(end))}">
-        <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
+        <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""} ${item.dueAt?"":"prd5-unplanned"}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
           ${canLink?`<button type="button" class="prd43-gantt-handle" data-gantt-handle="${escapeHtml(item.id)}" title="Arraste para criar TI a partir de ${escapeHtml(item.title)}" aria-label="Criar TI a partir de ${escapeHtml(item.title)}"></button>`:""}
         </div>
       </div>
@@ -788,7 +793,7 @@ function prd43DrawGanttRelations(){
   svg.setAttribute("width",width);svg.setAttribute("height",height);svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
   let lines=`<defs><marker id="prd43-ti-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#286d73"/></marker></defs>`;
   const rows=[...content.querySelectorAll("[data-gantt-row]")],ids=new Set(rows.map(row=>row.dataset.ganttRow));
-  const offset=rect=>({x:rect.left-contentBox.left+content.scrollLeft,y:rect.top-contentBox.top+content.scrollTop});
+  const offset=rect=>({x:rect.left-contentBox.left,y:rect.top-contentBox.top});
   for(const rel of state.relations.filter(r=>r.relationType==="TI"&&ids.has(r.sourceId)&&ids.has(r.targetId))){
     const source=content.querySelector('[data-gantt-bar="'+CSS.escape(rel.sourceId)+'"]');
     const target=content.querySelector('[data-gantt-bar="'+CSS.escape(rel.targetId)+'"]');
@@ -1017,7 +1022,7 @@ function renderViewSettingsPanel() {
   const canConfigureStatuses = canManageGpo(currentUser());
   return `${panelHeader("Preferências locais","Configurações de visualização")}
     <div class="drawer-body">
-      <section class="panel-section">
+      <section class="panel-section" hidden>
         <h3>Tabela Sintética</h3>
         <p class="muted">As preferências são salvas neste navegador. O ajuste automático remove larguras manuais e permite que o conteúdo determine a largura das colunas.</p>
         <div class="column-settings" aria-label="Colunas visíveis">${tableColumnOptions.map(([key,label]) => `<label><input type="checkbox" data-setting-column="${key}" ${hidden.has(key) ? "" : "checked"} ${key === "name" ? "disabled" : ""}/> ${label}</label>`).join("")}</div>
@@ -1273,7 +1278,7 @@ function renderItemPanel(item) {
   html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + '</span>' + (prd43ProgressBasis(item)?'<small class="prd43-progress-basis">'+escapeHtml(prd43ProgressBasis(item))+' · '+Math.round(Number(item.progressPercent||0))+'% consolidado</small>':"") + '</div>';
   html += '<div class="panel-tabs" role="tablist" aria-label="Detalhes do item">' + tabs.map((tab) => '<button role="tab" aria-selected="' + (ui.panelTab === tab.id) + '" class="' + (ui.panelTab === tab.id ? "active" : "") + '" data-panel-tab="' + tab.id + '">' + tab.label + '</button>').join("") + '</div><div class="drawer-body">';
   if (ui.panelTab === "details") html += editable
-    ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualização · data e comentário</summary><div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Comentário da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button></div></form>' + renderAttachments(item,true) + renderChildren(item)
+    ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualização · data e comentário</summary><div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Comentário da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button></div></form>' + '<details class="form-details prd5-panel-extras"><summary>Anexos e subitens</summary>' + renderAttachments(item,true) + renderChildren(item) + '</details>'
     : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item);
   if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
 
