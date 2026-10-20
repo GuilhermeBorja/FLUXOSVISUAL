@@ -62,8 +62,16 @@ try{
 
   // Gantt displays TI lines and supports direct edit.
   await page.locator('[data-pane-focus="gantt"]').click();
-  await page.locator("#prd43GanttOverlay [data-gantt-ti]").first().waitFor();
-  assert.ok(await page.locator("#prd43GanttOverlay [data-gantt-ti]").count()>=3);
+  await page.waitForTimeout(180);
+  const ganttState=await page.evaluate(()=>({
+    rows:document.querySelectorAll('[data-gantt-row]').length,
+    bars:document.querySelectorAll('[data-gantt-bar]').length,
+    links:document.querySelectorAll('#prd43GanttOverlay [data-gantt-ti]').length,
+    showSubitems:ui.showSubitems,
+    edges:state.relations.filter(r=>r.relationType==="TI").length,
+    errors:document.querySelector('#noticeRoot')?.innerText||""
+  }));
+  assert.ok(ganttState.links>=3,"Visible Gantt TI lines: "+JSON.stringify(ganttState)+" runtime "+errors.join("; "));
   const [a,b,c,d]=created.children.map(item=>item.id);
   const origin=page.locator('[data-gantt-handle="'+a+'"]');
   await origin.scrollIntoViewIfNeeded();
