@@ -1869,6 +1869,12 @@ function itemInput(form) {
   const progress = form.get("progressPercent");
   if (progress !== null && String(progress).trim() !== "") result.progressPercent = Number(progress);
   else if (!existing) result.progressPercent = 0;
+  // Pais têm progresso, status e cronograma derivados dos descendentes.
+  // O formulário de metas e responsável não pode reenviar cópias defasadas
+  // desses valores e ser confundido com uma tentativa de alteração manual.
+  if (existing && state.items.some(child=>child.parentId===existing.id && !child.archivedAt)) {
+    for (const field of ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays"]) delete result[field];
+  }
   return result;
 }
 
