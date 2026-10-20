@@ -1391,7 +1391,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   // this pass, a denied date/weight change could leave earlier fields updated.
   for (const field of Object.keys(fields)) {
     const rawNext = input[field] ?? item[field];
-    const next = ["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
+    const next = field==="plannedDurationDays" && (rawNext===null||rawNext==="") ? null : (["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext);
     if (next === item[field]) continue;
     const operation = field === "ownerId" ? "change_owner" : ["dueAt","plannedStartAt","plannedDurationDays","replannedDueAt","targetStartAt","targetDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
     if (operation && gpoDecision(user,operation,item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
@@ -1399,7 +1399,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   let changed = false;
   for (const [field,eventType] of Object.entries(fields)) {
     const rawNext = input[field] ?? item[field];
-    const next = ["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
+    const next = field==="plannedDurationDays" && (rawNext===null||rawNext==="") ? null : (["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext);
     if (next === item[field]) continue;
     const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt","plannedDurationDays","replannedDueAt","targetStartAt","targetDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
     if (operation && gpoDecision(user, operation, item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
