@@ -1031,11 +1031,15 @@ function renderItemPanel(item) {
   const tabs = [{id:"details",label:editable ? "Atualizar" : "Detalhes"},{id:"history",label:"Histórico (" + events.length + ")"}];
   if(ui.panelTab==="relations")ui.panelTab="details";
   if (item.type === "approval") tabs.push({id:"approval",label:"Aprovação"});
-  let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title, (canEditItem(currentUser(),item) ? '<button class="button quiet" data-action="archive-item">' + icon("archive") + 'Arquivar</button>' : '') + (canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""));
+  const canAddChild = editable && canCreateItem(currentUser(),{...item,createdBy:currentUser().id}) && gpoDecision(currentUser(),"create_relation",item)===true;
+  let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title,
+    (canAddChild ? '<button class="button quiet" data-action="new-subitem">' + icon("plus") + 'Criar subitem</button>' : "")
+    + (editable ? '<button class="button quiet" data-action="archive-item">' + icon("archive") + 'Arquivar</button>' : "")
+    + (canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""));
   html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + ' · ' + elapsedLabel(item) + ' total</span></div>';
   html += '<div class="panel-tabs" role="tablist" aria-label="Detalhes do item">' + tabs.map((tab) => '<button role="tab" aria-selected="' + (ui.panelTab === tab.id) + '" class="' + (ui.panelTab === tab.id ? "active" : "") + '" data-panel-tab="' + tab.id + '">' + tab.label + '</button>').join("") + '</div><div class="drawer-body">';
   if (ui.panelTab === "details") html += editable
-    ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Registro da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button><button class="button quiet" type="button" data-action="new-subitem">' + icon("plus") + 'Subitem</button></div></form>' + renderAttachments(item,true) + renderChildren(item)
+    ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualização · data e comentário</summary><div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Comentário da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button></div></form>' + renderAttachments(item,true) + renderChildren(item)
     : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item);
   if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
 
@@ -1584,7 +1588,11 @@ function bindPanel() {
     if (button.dataset.editRelation) { ui.relationEditId = button.dataset.editRelation; renderPanel(false); return; }
     if (action === "cancel-relation-edit") { ui.relationEditId = ""; renderPanel(false); return; }
     if (button.dataset.select) { openItem(button.dataset.select); return; }
-    if (action === "new-subitem") { ui.createParentId = ui.selectedItemId; ui.panel = "create"; renderPanel(); }
+    if (action === "new-subitem") {
+      const parent=getItem(ui.selectedItemId);
+      if(!parent || !canEditItem(currentUser(),parent) || gpoDecision(currentUser(),"create_relation",parent)!==true) { panelFailure(new Error("Sem permissão para criar subitens neste item.")); return; }
+      ui.createParentId=parent.id;ui.panel="create";renderPanel();
+    }
     if (button.dataset.removeRelation) {
       openDeletion("relation",button.dataset.removeRelation);
     }
