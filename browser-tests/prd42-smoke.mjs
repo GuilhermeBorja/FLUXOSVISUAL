@@ -79,7 +79,9 @@ try{
   await parentForm.locator('[name="ownerId"]').selectOption("u_enrique");
   await parentForm.locator('[type="submit"]').click();
   const after=await page.evaluate(id=>{const item=getItem(id);return {start:item.plannedStartAt,due:item.dueAt,duration:item.plannedDurationDays,baseline:item.baselineDueAt,owner:item.ownerId,targetStart:item.targetStartAt,targetDue:item.targetDueAt};},root.id);
-  assert.equal(after.owner,"u_enrique");
+  const formError=await page.locator("#panelError").count()?await page.locator("#panelError").innerText():"";
+  const notification=await page.locator("#noticeRoot").innerText();
+  assert.equal(after.owner,"u_enrique","parent save did not persist. error="+formError+" notice="+notification);
   assert.equal(after.targetStart,"2026-10-20");
   assert.equal(after.targetDue,"2026-10-31");
   assert.equal(after.baseline,before.baseline);
