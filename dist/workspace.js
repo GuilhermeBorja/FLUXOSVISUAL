@@ -23,6 +23,40 @@ function relationsFor(items) {
   const ids = new Set(items.map((item) => item.id));
   return state.relations.filter((rel) => ids.has(rel.sourceId) && ids.has(rel.targetId));
 }
+function prd44GraphProjection(items){
+  // A mesma arvore visivel da Sintetica e do Gantt determina os nos do grafo.
+  const shown=tableRows(items).map(row=>row.item);
+  const visible=new Set(shown.map(item=>item.id));
+  const byId=new Map(items.map(item=>[item.id,item]));
+  function representative(id){
+    let cursor=byId.get(id),seen=new Set();
+    while(cursor && !visible.has(cursor.id) && !seen.has(cursor.id)){
+      seen.add(cursor.id);cursor=byId.get(cursor.parentId);
+    }
+    return cursor && visible.has(cursor.id)?cursor.id:"";
+  }
+  const relations=[];
+  for(const rel of relationsFor(items)){
+    const src=representative(rel.sourceId),dst=representative(rel.targetId);
+    if(!src||!dst||src===dst)continue;
+    if(rel.relationType==="contains" && (src!==rel.sourceId || dst!==rel.targetId))continue;
+    relations.push(src===rel.sourceId&&dst===rel.targetId?rel:{...rel,sourceId:src,targetId:dst,prd44Projected:true});
+  }
+  return {nodes:shown,relations};
+}
+function prd44ToggleHierarchy(id){
+  const parent=getItem(id);
+  if(!parent || !state.items.some(child=>child.parentId===id&&!child.archivedAt))return;
+  ui.collapsed ||= new Set();
+  if(!ui.showSubitems){
+    ui.showSubitems=true;
+    // Globalmente recolhido: expandir somente o ramo escolhido.
+    ui.collapsed=new Set(scopedItems().filter(item=>state.items.some(child=>child.parentId===item.id&&!child.archivedAt)).map(item=>item.id));
+    ui.collapsed.delete(id);
+  }else if(ui.collapsed.has(id))ui.collapsed.delete(id);
+  else ui.collapsed.add(id);
+  render();
+}
 
 function childrenOf(id) {
   return accessibleItems().filter((item) => item.parentId === id);
@@ -868,16 +902,19 @@ function renderGraph(items) {
 function layoutKey() { return `${currentUser().id}:${ui.grouping}`; }
 
 function mountGraph(items) {
-  const graphKey = `${layoutKey()}:${items.map((item) => item.id).join("|")}`;
+  const projection=prd44GraphProjection(items);
+  const graphKey = `${layoutKey()}:${projection.nodes.map((item) => item.id).join("|")}`;
   const schedule = scheduleAnalysis(items);
   const forecasts = new Map(schedule.rows.map((row) => [row.item.id,inclusiveFinishDate(shiftedDate(schedule.startDate,row.startOffset),row.duration)]));
   graphInstance = FluxosGraph.mount(document.querySelector("#graphCanvas"), {
-    items, relations: relationsFor(items), grouping: ui.grouping,
+    items:projection.nodes, relations:projection.relations, grouping: ui.grouping,
     savedPositions: ui.positions[layoutKey()] || {}, selectedId: ui.selectedItemId,
     initialTransform: ui.graphKey === graphKey ? ui.graphTransform : null,
     escape: escapeHtml,
     labels: {
       owner: userName, organization: orgName, relation: (id) => labelOf(relationTypes, id),
+      hasChildren: item=>state.items.some(child=>child.parentId===item.id&&!child.archivedAt),
+      isCollapsed: item=>!ui.showSubitems||ui.collapsed?.has(item.id),
       type: (item) => itemTypeConfig(item.type,item.organizationId).label, typeColor: (item) => itemTypeConfig(item.type,item.organizationId).color, status: (item) => signalLabel(item),
       signal: signalOf, statusColor: (item) => prd43Colors[signalOf(item)], duration: elapsedLabel, ownerTimer: ownerElapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
       progress: (item) => Math.round(Number(item.progressPercent || 0)),
@@ -892,6 +929,7 @@ function mountGraph(items) {
       dependencies: (item) => state.relations.filter((relation) => relation.targetId === item.id && relation.relationType === "TI").map((relation) => getItem(relation.sourceId)?.title).filter(Boolean).join(", ") || "Nenhuma",
     },
     onSelect: (id) => openItem(id),
+    onToggleCollapse: (id)=>prd44ToggleHierarchy(id),
     onRelation: (relation) => { ui.selectedRelationId=relation.id; notify("Relação selecionada. Pressione Delete para excluir."); },
     onCreateRelation: (sourceId,targetId)=>{
       try { const relation=createRelation(sourceId,targetId,"TI"); saveState();ui.prd43Undo={type:"create-ti",relationId:relation.id};notify("Precedência TI criada.");render(); }
@@ -1604,12 +1642,7 @@ function bindWorkspace() {
       render(); return;
     }
     if (button.dataset.highlightOwner !== undefined) { ui.graphOwnerHighlight = button.dataset.highlightOwner || ""; render(); return; }
-    if (button.dataset.expand) {
-      const id = button.dataset.expand; ui.collapsed ||= new Set();
-      if (!ui.showSubitems) { ui.showSubitems = true; ui.collapsed.delete(id); }
-      else if (ui.collapsed.has(id)) ui.collapsed.delete(id); else ui.collapsed.add(id);
-      render(); return;
-    }
+    if (button.dataset.expand) {prd44ToggleHierarchy(button.dataset.expand);return;}
     const orderId = button.dataset.orderUp || button.dataset.orderDown;
     if (orderId) {
       try {
