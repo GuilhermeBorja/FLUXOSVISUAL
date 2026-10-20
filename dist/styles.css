@@ -1529,3 +1529,83 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
   #panelRoot #createItemForm>.prd42-create-actions{grid-row:8}
   #panelRoot #createItemForm>.prd42-create-extras>summary{padding:2px!important}
 }
+
+/* PRD5 - dois painéis, alinhamento consistente e formulário focado em hierarquia */
+.prd5-two-pane{display:grid!important;grid-template-columns:minmax(0,calc(var(--prd5-gantt-width,62%) - 5px)) 10px minmax(0,1fr)!important;min-width:990px;height:calc(100dvh - 177px)}
+.prd5-two-pane>.prd41-pane--gantt{grid-column:1;min-width:0}
+.prd5-two-pane>.prd41-pane--graph{grid-column:3;min-width:0}
+.prd5-two-pane>.prd41-splitter{grid-column:2}
+.prd5-two-pane.is-focused{grid-template-columns:minmax(0,1fr)!important;min-width:0}
+.prd5-two-pane.is-focused>.prd41-pane.is-focus-target{grid-column:1}
+.prd5-two-pane .prd43-gantt,.prd5-two-pane .gantt-scroll{width:100%;max-width:100%;overflow-x:auto!important}
+.prd5-two-pane .prd43-gantt-content{width:max(100%,1100px)!important;min-width:1100px!important;max-width:none!important}
+.prd5-two-pane .prd43-gantt .gantt-axis,.prd5-two-pane .prd43-gantt .gantt-row{display:grid!important;grid-template-columns:minmax(190px,1.4fr) minmax(100px,.85fr) 75px 115px 31px minmax(250px,2.3fr)!important;gap:6px;align-items:center;width:100%!important;min-width:1100px!important;box-sizing:border-box}
+.prd5-two-pane .prd43-gantt .gantt-axis{min-height:37px!important;height:37px!important}
+.prd5-two-pane .prd43-gantt .gantt-row{min-height:46px!important}
+.prd5-two-pane .prd43-gantt-row .gantt-item-wrap{min-width:0;display:flex}
+.prd5-two-pane .prd43-gantt-row .gantt-item-wrap>.tree-toggle{margin-left:calc(var(--depth,0)*12px)}
+.prd5-two-pane .prd43-gantt-row .gantt-item strong{font-size:11px!important;overflow-wrap:normal;word-break:normal}
+.prd5-gantt-status{min-width:0;overflow:hidden;white-space:nowrap}
+.prd5-gantt-status .status-badge{max-width:100%;font-size:9px!important;padding:4px!important}
+.prd5-gantt-status .prd43-status-alert{display:none}
+.prd5-gantt-progress{min-width:0}
+.prd5-gantt-progress .progress-track{min-width:18px}
+.prd5-gantt-dates{display:flex;gap:4px;align-items:center;justify-content:center;font-size:9px;white-space:nowrap}
+.prd5-gantt-dates>span{color:var(--muted)}
+.prd5-gantt-edit{border:1px solid var(--line);border-radius:5px;background:white;width:26px;height:26px;display:grid;place-items:center;cursor:pointer}
+.prd5-gantt-edit .lucide{width:13px;height:13px}
+.prd5-axis-status,.prd5-axis-progress,.prd5-axis-dates,.prd5-axis-actions{font-size:10px;color:var(--muted);text-align:center}
+.prd5-two-pane .gantt-axis-track{overflow:visible}
+.prd5-two-pane .prd43-gantt-links-svg{pointer-events:none}
+.prd5-create-form{grid-template-columns:1fr!important;grid-template-rows:auto auto minmax(0,1fr) auto auto!important;gap:7px!important}
+#panelRoot #createItemForm.prd5-create-form>.prd42-create-context{grid-column:1;grid-row:1;grid-template-columns:auto minmax(220px,1fr);padding:2px 7px!important}
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-top{grid-column:1;grid-row:2;display:grid;grid-template-columns:minmax(190px,2fr) minmax(100px,.75fr) minmax(155px,1.3fr) minmax(130px,.9fr);gap:8px;min-width:0;align-items:end}
+.prd5-create-top label{font-size:11px;min-width:0}
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-activities{grid-column:1;grid-row:3;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:8px!important;min-height:0}
+.prd5-create-activities .prd43-activities-head{grid-column:1/-1;grid-row:1}
+#panelRoot #createItemForm .prd5-source-label{grid-column:1!important;grid-row:2;min-height:0;display:flex;flex-direction:column;font-size:11px}
+#panelRoot #createItemForm .prd5-source-label #prd43PasteActivities{height:100%;flex:1 1 auto;min-height:150px!important;font-family:ui-monospace,Consolas,monospace;font-size:13px!important;white-space:pre;tab-size:4;line-height:1.6}
+.prd5-source-label small{color:var(--muted);font-size:10px;line-height:1.3}
+#panelRoot #createItemForm .prd5-result-area{grid-column:2;grid-row:2/4;display:flex;flex-direction:column;min-height:0;min-width:0;gap:5px}
+.prd5-result-title{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:650}
+.prd5-result-title small{font-weight:400;color:var(--muted)}
+#panelRoot #createItemForm .prd5-result-area .prd43-steps-table{min-height:0;max-height:none!important;height:100%;overflow:auto!important}
+#panelRoot #createItemForm .prd5-step-row{display:grid;grid-template-columns:26px minmax(90px,1.8fr) minmax(74px,.8fr) minmax(93px,1.1fr);gap:4px;align-items:center;padding:4px 5px;border:1px solid var(--line)}
+#panelRoot #createItemForm .prd5-step-row.has-children{background:#eaf5f3}
+#panelRoot #createItemForm .prd5-step-row .prd5-step-name{padding-left:calc(var(--step-depth)*9px)}
+#panelRoot #createItemForm .prd5-step-row label{margin:0!important;min-width:0}
+#panelRoot #createItemForm .prd5-sequence-toggle,#panelRoot #createItemForm .prd43-sequence-toggle{grid-column:1;grid-row:3;align-self:end;font-size:11px}
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-details{grid-column:1;grid-row:4;min-width:0}
+#panelRoot #createItemForm.prd5-create-form>.prd42-create-actions{grid-column:1;grid-row:5}
+.prd5-indent-error{padding:10px;color:#a11a28;background:#fff1f1;border:1px solid #e5a9b0;border-radius:5px;font-size:12px}
+.drawer:has(#updateItemForm){display:flex;flex-direction:column;overflow:hidden!important;max-height:100dvh}
+.drawer:has(#updateItemForm)>.drawer-body{display:flex;flex:1;min-height:0;overflow-y:auto;flex-direction:column;padding:8px 14px 0!important}
+.drawer:has(#updateItemForm) .drawer-header{padding:10px 15px!important;flex:none}
+.drawer:has(#updateItemForm) .item-summary{padding:5px 15px!important;gap:6px}
+.drawer:has(#updateItemForm) .panel-tabs{padding:0 15px!important}
+.drawer:has(#updateItemForm) .panel-tabs button{padding:7px 3px}
+#updateItemForm{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 11px;padding-bottom:65px}
+#updateItemForm>label:first-child{grid-column:1/-1}
+#updateItemForm>.prd42-projection-summary{grid-column:1/-1}
+#updateItemForm>.form-details{grid-column:1/-1}
+#updateItemForm>.drawer-actions{grid-column:1/-1;position:sticky;bottom:0;z-index:20;background:#fff;border-top:1px solid var(--line);padding:8px 0;margin-bottom:-65px}
+#updateItemForm label{gap:4px;font-size:11px}
+#updateItemForm :is(input,select){min-height:33px}
+.prd5-history-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:6px 0 13px}
+.prd5-history-filters label{font-size:11px;min-width:0}
+@media(max-width:760px){
+.prd5-two-pane{display:flex!important;flex-direction:column!important;min-width:0!important;height:auto!important}
+.prd5-two-pane>.prd41-pane{width:100%;height:clamp(340px,60dvh,620px)}
+.prd5-two-pane>.prd41-splitter{display:none!important}
+#panelRoot #createItemForm.prd5-create-form{grid-template-rows:auto auto minmax(0,1fr) auto auto!important}
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-top{grid-template-columns:repeat(2,minmax(0,1fr));grid-row:2}
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-activities{grid-row:3;grid-template-columns:1fr;grid-template-rows:auto minmax(95px,1fr) minmax(90px,1fr) auto;overflow:hidden}
+#panelRoot #createItemForm .prd5-source-label{grid-column:1!important;grid-row:2}
+#panelRoot #createItemForm .prd5-source-label #prd43PasteActivities{min-height:85px!important}
+#panelRoot #createItemForm .prd5-result-area{grid-column:1;grid-row:3}
+#panelRoot #createItemForm .prd43-sequence-toggle{grid-column:1;grid-row:4}
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-details{grid-row:4;display:block}
+#panelRoot #createItemForm.prd5-create-form>.prd42-create-actions{grid-row:5}
+#updateItemForm{grid-template-columns:1fr}
+.prd5-history-filters{grid-template-columns:1fr}
+}
