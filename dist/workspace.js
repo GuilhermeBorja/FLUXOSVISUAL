@@ -1571,6 +1571,24 @@ function bindPanel() {
     }
   };
   root.querySelector('[name="quickSteps"]')?.addEventListener("input",(event)=>{ renderQuickStepRows(event.target.value.split("\n")); updateSchedulePreview(); });
+  root.querySelector("#prd42ParentSelect")?.addEventListener("change",(event)=>{
+    const parent = getItem(event.target.value);
+    const hint = root.querySelector("#prd42ParentHelp");
+    if(hint)hint.textContent=parent?"Subitem de: "+parent.title:"Item independente (nível principal)";
+  });
+  const metaForm=root.querySelector("#updateItemForm");
+  metaForm?.querySelectorAll('[name="targetStartAt"],[name="targetDurationDays"],[name="targetDueAt"]').forEach(element=>element.addEventListener("change",(event)=>{
+    const startInput=metaForm.querySelector('[name="targetStartAt"]');
+    const daysInput=metaForm.querySelector('[name="targetDurationDays"]');
+    const dueInput=metaForm.querySelector('[name="targetDueAt"]');
+    if(!startInput?.value||!daysInput||!dueInput)return;
+    if(event.target===dueInput){
+      if(dueInput.value>=startInput.value)daysInput.value=String(inclusiveDurationDays(startInput.value,dueInput.value));
+    }else{
+      const days=Number(daysInput.value);
+      if(Number.isInteger(days)&&days>=1)dueInput.value=inclusiveFinishDate(startInput.value,days);
+    }
+  }));
   document.querySelector("#editUserOrganization")?.addEventListener("change",(event)=>{ const sector=document.querySelector("#editUserSector"); if(!sector)return; sector.innerHTML=state.sectors.filter((entry)=>entry.organizationId===event.target.value).map((entry)=>option(entry.id,entry.name)).join(""); });
   root.querySelectorAll('#createItemForm [name="plannedStartAt"],#createItemForm [name="plannedDurationDays"],#createItemForm [name="sequence"]').forEach((input)=>input.addEventListener("input",updateSchedulePreview));
   root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) updateSchedulePreview(); });
@@ -1597,8 +1615,10 @@ function bindPanel() {
   });
   submitHandler("createItemForm", async (form) => {
     const input = itemInput(form);
-    const quickSteps = String(form.get("quickSteps") || "").split("\n").map((value) => value.trim()).filter(Boolean);
-    if (quickSteps.length > 100) throw new Error("Adicione até 100 etapas por cadastro.");
+    const quickSteps = String(form.get("quickSteps") || "").split("\n").map(value=>value.trim()).filter(Boolean);
+    const additionalTitles = String(form.get("additionalTitles")||"").split("\n").map(value=>value.trim()).filter(Boolean);
+    if (quickSteps.length && additionalTitles.length) throw new Error("Escolha adicionar itens no mesmo nível OU criar etapas dentro do novo item.");
+    if (quickSteps.length > 100 || additionalTitles.length > 99) throw new Error("Limite de 100 itens por cadastro.");
     const snapshot = JSON.stringify(state);
     let item;
     try {
@@ -1613,6 +1633,7 @@ function bindPanel() {
         if (previous) createRelation(previous.id,child.id,String(form.get(`stepRelation_${index}`) || "TI")); previous = child;
       });
       if (quickSteps.length) { syncParentSummary(item.id); item.baselineStartAt=item.plannedStartAt;item.baselineDueAt=item.dueAt; }
+      for (const title of additionalTitles) createItem({...input,title,status:"backlog",progressPercent:0});
       await addAttachments(item.id,form.getAll("attachments"));
     } catch (error) {
       const restored = JSON.parse(snapshot);
@@ -1620,7 +1641,9 @@ function bindPanel() {
       Object.assign(state,restored);
       throw error;
     }
-    ui.selectedItemId = item.id; ui.panel = "item"; ui.panelTab = "details"; saveState(); notify("Item criado."); render();
+    ui.selectedItemId = item.id; ui.panel = "item"; ui.panelTab = "details"; saveState();
+    notify((additionalTitles.length + quickSteps.length + 1) + " item(ns) criado(s)" + (input.parentId ? " no item pai selecionado." : " no nível principal."));
+    render();
   });
   submitHandler("updateItemForm", async (form) => {
     const effective = new Date(form.get("effectiveAt"));
@@ -1783,9 +1806,18 @@ function itemInput(form) {
   const existing = form.id === "updateItemForm" ? getItem(ui.selectedItemId) : null;
   const ownerValue = form.has("ownerId") ? String(form.get("ownerId") || "") : String(existing?.ownerId || "");
   const owner = state.users.find((entry) => entry.id === ownerValue);
-  const parent = getItem(String(form.get("parentId") || ui.createParentId || existing?.parentId || ""));
-  const result = {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:ownerValue,plannedStartAt:String(form.get("plannedStartAt") ?? existing?.plannedStartAt ?? (parent?.baselineStartAt || parent?.plannedStartAt || "")),dueAt:String(form.get("dueAt") ?? existing?.dueAt ?? ""),plannedDurationDays:Number(form.get("plannedDurationDays") ?? existing?.plannedDurationDays ?? 0),replannedDueAt:String(form.get("replannedDueAt") ?? existing?.replannedDueAt ?? ""),weight:Number(form.get("weight") ?? existing?.weight ?? 1),description:String(form.get("description") || existing?.description || ""),organizationId:owner?.organizationId || parent?.organizationId || existing?.organizationId || currentUser().organizationId,sectorId:owner?.sectorId || parent?.sectorId || existing?.sectorId || currentUser().sectorId,state:owner?.state || parent?.state || existing?.state || currentUser().state,parentId:String(form.get("parentId") || existing?.parentId || "")};
-  if (form.id === "updateItemForm") { result.blockedReason = String(form.get("blockedReason") || "").trim(); }
+  const parentId = form.has("parentId") ? String(form.get("parentId")||"") : String(existing?.parentId||ui.createParentId||"");
+  const parent = getItem(parentId);
+  const result = {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:ownerValue,plannedStartAt:String(form.get("plannedStartAt") ?? existing?.plannedStartAt ?? (parent?.baselineStartAt || parent?.plannedStartAt || "")),dueAt:String(form.get("dueAt") ?? existing?.dueAt ?? ""),plannedDurationDays:Number(form.get("plannedDurationDays") ?? existing?.plannedDurationDays ?? 0),replannedDueAt:String(form.get("replannedDueAt") ?? existing?.replannedDueAt ?? ""),weight:Number(form.get("weight") ?? existing?.weight ?? 1),description:String(form.get("description") || existing?.description || ""),organizationId:owner?.organizationId || parent?.organizationId || existing?.organizationId || currentUser().organizationId,sectorId:owner?.sectorId || parent?.sectorId || existing?.sectorId || currentUser().sectorId,state:owner?.state || parent?.state || existing?.state || currentUser().state,parentId};
+  if (form.id === "updateItemForm") {
+    if (form.has("blockedReason")) result.blockedReason = String(form.get("blockedReason") || "").trim();
+    for (const [key,baselineField] of [["targetStartAt","baselineStartAt"],["targetDueAt","baselineDueAt"]]) {
+      if (!form.has(key)) continue;
+      const desired = String(form.get(key)||"");
+      const prior = String(existing?.[key] || existing?.[baselineField] || (key==="targetStartAt" ? existing?.plannedStartAt : existing?.dueAt) || "");
+      if (desired !== prior) result[key] = desired;
+    }
+  }
   const progress = form.get("progressPercent");
   if (progress !== null && String(progress).trim() !== "") result.progressPercent = Number(progress);
   else if (!existing) result.progressPercent = 0;
