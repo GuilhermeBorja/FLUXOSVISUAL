@@ -39,7 +39,7 @@ test("PRD4.2: meta invalida e rejeitada",()=>{
 test("PRD4.2: status e duracao derivados dos filhos continuam protegidos",()=>{
   const run=runtime();
   run('p=createItem({...'+base+',type:"process"});a=createItem({...'+base+',parentId:p.id});');
-  assert.throws(()=>run('updateItem(p.id,{...p,plannedDurationDays:p.plannedDurationDays+1})'),/herdad/i);
+  assert.throws(()=>run('updateItem(p.id,{...p,plannedDurationDays:p.plannedDurationDays+1})'),/calculad|herdad/i);
   assert.equal(run('p.plannedDurationDays'),2);
 });
 test("PRD4.2: mudanca autorizada de responsavel do pai nao troca os filhos",()=>{
