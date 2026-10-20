@@ -904,7 +904,11 @@ function signalOf(item) {
   if(!item)return "gray";
   const alerts=prd43DescendantAlerts(item);
   if(isBlocked(item)||alerts.blocked)return "red";
-  if(isOverdue(item)||isAtRisk(item)||alerts.late||alerts.risk||alerts.approvals
+  // Prazo proximo nao altera a cor-base de "Lista de pendencias".
+  // O risco continua acessivel nos detalhes e na contagem, sem amarelar todo o grafo.
+  const activeRisk=item.status!=="backlog" && isAtRisk(item);
+  const descendantsRisk=item.status!=="backlog" && Boolean(alerts.risk);
+  if(isOverdue(item)||activeRisk||alerts.late||descendantsRisk||alerts.approvals
       ||["waiting","under_review","correction"].includes(item.status))return "yellow";
   if(completeStatus(item.status))return "green";
   if(item.status==="in_progress"||item.status==="ready")return "blue";
