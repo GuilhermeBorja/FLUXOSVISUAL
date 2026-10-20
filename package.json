@@ -1,7 +1,7 @@
 {
   "name": "fluxos-visual",
   "private": true,
-  "version": "0.5.0-prd4",
+  "version": "0.5.2-prd4.2",
   "type": "module",
   "scripts": {
     "build": "node scripts/build-vendor.mjs && node scripts/build-version.mjs",
