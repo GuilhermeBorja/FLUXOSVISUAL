@@ -8,7 +8,7 @@ try{
  await page.evaluate(()=>{const seed=seedState();seed.setupComplete=true;seed.currentUserId="u_luis";localStorage.setItem("fluxosVisualState.prd4",JSON.stringify(seed));});
  await page.reload({waitUntil:"networkidle"});
  assert.equal(await page.locator(".prd5-two-pane .prd41-pane").count(),2);
- await page.locator('[data-action="create"]').click();
+ await page.locator('.workspace-heading-actions button[data-action="create"]').click();
  const form=page.locator("#createItemForm");
  assert.equal(await form.locator('[name="title"],[name="parentId"]').count(),0,"sem pai separado");
  await form.locator("#prd43PasteActivities").fill("PRD5 Alfa\nPRD5 Beta\n\tPRD5 Gama\n\t\tPRD5 Delta\nPRD5 Epsilon");
