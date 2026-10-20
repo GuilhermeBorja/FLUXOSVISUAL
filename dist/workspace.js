@@ -1699,7 +1699,7 @@ function bindPanel() {
     const snapshot = JSON.stringify(state);
     let changed;
     try {
-      changed = updateItem(ui.selectedItemId,itemInput(form),effective.toISOString(),String(form.get("comment") || ""));
+      changed = updateItem(ui.selectedItemId,itemInput(form,ui.selectedItemId),effective.toISOString(),String(form.get("comment") || ""));
       await addAttachments(ui.selectedItemId,form.getAll("attachments"),effective.toISOString());
     } catch (error) {
       const restored = JSON.parse(snapshot);
@@ -1850,14 +1850,16 @@ function bindOrganizationSelect(orgId,sectorId) {
   });
 }
 
-function itemInput(form) {
-  const existing = form.id === "updateItemForm" ? getItem(ui.selectedItemId) : null;
+function itemInput(form, existingId = "") {
+  // O parametro e FormData, nao o elemento HTML. FormData nao possui .id.
+  // Receber a identidade explicitamente evita tratar uma edicao como criacao.
+  const existing = existingId ? getItem(existingId) : null;
   const ownerValue = form.has("ownerId") ? String(form.get("ownerId") || "") : String(existing?.ownerId || "");
   const owner = state.users.find((entry) => entry.id === ownerValue);
   const parentId = form.has("parentId") ? String(form.get("parentId")||"") : String(existing?.parentId||ui.createParentId||"");
   const parent = getItem(parentId);
   const result = {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:ownerValue,plannedStartAt:String(form.get("plannedStartAt") ?? existing?.plannedStartAt ?? (parent?.baselineStartAt || parent?.plannedStartAt || "")),dueAt:String(form.get("dueAt") ?? existing?.dueAt ?? ""),plannedDurationDays:Number(form.get("plannedDurationDays") ?? existing?.plannedDurationDays ?? 0),replannedDueAt:String(form.get("replannedDueAt") ?? existing?.replannedDueAt ?? ""),weight:Number(form.get("weight") ?? existing?.weight ?? 1),description:String(form.get("description") || existing?.description || ""),organizationId:owner?.organizationId || parent?.organizationId || existing?.organizationId || currentUser().organizationId,sectorId:owner?.sectorId || parent?.sectorId || existing?.sectorId || currentUser().sectorId,state:owner?.state || parent?.state || existing?.state || currentUser().state,parentId};
-  if (form.id === "updateItemForm") {
+  if (existing) {
     if (form.has("blockedReason")) result.blockedReason = String(form.get("blockedReason") || "").trim();
     for (const [key,baselineField] of [["targetStartAt","baselineStartAt"],["targetDueAt","baselineDueAt"]]) {
       if (!form.has(key)) continue;
