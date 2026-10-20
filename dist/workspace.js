@@ -337,6 +337,7 @@ function render() {
   bindWorkspace();
   renderPanel(false);
   if (items.length) mountGraph(items);
+  prd43BindGantt();
   prd41BindSplitters();
   prd41ApplyPaneLayout();
   mountIcons();
@@ -614,35 +615,140 @@ function scheduleAnalysis(items) {
   return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectDuration),rows,message:reliable ? "" : "Cronograma incompleto: informe a data inicial idealizada e uma duração explícita (ou início e término válidos) para cada atividade; nenhuma duração é presumida."};
 }
 
+let prd43SelectedTiId="";
+let prd43GanttObserver=null;
 function renderGantt(items) {
-  const analysis = scheduleAnalysis(items);
-  const computed = new Map(analysis.rows.map((row) => [row.item.id,row]));
-  const rows = tableRows(items).map(({item,depth,children}) => {
-    if (computed.has(item.id)) return {...computed.get(item.id),depth,children};
-    const startOffset = item.plannedStartAt ? Math.max(0,(new Date(item.plannedStartAt + "T12:00:00") - new Date(analysis.startDate + "T12:00:00")) / 86400000) : 0;
-    const duration = itemDurationDays(item);
-    return {item,startOffset,duration,slack:null,critical:false,structural:true,depth,children};
+  const analysis=scheduleAnalysis(items), computed=new Map(analysis.rows.map(row=>[row.item.id,row]));
+  const rows=tableRows(items).map(({item,depth,children})=>{
+    if(computed.has(item.id))return {...computed.get(item.id),depth,children};
+    const offset=item.plannedStartAt?Math.max(0,(new Date(item.plannedStartAt+"T12:00:00")-new Date(analysis.startDate+"T12:00:00"))/86400000):0;
+    return {item,startOffset:offset,duration:itemDurationDays(item),slack:null,critical:false,structural:true,depth,children};
   });
-  const maxDay = Math.max(1,...rows.map((row) => row.startOffset + row.duration + (row.slack || 0)));
-  let html = '<div class="gantt-card"><div class="gantt-heading"><div><h2>Cronograma e caminho crítico</h2></div><div><strong>Previsão de término</strong><span>' + escapeHtml(analysis.finishDate ? formatDate(analysis.finishDate) : "—") + '</span></div></div>';
-  html += '<div class="gantt-toolbar">' + (canManageGpo(currentUser()) ? '<label class="risk-setting">Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="' + Math.max(1,Math.min(60,Number(state.riskThresholdDays) || 3)) + '"/></label>' : '') + '</div>';
-  if (analysis.message) html += '<div class="notice ' + (analysis.valid ? '' : 'error') + '" role="' + (analysis.valid ? 'status' : 'alert') + '">' + escapeHtml(analysis.message) + '</div>';
-  if (!rows.length) return html + emptyMarkup() + '</div>';
-  html += '<div class="gantt-scroll"><div class="gantt-axis"><span>Item</span><div class="gantt-axis-track">' + [0,25,50,75,100].map((percent)=>'<span style="left:' + percent + '%">' + escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100)))) + '</span>').join("") + '</div></div>';
-  html += rows.map((row) => {
-    const left = Math.max(0,Math.min(100,row.startOffset / maxDay * 100));
-    const width = Math.max(1,Math.min(100 - left,Math.max(1,row.duration / maxDay * 100)));
-    const start = shiftedDate(analysis.startDate,row.startOffset);
-    const finish = inclusiveFinishDate(start,row.duration);
-    const incoming = relationsFor(items).filter((relation) => relation.targetId === row.item.id && relation.relationType === "TI").map((relation) => ({relation,item:getItem(relation.sourceId)})).filter((entry) => entry.item);
-    const barTone = row.item.status === "cancelled" ? "cancelled" : row.critical && analysis.valid ? "critical" : isOverdue(row.item) ? "overdue" : isAtRisk(row.item) ? "at-risk" : "";
-    const slackLeft = Math.max(0,Math.min(100,(row.startOffset + row.duration) / maxDay * 100));
-    const slackWidth = row.slack === null ? 0 : Math.max(0,Math.min(100 - slackLeft,row.slack / maxDay * 100));
-    const childToggle = row.children?.length ? '<button class="tree-toggle" data-expand="' + escapeHtml(row.item.id) + '" aria-label="' + (ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'Recolher' : 'Expandir') + ' subitens">' + icon(ui.showSubitems && !ui.collapsed?.has(row.item.id) ? 'chevron-down' : 'chevron-right') + '</button>' : '<span class="tree-spacer"></span>';
-    const dependencies = incoming.length ? incoming.map(({relation,item}) => '<span class="dependency-chip" title="' + escapeHtml(labelOf(relationTypes,relation.relationType) + ' · ' + item.title) + '">← ' + escapeHtml(relation.relationType + ' · ' + item.title) + '</span>').join('') : '<span class="dependency-none">Sem predecessoras</span>';
-    return '<div class="gantt-row ' + (row.structural ? 'structural' : '') + (row.item.id === ui.selectedItemId ? ' selected' : '') + '" data-gantt-row="' + escapeHtml(row.item.id) + '" style="--depth:' + Math.min(row.depth || 0,8) + '"><div class="gantt-item-wrap">' + childToggle + '<button class="gantt-item" data-select="' + escapeHtml(row.item.id) + '"><strong>' + escapeHtml(row.item.title) + '</strong><small style="color:' + escapeHtml(statusConfig(row.item.status).color) + '">' + escapeHtml(userName(row.item.ownerId)) + ' · ' + icon(statusConfig(row.item.status).icon) + ' ' + escapeHtml(statusDisplayLabel(row.item)) + ' · ' + Number(row.item.progressPercent || 0) + '%</small></button></div><div class="gantt-track"><div class="gantt-bar ' + barTone + '" style="left:' + left + '%;width:' + width + '%" title="' + escapeHtml(formatDate(start) + " – " + formatDate(finish) + (row.slack === null ? "" : " · folga calculada " + row.slack.toFixed(1) + "d")) + '"></div>' + (slackWidth > 0 ? '<div class="gantt-slack" style="left:' + slackLeft + '%;width:' + slackWidth + '%" title="Folga calculada: ' + row.slack.toFixed(1) + ' dias"></div>' : '') + '<span class="gantt-dates">' + escapeHtml(formatDate(start)) + ' – ' + escapeHtml(formatDate(finish)) + '</span></div><div class="gantt-dependencies">' + dependencies + (row.critical && analysis.valid ? '<strong> · caminho crítico</strong>' : '') + '</div></div>';
+  const maxDay=Math.max(1,...rows.map(row=>row.startOffset+row.duration+(row.slack||0)));
+  const visible=new Set(rows.map(row=>row.item.id));
+  const ties=relationsFor(items).filter(rel=>rel.relationType==="TI"&&visible.has(rel.sourceId)&&visible.has(rel.targetId));
+  let html=`<div class="gantt-card prd43-gantt">
+    <div class="gantt-heading prd43-gantt-header"><strong>Cronograma</strong>
+      <span title="Término projetado a partir das atividades">${escapeHtml(analysis.finishDate?formatDate(analysis.finishDate):"Sem previsão")}</span>
+      <details class="prd43-gantt-settings"><summary aria-label="Configurações do Gantt" title="Configurações do Gantt">${icon("settings-2")}</summary>
+        ${canManageGpo(currentUser())?`<label>Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="${Math.max(1,Math.min(60,Number(state.riskThresholdDays)||3))}"/></label>`:""}
+        <p>Arraste o círculo na extremidade da barra até outra atividade para criar TI.</p>
+      </details>
+    </div>
+    <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
+  if(analysis.message)html+=`<div class="prd43-gantt-info" title="${escapeHtml(analysis.message)}">${escapeHtml(analysis.message)}</div>`;
+  if(!rows.length)return html+emptyMarkup()+"</div>";
+  html+=`<div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
+    <div class="gantt-axis"><span>Atividade</span><div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
+  const relationMap=new Map();
+  for(const rel of ties){const incoming=relationMap.get(rel.targetId)||{before:[],after:[]};incoming.before.push(rel);relationMap.set(rel.targetId,incoming);
+    const outgoing=relationMap.get(rel.sourceId)||{before:[],after:[]};outgoing.after.push(rel);relationMap.set(rel.sourceId,outgoing);}
+  html+=rows.map(row=>{
+    const item=row.item, left=Math.max(0,Math.min(100,row.startOffset/maxDay*100)), width=Math.max(1,Math.min(100-left,Math.max(1,row.duration/maxDay*100)));
+    const start=shiftedDate(analysis.startDate,row.startOffset),end=inclusiveFinishDate(start,row.duration);
+    const tone=signalOf(item), tiesFor=relationMap.get(item.id)||{before:[],after:[]};
+    const predecessor=tiesFor.before.map(rel=>getItem(rel.sourceId)?.title).filter(Boolean);
+    const successor=tiesFor.after.map(rel=>getItem(rel.targetId)?.title).filter(Boolean);
+    const isLeaf=!state.items.some(child=>child.parentId===item.id&&!child.archivedAt);
+    const canLink=isLeaf&&canEditItem(currentUser(),item)&&gpoDecision(currentUser(),"create_relation",item)===true;
+    const critical=Boolean(row.critical&&analysis.valid);
+    const toggle=row.children?.length?`<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${ui.showSubitems&&!ui.collapsed?.has(item.id)?"Recolher":"Expandir"} subitens">${icon(ui.showSubitems&&!ui.collapsed?.has(item.id)?"chevron-down":"chevron-right")}</button>`:'<span class="tree-spacer"></span>';
+    return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" style="--depth:${Math.min(row.depth||0,8)}">
+      <div class="gantt-item-wrap">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.ownerId))} · ${Math.round(Number(item.progressPercent||0))}%${critical?" · crítico":""}</small></button></div>
+      <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(item.title+" · "+formatDate(start)+" a "+formatDate(end))}">
+        <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
+          ${canLink?`<button type="button" class="prd43-gantt-handle" data-gantt-handle="${escapeHtml(item.id)}" title="Arraste para criar TI a partir de ${escapeHtml(item.title)}" aria-label="Criar TI a partir de ${escapeHtml(item.title)}"></button>`:""}
+        </div>
+      </div>
+      <span class="prd43-gantt-links" title="${escapeHtml("Predecessoras: "+(predecessor.join(", ")||"nenhuma")+" · Sucessoras: "+(successor.join(", ")||"nenhuma"))}">${predecessor.length?"←"+predecessor.length:""}${successor.length?" →"+successor.length:""}</span>
+    </div>`;
   }).join("");
-  return html + '</div></div>';
+  html+=`<svg class="prd43-gantt-links-svg" id="prd43GanttOverlay" aria-label="Relações TI do Gantt"></svg>
+    </div></div><div class="prd43-gantt-legend" aria-label="Legenda">
+      <span class="gray">Não iniciado</span><span class="blue">Em execução</span><span class="green">Concluído</span>
+      <span class="yellow">Risco / atraso</span><span class="red">Bloqueado</span><span class="prd43-critical-key">◆ Crítico</span>
+    </div></div>`;
+  return html;
+}
+function prd43DrawGanttRelations(){
+  const content=document.querySelector("#prd43GanttContent"),svg=document.querySelector("#prd43GanttOverlay");
+  if(!content||!svg)return;
+  const contentBox=content.getBoundingClientRect();
+  const width=content.scrollWidth,height=content.scrollHeight;
+  svg.setAttribute("width",width);svg.setAttribute("height",height);svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
+  let lines=`<defs><marker id="prd43-ti-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#286d73"/></marker></defs>`;
+  const rows=[...content.querySelectorAll("[data-gantt-row]")],ids=new Set(rows.map(row=>row.dataset.ganttRow));
+  const offset=rect=>({x:rect.left-contentBox.left,y:rect.top-contentBox.top});
+  for(const rel of state.relations.filter(r=>r.relationType==="TI"&&ids.has(r.sourceId)&&ids.has(r.targetId))){
+    const source=content.querySelector('[data-gantt-bar="'+CSS.escape(rel.sourceId)+'"]');
+    const target=content.querySelector('[data-gantt-bar="'+CSS.escape(rel.targetId)+'"]');
+    if(!source||!target)continue;
+    const sa=source.getBoundingClientRect(),tb=target.getBoundingClientRect();
+    const start=offset(sa),end=offset(tb);
+    const sx=start.x+sa.width,sy=start.y+sa.height/2,tx=end.x,ty=end.y+tb.height/2;
+    const elbow=tx>=sx+24?Math.max(sx+11,(sx+tx)/2):sx+20;
+    const d=`M${sx.toFixed(1)} ${sy.toFixed(1)} H${elbow.toFixed(1)} V${ty.toFixed(1)} H${tx.toFixed(1)}`;
+    lines+=`<g class="prd43-ti-edge ${prd43SelectedTiId===rel.id?"selected":""}" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" role="button" tabindex="0" aria-label="TI de ${escapeHtml(getItem(rel.sourceId)?.title||"")} para ${escapeHtml(getItem(rel.targetId)?.title||"")}. Clique para editar.">
+       <path class="prd43-ti-hit" d="${d}"/><path class="prd43-ti-path" d="${d}" marker-end="url(#prd43-ti-arrow)"/></g>`;
+  }
+  svg.innerHTML=lines;
+}
+function prd43ShowGanttRelation(id){
+  const relation=state.relations.find(rel=>rel.id===id&&rel.relationType==="TI");
+  const editor=document.querySelector("#prd43GanttRelationEditor");
+  if(!editor)return;
+  prd43SelectedTiId=relation?.id||"";
+  if(!relation){editor.hidden=true;editor.innerHTML="";prd43DrawGanttRelations();return;}
+  const leaves=scopedItems().filter(item=>!state.items.some(child=>child.parentId===item.id&&!child.archivedAt)&&canViewItem(currentUser(),item));
+  editor.hidden=false;
+  editor.innerHTML=`<strong>Editar TI</strong><label>Origem<select id="prd43TiSource">${leaves.map(item=>option(item.id,item.title,relation.sourceId===item.id)).join("")}</select></label>
+    <label>Destino<select id="prd43TiTarget">${leaves.map(item=>option(item.id,item.title,relation.targetId===item.id)).join("")}</select></label>
+    <button type="button" class="button quiet" data-action="prd43-update-ti">Aplicar</button>
+    <button type="button" class="button danger" data-action="prd43-delete-ti">Remover TI</button>
+    <button type="button" class="icon-button" data-action="prd43-close-ti" aria-label="Fechar edição de TI">${icon("x")}</button>`;
+  mountIcons();prd43DrawGanttRelations();
+}
+function prd43BindGantt(){
+  const content=document.querySelector("#prd43GanttContent");if(!content)return;
+  if(prd43GanttObserver){prd43GanttObserver.disconnect();prd43GanttObserver=null;}
+  requestAnimationFrame(prd43DrawGanttRelations);
+  if(typeof ResizeObserver!=="undefined"){
+    prd43GanttObserver=new ResizeObserver(()=>prd43DrawGanttRelations());prd43GanttObserver.observe(content);
+  }
+  content.querySelectorAll("[data-gantt-handle]").forEach(handle=>{
+    handle.addEventListener("pointerdown",event=>{
+      if(event.button!==0)return;
+      event.preventDefault();event.stopPropagation();
+      const originId=handle.dataset.ganttHandle,origin=handle.getBoundingClientRect();
+      const root=content.getBoundingClientRect(),svg=content.querySelector("#prd43GanttOverlay");
+      const start={x:origin.left+origin.width/2-root.left,y:origin.top+origin.height/2-root.top};
+      const ghost=document.createElementNS("http://www.w3.org/2000/svg","path");
+      ghost.classList.add("prd43-ti-preview");ghost.setAttribute("d",`M${start.x} ${start.y} L${start.x} ${start.y}`);
+      svg.append(ghost);handle.setPointerCapture(event.pointerId);
+      const move=e=>{
+        if(e.pointerId!==event.pointerId)return;
+        const p={x:e.clientX-root.left,y:e.clientY-root.top};
+        ghost.setAttribute("d",`M${start.x} ${start.y} L${p.x} ${p.y}`);
+        content.querySelectorAll(".prd43-gantt-row.is-link-target").forEach(row=>row.classList.remove("is-link-target"));
+        const target=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-gantt-row]");
+        if(target?.dataset.ganttRow!==originId)target?.classList.add("is-link-target");
+      };
+      const end=e=>{
+        if(e.pointerId!==event.pointerId)return;
+        handle.removeEventListener("pointermove",move);handle.removeEventListener("pointerup",end);handle.removeEventListener("pointercancel",end);
+        if(handle.hasPointerCapture(e.pointerId))handle.releasePointerCapture(e.pointerId);
+        ghost.remove();content.querySelectorAll(".prd43-gantt-row.is-link-target").forEach(row=>row.classList.remove("is-link-target"));
+        if(e.type==="pointercancel")return;
+        const targetId=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-gantt-row]")?.dataset.ganttRow;
+        if(!targetId||targetId===originId)return;
+        try{
+          const rel=createRelation(originId,targetId,"TI");saveState();
+          ui.prd43Undo={type:"create-ti",relationId:rel.id};notify("TI criada: "+getItem(originId).title+" → "+getItem(targetId).title+".");render();
+        }catch(error){notify(error.message,"error");}
+      };
+      handle.addEventListener("pointermove",move);handle.addEventListener("pointerup",end);handle.addEventListener("pointercancel",end);
+    });
+  });
 }
 
 function renderGraphTree(items) {
