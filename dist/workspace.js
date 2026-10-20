@@ -670,17 +670,25 @@ function renderPrd4Overview(items){
 
 function renderGraph(items) {
   const legend = [{signal:"red",label:"Bloqueado / atraso"},{signal:"yellow",label:"Aguardando / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Planejado / cancelado"}];
-  return `<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar">
-    <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map((entry) => option(entry.id,entry.label,ui.grouping === entry.id)).join("")}</select></label>
-    <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
-    <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
-    <button class="button quiet" data-action="propagate">${icon("play")}Reproduzir</button>
-    <button class="button quiet" data-action="pause-animation">${icon("pause")}Pausar</button>
-    <button class="button quiet" data-action="restart-animation">${icon("rotate-ccw")}Reiniciar</button>
-    ${ui.lastDeletedRelation ? `<button class="button quiet" data-action="undo-relation">${icon("undo-2")}Desfazer TI</button>` : ""}
-    <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
+  return `<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar prd42-graph-toolbar">
+    <div class="prd42-graph-primary">
+      <button class="button quiet" data-action="propagate" title="Percorrer processo">${icon("play")}Reproduzir</button>
+      <button class="button quiet" data-action="pause-animation" title="Pausar percurso" aria-label="Pausar animação">${icon("pause")}</button>
+      <button class="button quiet" data-action="restart-animation" title="Reiniciar percurso" aria-label="Reiniciar animação">${icon("rotate-ccw")}</button>
+      <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
+    </div>
+    <details class="prd42-graph-options"><summary>${icon("sliders-horizontal")} Opções</summary>
+      <div class="prd42-graph-option-fields">
+        <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map(entry=>option(entry.id,entry.label,ui.grouping===entry.id)).join("")}</select></label>
+        <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
+        <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
+        ${ui.lastDeletedRelation ? `<button class="button quiet" data-action="undo-relation">${icon("undo-2")}Desfazer TI</button>` : ""}
+      </div>
+    </details>
     </div><div id="graphCanvas" class="graph-canvas">${items.length ? "" : emptyMarkup()}</div>
-    <div class="graph-legend" aria-label="Legenda do farol">${legend.map((entry) => '<button type="button" class="' + entry.signal + (ui.graphHighlight === entry.signal ? ' active' : '') + '" data-highlight-signal="' + entry.signal + '" aria-pressed="' + (ui.graphHighlight === entry.signal) + '"><b></b>' + entry.label + '</button>').join("")}${ui.graphHighlight ? '<button type="button" class="button quiet" data-highlight-signal="all">Limpar destaque</button>' : ''}</div></div></div>`;
+    <details class="prd42-graph-legend"><summary>Legenda e destaques</summary>
+      <div class="graph-legend" aria-label="Legenda do farol">${legend.map(entry=>'<button type="button" class="'+entry.signal+(ui.graphHighlight===entry.signal?' active':'')+'" data-highlight-signal="'+entry.signal+'" aria-pressed="'+(ui.graphHighlight===entry.signal)+'"><b></b>'+entry.label+'</button>').join("")}${ui.graphHighlight?'<button type="button" class="button quiet" data-highlight-signal="all">Limpar destaque</button>':""}</div>
+    </details></div></div>`;
 }
 
 function layoutKey() { return `${currentUser().id}:${ui.grouping}`; }
