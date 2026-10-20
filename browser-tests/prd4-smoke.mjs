@@ -20,6 +20,7 @@ try{
   assert.equal(await page.getByRole("tab",{name:/Gantt/}).count(),1);
   const form=page.locator("#prd4QuickCreate");
   await form.locator('[name="title"]').fill("PRD4 Cadastro direto");
+  await form.locator("summary").click();
   await form.locator('[name="additionalTitles"]').fill("PRD4 Item em lote");
   await form.locator('[type="submit"]').click();
   await page.getByText("2 item(ns) criado(s).").waitFor();
