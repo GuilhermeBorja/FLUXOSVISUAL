@@ -739,6 +739,14 @@ function prd43ShowGanttRelation(id){
     <button type="button" class="icon-button" data-action="prd43-close-ti" aria-label="Fechar edição de TI">${icon("x")}</button>`;
   mountIcons();prd43DrawGanttRelations();
 }
+function prd43GanttDropTarget(clientX,clientY){
+  // Uma conexão SVG pode estar sobre a barra: procurar a linha real abaixo dela.
+  for(const element of document.elementsFromPoint(clientX,clientY)){
+    const row=element.closest?.("[data-gantt-row]");
+    if(row)return row;
+  }
+  return null;
+}
 function prd43BindGantt(){
   const content=document.querySelector("#prd43GanttContent");if(!content)return;
   if(prd43GanttObserver){prd43GanttObserver.disconnect();prd43GanttObserver=null;}
@@ -761,7 +769,7 @@ function prd43BindGantt(){
         const p={x:e.clientX-root.left,y:e.clientY-root.top};
         ghost.setAttribute("d",`M${start.x} ${start.y} L${p.x} ${p.y}`);
         content.querySelectorAll(".prd43-gantt-row.is-link-target").forEach(row=>row.classList.remove("is-link-target"));
-        const target=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-gantt-row]");
+        const target=prd43GanttDropTarget(e.clientX,e.clientY);
         if(target?.dataset.ganttRow!==originId)target?.classList.add("is-link-target");
       };
       const end=e=>{
@@ -770,7 +778,7 @@ function prd43BindGantt(){
         if(handle.hasPointerCapture(e.pointerId))handle.releasePointerCapture(e.pointerId);
         ghost.remove();content.querySelectorAll(".prd43-gantt-row.is-link-target").forEach(row=>row.classList.remove("is-link-target"));
         if(e.type==="pointercancel")return;
-        const targetId=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-gantt-row]")?.dataset.ganttRow;
+        const targetId=prd43GanttDropTarget(e.clientX,e.clientY)?.dataset.ganttRow;
         if(!targetId||targetId===originId)return;
         try{
           const rel=createRelation(originId,targetId,"TI");saveState();
