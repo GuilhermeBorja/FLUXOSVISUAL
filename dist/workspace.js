@@ -312,13 +312,48 @@ function prd41BindSplitters() {
     });
   });
 }
+function prd44PaneToolbar(id,items){
+  if(id==="table"){
+    const rows=tableRows(items),selected=rows.filter(row=>ui.bulkSelected?.has(row.item.id)).length;
+    return `<label class="prd44-toolbar-select" title="Selecionar todos os itens visíveis"><input type="checkbox" id="selectAllRows" ${rows.length&&selected===rows.length?"checked":""}/> Todos</label>
+      <button class="prd44-small-control" type="button" data-action="toggle-bulk" ${selected?"":"disabled"} title="Editar itens selecionados">Lote${selected?" "+selected:""}</button>`;
+  }
+  if(id==="graph"){
+    return `<button class="prd44-small-control prd44-play" data-action="propagate" title="Reproduzir sequência" aria-label="Reproduzir sequência">${icon("play")}</button>
+      <button class="prd44-small-control" data-action="pause-animation" title="Pausar" aria-label="Pausar animação">${icon("pause")}</button>
+      <details class="prd44-pane-options"><summary aria-label="Ferramentas do grafo" title="Ferramentas do grafo">${icon("sliders-horizontal")}</summary>
+        <div class="prd44-options-menu">
+          <div class="prd44-zoom-controls">
+            <button class="icon-button" data-action="zoom-out" title="Diminuir zoom">${icon("zoom-out")}</button>
+            <span id="zoomLabel">100%</span>
+            <button class="icon-button" data-action="zoom-in" title="Aumentar zoom">${icon("zoom-in")}</button>
+            <button class="icon-button" data-action="fit-graph" title="Enquadrar grafo">${icon("maximize")}</button>
+            <button class="icon-button" data-action="reset-layout" title="Reorganizar nós">${icon("rotate-ccw")}</button>
+          </div>
+          <button class="button quiet" data-action="restart-animation">${icon("rotate-ccw")} Reiniciar animação</button>
+          <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map(entry=>option(entry.id,entry.label,ui.grouping===entry.id)).join("")}</select></label>
+          <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
+          <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
+          ${ui.lastDeletedRelation?`<button class="button quiet" data-action="undo-relation">Desfazer TI</button>`:""}
+        </div>
+      </details>`;
+  }
+  return `<details class="prd44-pane-options"><summary aria-label="Configurações do Gantt" title="Configurações do Gantt">${icon("settings-2")}</summary>
+    <div class="prd44-options-menu prd44-gantt-settings">
+      ${canManageGpo(currentUser())?`<label>Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="${Math.max(1,Math.min(60,Number(state.riskThresholdDays)||3))}"/></label>`:""}
+      <p>Arraste a extremidade de uma barra para criar TI; ou clique no círculo e escolha o destino.</p>
+    </div>
+  </details>`;
+}
 function renderPrd41Workspace(items) {
-  const pane = (id,label,subtitle,content) => `<section class="prd41-pane prd41-pane--${id} ${prd41FocusedPane === id ? "is-focus-target" : ""}" data-pane="${id}" aria-label="${label}">
-    <header class="prd41-pane-heading"><div><strong>${label}</strong><small>${subtitle}</small></div>
-      <button type="button" class="prd41-focus-button" data-pane-focus="${id}" aria-label="Maximizar ${label}" aria-pressed="${prd41FocusedPane === id}">${icon(prd41FocusedPane === id ? "minimize-2" : "maximize-2")}</button></header>
+  const pane=(id,label,subtitle,content)=>`<section class="prd41-pane prd41-pane--${id} ${prd41FocusedPane===id?"is-focus-target":""}" data-pane="${id}" aria-label="${label}">
+    <header class="prd41-pane-heading prd44-pane-heading"><strong>${label}</strong>
+      <div class="prd44-pane-actions">${prd44PaneToolbar(id,items)}
+        <button type="button" class="prd41-focus-button" data-pane-focus="${id}" aria-label="Maximizar ${label}" aria-pressed="${prd41FocusedPane===id}">${icon(prd41FocusedPane===id?"minimize-2":"maximize-2")}</button>
+      </div></header>
     <div class="prd41-pane-body">${content}</div></section>`;
   return `<div class="prd41-workspace-viewport">
-    <div class="prd41-workspace ${prd41FocusedPane ? "is-focused" : ""}" data-focus="${prd41FocusedPane || "all"}" style="--pane-table:${prd41PaneWidths.table}fr;--pane-graph:${prd41PaneWidths.graph}fr;--pane-gantt:${prd41PaneWidths.gantt}fr;">
+    <div class="prd41-workspace ${prd41FocusedPane?"is-focused":""}" data-focus="${prd41FocusedPane||"all"}" style="--pane-table:${prd41PaneWidths.table}fr;--pane-graph:${prd41PaneWidths.graph}fr;--pane-gantt:${prd41PaneWidths.gantt}fr;">
       ${pane("table","Sintética","Cadastro e atividades",renderTable(items))}
       <div class="prd41-splitter" role="separator" tabindex="0" data-pane-split="table-graph" aria-label="Redimensionar Sintética e Analítica" aria-orientation="vertical" aria-valuemin="10" aria-valuemax="80" aria-valuenow="${Math.round(prd41PaneWidths.table)}" title="Arraste para ajustar os painéis; use as setas para ajuste fino"><span aria-hidden="true"></span></div>
       ${pane("graph","Analítica","Relações e animação",renderGraph(items))}
@@ -590,9 +625,6 @@ function renderTable(items) {
   const rows = tableRows(items);
   const selectedVisible = rows.filter(({item}) => ui.bulkSelected.has(item.id)).length;
   return `<div class="table-card">
-    <div class="table-toolbar prd42-table-toolbar"><span class="prd42-table-count">${rows.length} itens</span>
-      <label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar</label>
-      <button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Lote${selectedVisible ? " · "+selectedVisible : ""}</button></div>
     ${ui.bulkOpen && selectedVisible ? renderBulkEditor() : ""}
     ${!rows.length ? emptyMarkup() : `<div class="synth-table-wrap"><table class="synth-table"><thead><tr><th><span class="sr-only">Selecionar</span></th><th>ID</th><th>Nome</th><th>Conclusão</th><th>Responsável</th><th>Criação</th><th>Início projetado</th><th>Início real</th><th>Liberada em</th><th>Término projetado</th><th>Término real</th><th>Duração total</th><th>Duração da atividade</th><th>Peso</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
       ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" data-depth="${depth}" data-type="${escapeHtml(item.type)}" data-row-draggable="${canChangeHierarchy(currentUser(),item) ? "true" : "false"}" draggable="${canChangeHierarchy(currentUser(),item)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}" style="--row-fill:${rowFillColor(item,depth)}">
@@ -693,13 +725,6 @@ function renderGantt(items) {
   const visible=new Set(rows.map(row=>row.item.id));
   const ties=relationsFor(items).filter(rel=>rel.relationType==="TI"&&visible.has(rel.sourceId)&&visible.has(rel.targetId));
   let html=`<div class="gantt-card prd43-gantt">
-    <div class="gantt-heading prd43-gantt-header"><strong>Cronograma</strong>
-      <span title="Término projetado a partir das atividades">${escapeHtml(analysis.finishDate?formatDate(analysis.finishDate):"Sem previsão")}</span>
-      <details class="prd43-gantt-settings"><summary aria-label="Configurações do Gantt" title="Configurações do Gantt">${icon("settings-2")}</summary>
-        ${canManageGpo(currentUser())?`<label>Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="${Math.max(1,Math.min(60,Number(state.riskThresholdDays)||3))}"/></label>`:""}
-        <p>Arraste o círculo na extremidade da barra até outra atividade para criar TI.</p>
-      </details>
-    </div>
     <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
   if(analysis.message)html+=`<div class="prd43-gantt-info" title="${escapeHtml(analysis.message)}">${escapeHtml(analysis.message)}</div>`;
   if(!rows.length)return html+emptyMarkup()+"</div>";
@@ -876,29 +901,15 @@ function renderPrd4Overview(items){
   </section>`;
 }
 
-function renderGraph(items) {
-  const legend = [{signal:"red",label:"Bloqueado / atraso"},{signal:"yellow",label:"Aguardando / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Planejado / cancelado"}];
-  return `<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar prd42-graph-toolbar">
-    <div class="prd42-graph-primary">
-      <button class="button quiet" data-action="propagate" title="Percorrer processo">${icon("play")}Reproduzir</button>
-      <button class="button quiet" data-action="pause-animation" title="Pausar percurso" aria-label="Pausar animação">${icon("pause")}</button>
-      <button class="button quiet" data-action="restart-animation" title="Reiniciar percurso" aria-label="Reiniciar animação">${icon("rotate-ccw")}</button>
-      <div class="graph-controls"><button class="icon-button" data-action="zoom-out" aria-label="Diminuir zoom" title="Diminuir zoom">${icon("zoom-out")}</button><span id="zoomLabel">100%</span><button class="icon-button" data-action="zoom-in" aria-label="Aumentar zoom" title="Aumentar zoom">${icon("zoom-in")}</button><button class="icon-button" data-action="fit-graph" aria-label="Enquadrar grafo" title="Enquadrar grafo">${icon("maximize")}</button><button class="icon-button" data-action="reset-layout" aria-label="Reorganizar nós" title="Reorganizar nós">${icon("rotate-ccw")}</button></div>
-    </div>
-    <details class="prd42-graph-options"><summary>${icon("sliders-horizontal")} Opções</summary>
-      <div class="prd42-graph-option-fields">
-        <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map(entry=>option(entry.id,entry.label,ui.grouping===entry.id)).join("")}</select></label>
-        <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
-        <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
-        ${ui.lastDeletedRelation ? `<button class="button quiet" data-action="undo-relation">${icon("undo-2")}Desfazer TI</button>` : ""}
-      </div>
+function renderGraph(items){
+  const legend=[{signal:"red",label:"Bloqueado"},{signal:"yellow",label:"Atraso / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Não iniciado"}];
+  return `<div class="graph-layout prd44-graph-layout"><div class="graph-shell">
+    <div id="graphCanvas" class="graph-canvas">${items.length?"":emptyMarkup()}</div>
+    <details class="prd42-graph-legend prd44-graph-legend"><summary>Legenda e destaques</summary>
+      <div class="graph-legend" aria-label="Legenda dos status">${legend.map(entry=>`<button type="button" class="${entry.signal}${ui.graphHighlight===entry.signal?" active":""}" data-highlight-signal="${entry.signal}" aria-pressed="${ui.graphHighlight===entry.signal}"><b></b>${entry.label}</button>`).join("")}${ui.graphHighlight?'<button class="button quiet" data-highlight-signal="all">Limpar destaque</button>':""}</div>
     </details>
-    </div><div id="graphCanvas" class="graph-canvas">${items.length ? "" : emptyMarkup()}</div>
-    <details class="prd42-graph-legend"><summary>Legenda e destaques</summary>
-      <div class="graph-legend" aria-label="Legenda do farol">${legend.map(entry=>'<button type="button" class="'+entry.signal+(ui.graphHighlight===entry.signal?' active':'')+'" data-highlight-signal="'+entry.signal+'" aria-pressed="'+(ui.graphHighlight===entry.signal)+'"><b></b>'+entry.label+'</button>').join("")}${ui.graphHighlight?'<button type="button" class="button quiet" data-highlight-signal="all">Limpar destaque</button>':""}</div>
-    </details></div></div>`;
+  </div></div>`;
 }
-
 function layoutKey() { return `${currentUser().id}:${ui.grouping}`; }
 
 function mountGraph(items) {
