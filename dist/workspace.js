@@ -948,30 +948,18 @@ function renderAttachments(item,editable) {
 }
 
 function updateSchedulePreview() {
-  const form=document.querySelector("#createItemForm"), output=document.querySelector("#schedulePreview");
+  const form=document.querySelector("#createItemForm"),output=document.querySelector("#schedulePreview");
   if(!form||!output)return;
   const start=String(form.querySelector('[name="plannedStartAt"]')?.value||today());
-  const durationRaw=String(form.querySelector('[name="plannedDurationDays"]')?.value||"").trim();
-  const titles=String(form.querySelector('[name="quickSteps"]')?.value||"").split("\n").map(x=>x.trim()).filter(Boolean);
-  if(titles.length){
-    const durations=titles.map((_,i)=>Number(form.querySelector('[name="stepDuration_'+i+'"]')?.value||0));
-    if(durations.some(d=>!Number.isInteger(d)||d<1)){output.textContent="Informe a duração de cada subitem.";return;}
-    let predecessorStart=start, predecessorDuration=durations[0], first=start,last=inclusiveFinishDate(start,durations[0]);
-    for(let i=1;i<durations.length;i++){
-      const relationType=String(form.querySelector('[name="stepRelation_'+i+'"]')?.value||"TI");
-      let candidate=start;
-      if(["TI","II","TT","IF"].includes(relationType)){
-        candidate=datePlusDays(predecessorStart,temporalStartOffset({relationType,lagDays:0},predecessorDuration,durations[i]));
-      }
-      predecessorStart=candidate;predecessorDuration=durations[i];
-      if(candidate<first)first=candidate;
-      const finish=inclusiveFinishDate(candidate,durations[i]);if(finish>last)last=finish;
-    }
-    output.textContent="Previsão do grupo: "+formatDate(first)+" a "+formatDate(last)+" · "+inclusiveDurationDays(first,last)+" dias";
-    return;
-  }
-  if(durationRaw===""||!Number.isFinite(Number(durationRaw))){output.textContent="Informe a duração da atividade.";return;}
-  output.textContent="Previsão final: "+formatDate(inclusiveFinishDate(start,Number(durationRaw)));
+  const duration=Number(form.querySelector('[name="plannedDurationDays"]')?.value||1);
+  const rows=[...form.querySelectorAll(".prd43-step-row")];
+  if(!rows.length){output.textContent="Previsão inicial: "+formatDate(inclusiveFinishDate(start,Math.max(1,duration)));return;}
+  const durations=rows.map(row=>Number(row.querySelector('[data-step-duration]')?.value||0));
+  if(durations.some(days=>!Number.isInteger(days)||days<1)){output.textContent="Informe a duração de cada atividade.";return;}
+  const linked=form.querySelector("#prd43Sequence")?.checked;
+  const total=linked?durations.reduce((sum,days)=>sum+days,0):Math.max(...durations);
+  output.textContent=linked?"Sequência TI: "+total+" dias · término projetado "+formatDate(inclusiveFinishDate(start,total)):
+    "Sem sequência TI: atividades independentes · término inicial "+formatDate(inclusiveFinishDate(start,total));
 }
 
 function renderCreatePanel() {
@@ -1642,7 +1630,9 @@ function bindPanel() {
       } catch (error) { panelFailure(error); }
     }
   };
-  root.querySelector('[name="quickSteps"]')?.addEventListener("input",(event)=>{ renderQuickStepRows(event.target.value.split("\n")); updateSchedulePreview(); });
+  root.querySelector('[name="quickSteps"]')?.addEventListener("input",(event)=>renderQuickStepRows(event.target.value.split("\n")));
+  root.querySelector("#prd43Sequence")?.addEventListener("change",updateSchedulePreview);
+  root.querySelector("#quickStepRows")?.addEventListener("input",(event)=>{if(event.target.matches('[data-step-duration]'))updateSchedulePreview();});
   root.querySelector("#prd42ParentSelect")?.addEventListener("change",(event)=>{
     const parent = getItem(event.target.value);
     const hint = root.querySelector("#prd42ParentHelp");
@@ -1686,35 +1676,45 @@ function bindPanel() {
     saveState(); notify(message); render();
   });
   submitHandler("createItemForm", async (form) => {
-    const input = itemInput(form);
-    const quickSteps = String(form.get("quickSteps") || "").split("\n").map(value=>value.trim()).filter(Boolean);
-    const additionalTitles = String(form.get("additionalTitles")||"").split("\n").map(value=>value.trim()).filter(Boolean);
-    if (quickSteps.length && additionalTitles.length) throw new Error("Escolha adicionar itens no mesmo nível OU criar etapas dentro do novo item.");
-    if (quickSteps.length > 100 || additionalTitles.length > 99) throw new Error("Limite de 100 itens por cadastro.");
-    const snapshot = JSON.stringify(state);
+    const input=itemInput(form);
+    const quickSteps=String(form.get("quickSteps")||"").split("\n").map(value=>value.trim()).filter(Boolean);
+    const additionalTitles=String(form.get("additionalTitles")||"").split("\n").map(value=>value.trim()).filter(Boolean);
+    if(quickSteps.length && additionalTitles.length)throw new Error("Escolha subitens ou outros itens no mesmo nível.");
+    if(quickSteps.length>100 || additionalTitles.length>99)throw new Error("Limite de 100 atividades por operação.");
+    const sequence=form.get("autoSequence")==="1";
+    const snapshot=JSON.stringify(state);
     let item;
     try {
-      item = createItem(input); let previous = null;
-      quickSteps.forEach((title,index) => {
-        const durationRaw = String(form.get(`stepDuration_${index}`) || "").trim();
-        if (!durationRaw) throw new Error(`Informe a duração da etapa ${index + 1}.`);
-        const duration = Number(durationRaw);
-        if (!Number.isInteger(duration) || duration < 1) throw new Error(`Informe uma duração válida para a etapa ${index + 1}.`);
-        const start = input.plannedStartAt || today();
-        const child = createItem({...input,title,type:String(form.get(`stepType_${index}`) || "substage"),status:"backlog",ownerId:String(form.get(`stepOwner_${index}`) || currentUser().id),weight:1,progressPercent:0,parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration,dueAt:inclusiveFinishDate(start,duration)});
-        if (previous) createRelation(previous.id,child.id,String(form.get(`stepRelation_${index}`) || "TI")); previous = child;
-      });
-      if (quickSteps.length) { syncParentSummary(item.id); item.baselineStartAt=item.plannedStartAt;item.baselineDueAt=item.dueAt; }
-      for (const title of additionalTitles) createItem({...input,title,status:"backlog",progressPercent:0});
+      item=createItem(input);
+      const children=[];
+      for(let index=0;index<quickSteps.length;index++){
+        const title=String(form.get(`stepTitle_${index}`)||quickSteps[index]).trim();
+        const duration=Number(form.get(`stepDuration_${index}`));
+        const ownerId=String(form.get(`stepOwner_${index}`)||input.ownerId);
+        const owner=state.users.find(user=>user.id===ownerId && !user.disabled);
+        const type=String(form.get(`stepType_${index}`)||"task");
+        if(!title)throw new Error(`Informe o nome do subitem ${index+1}.`);
+        if(!owner)throw new Error(`Selecione o responsável pelo subitem ${index+1}.`);
+        if(!Number.isInteger(duration)||duration<1||duration>3650)throw new Error(`Informe a duração do subitem ${index+1} (1 a 3650 dias).`);
+        const start=input.plannedStartAt||today();
+        const child=createItem({...input,title,type,ownerId,organizationId:owner.organizationId,
+          sectorId:owner.sectorId,state:owner.state,status:"backlog",weight:1,progressPercent:0,
+          parentId:item.id,description:"",plannedStartAt:start,plannedDurationDays:duration,
+          dueAt:inclusiveFinishDate(start,duration)});
+        children.push(child);
+      }
+      if(sequence && children.length>1) {
+        for(let index=1;index<children.length;index++) createRelation(children[index-1].id,children[index].id,"TI");
+      }
+      if(children.length){syncParentSummary(item.id);item.baselineStartAt=item.plannedStartAt;item.baselineDueAt=item.dueAt;}
+      for(const title of additionalTitles)createItem({...input,title,status:"backlog",progressPercent:0});
       await addAttachments(item.id,form.getAll("attachments"));
-    } catch (error) {
-      const restored = JSON.parse(snapshot);
-      for (const key of Object.keys(state)) delete state[key];
-      Object.assign(state,restored);
+    }catch(error){
+      const restored=JSON.parse(snapshot);for(const key of Object.keys(state))delete state[key];Object.assign(state,restored);
       throw error;
     }
-    ui.selectedItemId = item.id; ui.panel = "item"; ui.panelTab = "details"; saveState();
-    notify((additionalTitles.length + quickSteps.length + 1) + " item(ns) criado(s)" + (input.parentId ? " no item pai selecionado." : " no nível principal."));
+    ui.selectedItemId=item.id;ui.panel="item";ui.panelTab="details";saveState();
+    notify(`Criado: ${item.title}${quickSteps.length?" + "+quickSteps.length+" subitens":""}${sequence&&quickSteps.length>1?" · "+(quickSteps.length-1)+" relações TI":""}.`);
     render();
   });
   submitHandler("updateItemForm", async (form) => {
