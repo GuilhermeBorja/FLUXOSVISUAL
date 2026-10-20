@@ -27,7 +27,7 @@ try{
  assert.equal(shape.parent,true);assert.equal(shape.grand,true);
  await page.locator('[data-panel-tab="history"]').click();
  assert.equal(await page.locator("#prd5HistoryUser").count(),1);
- await page.locator('[data-action="close-panel"]').click();
+ await page.locator('button[data-action="close-panel"]').click();
  await page.locator("#scopeSelect").selectOption(shape.root);
  assert.ok(await page.locator(".prd5-gantt-edit").count()>=6);
  await page.locator(".prd5-gantt-edit").first().click();
