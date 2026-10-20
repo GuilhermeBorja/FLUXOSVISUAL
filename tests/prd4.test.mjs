@@ -108,10 +108,11 @@ test("PRD4: nao ha aba Relações na ficha do item",()=>{
   assert.match(workspace,/id:"history",label:"Histórico/);
 });
 
-test("PRD4: criacao em lote usa tipo, responsavel, inicio e duracao",()=>{
-  for(const name of ["prd4QuickCreate","additionalTitles","plannedDurationDays","plannedStartAt","ownerId","type"])
+test("PRD4: cadastro contextual preserva lotes, tipo, responsavel, inicio e duracao",()=>{
+  for(const name of ["createItemForm","additionalTitles","quickSteps","plannedDurationDays","plannedStartAt","ownerId","type"])
     assert.ok(workspace.includes(name),name);
-  assert.match(workspace,/names\.length>100/);
+  assert.doesNotMatch(workspace,/id="prd4QuickCreate"/);
+  assert.match(workspace,/additionalTitles\.length > 99/);
 });
 
 test("PRD4: graph tem conector independente, exclusao Delete e animacao pausavel",()=>{
