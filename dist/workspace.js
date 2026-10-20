@@ -726,6 +726,7 @@ function scheduleAnalysis(items) {
 
 let prd43SelectedTiId="";
 let prd43GanttObserver=null;
+let prd44LinkSource="";
 function renderGantt(items) {
   const analysis=scheduleAnalysis(items), computed=new Map(analysis.rows.map(row=>[row.item.id,row]));
   const rows=tableRows(items).map(({item,depth,children})=>{
@@ -795,10 +796,24 @@ function prd43DrawGanttRelations(){
   }
   svg.innerHTML=lines;
 }
+function prd44BeginGanttLink(sourceId){
+  const source=getItem(sourceId),editor=document.querySelector("#prd43GanttRelationEditor");
+  if(!editor||!source)return;
+  prd44LinkSource=sourceId;prd43SelectedTiId="";
+  const sources=scopedItems().filter(item=>item.id!==sourceId&&canViewItem(currentUser(),item)
+    &&!state.items.some(child=>child.parentId===item.id&&!child.archivedAt));
+  editor.hidden=false;
+  editor.innerHTML=`<strong>Criar TI: ${escapeHtml(source.title)} →</strong>
+    <label>Atividade de destino<select id="prd44TiDestination"><option value="">Selecione o destino…</option>${sources.map(item=>option(item.id,item.title)).join("")}</select></label>
+    <button type="button" class="button primary" data-action="prd44-confirm-ti">Criar TI</button>
+    <button type="button" class="button quiet" data-action="prd43-close-ti">Cancelar</button>`;
+  mountIcons();editor.querySelector("#prd44TiDestination")?.focus();prd43DrawGanttRelations();
+}
 function prd43ShowGanttRelation(id){
   const relation=state.relations.find(rel=>rel.id===id&&rel.relationType==="TI");
   const editor=document.querySelector("#prd43GanttRelationEditor");
   if(!editor)return;
+  prd44LinkSource="";
   prd43SelectedTiId=relation?.id||"";
   if(!relation){editor.hidden=true;editor.innerHTML="";prd43DrawGanttRelations();return;}
   const leaves=scopedItems().filter(item=>!state.items.some(child=>child.parentId===item.id&&!child.archivedAt)&&canViewItem(currentUser(),item));
@@ -856,7 +871,11 @@ function prd43BindGantt(){
         ghost.remove();content.querySelectorAll(".prd43-gantt-row.is-link-target").forEach(row=>row.classList.remove("is-link-target"));
         if(e.type==="pointercancel")return;
         const targetId=prd43GanttDropTarget(e.clientX,e.clientY)?.dataset.ganttRow;
-        if(!targetId||targetId===originId)return;
+        if(!targetId||targetId===originId){
+          // Clique simples no conector: escolha guiada do sucessor.
+          prd44BeginGanttLink(originId);
+          return;
+        }
         try{
           const rel=createRelation(originId,targetId,"TI");saveState();
           ui.prd43Undo={type:"create-ti",relationId:rel.id};notify("TI criada: "+getItem(originId).title+" → "+getItem(targetId).title+".");render();
@@ -1603,6 +1622,16 @@ function bindWorkspace() {
       return;
     }
     if (button.dataset.action==="toggle-subitems") {ui.showSubitems=!ui.showSubitems;ui.collapsed=new Set();render();return;}
+    if (button.dataset.action==="prd44-confirm-ti"){
+      const targetId=document.querySelector("#prd44TiDestination")?.value;
+      if(!prd44LinkSource||!targetId){notify("Selecione uma atividade de destino para a TI.","error");return;}
+      try{
+        const rel=createRelation(prd44LinkSource,targetId,"TI");
+        saveState();ui.prd43Undo={type:"create-ti",relationId:rel.id};
+        notify("TI criada: "+getItem(prd44LinkSource).title+" → "+getItem(targetId).title+".");
+        prd44LinkSource="";render();
+      }catch(error){notify(error.message,"error");}return;
+    }
     if (button.dataset.action==="select-gantt-ti") {prd43ShowGanttRelation(button.dataset.ganttTi);return;}
     if (button.dataset.action==="prd43-close-ti") {prd43ShowGanttRelation("");return;}
     if (button.dataset.action==="prd43-update-ti") {
