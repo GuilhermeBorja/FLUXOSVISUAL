@@ -857,13 +857,15 @@ function visibleEvents() {
 }
 
 function isOverdue(item) {
-  if (!item.dueAt || ["done", "cancelled"].includes(item.status)) return false;
-  return new Date(`${item.dueAt}T00:00:00`) < new Date(`${today()}T00:00:00`);
+  if(!item || ["done","cancelled"].includes(item.status))return false;
+  const target=item.baselineDueAt||item.dueAt;
+  return Boolean(target && target<today());
 }
 
 function dueDeltaDays(item) {
-  if (!item.dueAt) return null;
-  return Math.floor((new Date(item.dueAt + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000);
+  const target=item?.baselineDueAt||item?.dueAt;
+  if(!target)return null;
+  return Math.floor((new Date(target+"T00:00:00")-new Date(today()+"T00:00:00"))/86400000);
 }
 
 function isAtRisk(item) {
