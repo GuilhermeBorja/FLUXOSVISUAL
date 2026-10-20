@@ -199,12 +199,21 @@ function noticeMarkup() {
   return `<div class="notice ${ui.noticeKind === "error" ? "error" : ""} prd43-notice" role="${ui.noticeKind === "error" ? "alert" : "status"}">${escapeHtml(ui.notice)}${undo}<button class="icon-button" data-action="dismiss-notice" aria-label="Fechar aviso">${icon("x")}</button></div>`;
 }
 
+let prd44NoticeTimer=null;
 function notify(message, kind = "success") {
-  ui.notice = message;
-  ui.noticeKind = kind;
+  ui.notice=message;ui.noticeKind=kind;
   if(kind==="error")ui.prd43Undo=null;
-  const target = document.querySelector("#noticeRoot");
-  if (target) { target.innerHTML = noticeMarkup(); mountIcons(); }
+  if(prd44NoticeTimer){clearTimeout(prd44NoticeTimer);prd44NoticeTimer=null;}
+  const target=document.querySelector("#noticeRoot");
+  if(target){target.innerHTML=noticeMarkup();mountIcons();}
+  // Desfazer permanece acessivel durante tempo suficiente sem ocupar o layout.
+  prd44NoticeTimer=setTimeout(()=>{
+    if(ui.notice===message){
+      ui.notice="";ui.prd43Undo=null;
+      const notice=document.querySelector("#noticeRoot");if(notice)notice.innerHTML="";
+    }
+    prd44NoticeTimer=null;
+  },ui.prd43Undo?9500:kind==="error"?7000:4500);
 }
 
 function mountIcons() {
@@ -415,12 +424,12 @@ function render() {
           <button class="button primary" data-action="create" ${canCreateItem(user) ? "" : 'disabled title="Seu perfil GPO não permite criar itens neste contexto."'}>${icon("plus")}Novo item</button>
         </div>
       </section>
-      ${renderPrd4Overview(items)}
       ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
       <section class="workspace-controls" aria-label="Visualização e filtros">
         <span class="sr-only">Sintética, Analítica e Gantt integrados</span>
         <div class="view-filters">
+          ${renderPrd4Overview(items)}
           <label class="search-box">${icon("search")}<input id="searchInput" type="search" placeholder="Buscar item ou responsável" value="${escapeHtml(state.filters.query)}" aria-label="Buscar item ou responsável"/></label>
           <select id="scopeSelect" aria-label="Projeto ou processo"><option value="all">Todos os processos</option>${projectOptions().map((item) => option(item.id, item.title, ui.scopeId === item.id)).join("")}</select>
           <button type="button" class="button quiet prd43-level-toggle" id="showSubitems" data-action="toggle-subitems" aria-pressed="${ui.showSubitems}" title="Expandir ou recolher níveis da hierarquia">${icon(ui.showSubitems?"list-collapse":"list-tree")}${ui.showSubitems?"Recolher níveis":"Expandir níveis"}</button>
