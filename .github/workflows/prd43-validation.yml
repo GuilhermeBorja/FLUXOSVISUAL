@@ -1,0 +1,30 @@
+name: Validate PRD4.3
+on:
+  push:
+    branches: [PRD4.3]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check
+      - name: PRD4 domain regressions
+        run: npm test
+      - name: PRD4.1-4.3 functional contracts
+        run: node --test tests/prd41.test.mjs tests/prd42.test.mjs tests/prd43.test.mjs
+      - name: Chromium complete user journeys
+        run: |
+          npm install --no-save playwright@1.56.0
+          npx playwright install --with-deps chromium
+          nohup python3 -m http.server 8080 --directory dist > /tmp/prd43-http.log 2>&1 &
+          timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
+          node browser-tests/prd43-smoke.mjs
