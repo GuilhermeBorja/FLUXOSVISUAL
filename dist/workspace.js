@@ -145,12 +145,15 @@ function itemContextLabel(item) {
 
 function noticeMarkup() {
   if (!ui.notice) return "";
-  return `<div class="notice ${ui.noticeKind === "error" ? "error" : ""}" role="${ui.noticeKind === "error" ? "alert" : "status"}">${escapeHtml(ui.notice)}<button class="icon-button" data-action="dismiss-notice" aria-label="Fechar aviso">${icon("x")}</button></div>`;
+  const undo=ui.prd43Undo && ui.noticeKind!=="error"
+    ? '<button type="button" class="button quiet prd43-undo-button" data-action="prd43-undo">Desfazer</button>' : "";
+  return `<div class="notice ${ui.noticeKind === "error" ? "error" : ""} prd43-notice" role="${ui.noticeKind === "error" ? "alert" : "status"}">${escapeHtml(ui.notice)}${undo}<button class="icon-button" data-action="dismiss-notice" aria-label="Fechar aviso">${icon("x")}</button></div>`;
 }
 
 function notify(message, kind = "success") {
   ui.notice = message;
   ui.noticeKind = kind;
+  if(kind==="error")ui.prd43Undo=null;
   const target = document.querySelector("#noticeRoot");
   if (target) { target.innerHTML = noticeMarkup(); mountIcons(); }
 }
@@ -862,11 +865,11 @@ function mountGraph(items) {
     onSelect: (id) => openItem(id),
     onRelation: (relation) => { ui.selectedRelationId=relation.id; notify("Relação selecionada. Pressione Delete para excluir."); },
     onCreateRelation: (sourceId,targetId)=>{
-      try { createRelation(sourceId,targetId,"TI"); saveState();notify("Precedência TI criada.");render(); }
+      try { const relation=createRelation(sourceId,targetId,"TI"); saveState();ui.prd43Undo={type:"create-ti",relationId:relation.id};notify("Precedência TI criada.");render(); }
       catch(error){notify(error.message,"error");}
     },
     onDeleteRelation: (id)=>{
-      try {const rel=state.relations.find(r=>r.id===id);if(!rel||rel.relationType!=="TI")throw new Error("Selecione uma TI para remover.");ui.lastDeletedRelation={sourceId:rel.sourceId,targetId:rel.targetId};removeRelation(id);saveState();notify("Relação TI removida. Use Desfazer para recuperá-la.");render();}
+      try {const rel=state.relations.find(r=>r.id===id);if(!rel||rel.relationType!=="TI")throw new Error("Selecione uma TI para remover.");ui.lastDeletedRelation={sourceId:rel.sourceId,targetId:rel.targetId};ui.prd43Undo={type:"delete-ti",relation:{sourceId:rel.sourceId,targetId:rel.targetId,lagDays:rel.lagDays,description:rel.description}};removeRelation(id);saveState();notify("Relação TI removida.");render();}
       catch(error){notify(error.message,"error");}
     },
     onPositions: (positions) => { ui.positions[layoutKey()] = positions; state.graphPositions = ui.positions; saveState(); },
@@ -1467,7 +1470,37 @@ function bindWorkspace() {
     if (button.dataset.paneFocus) {
       prd41FocusedPane = prd41FocusedPane === button.dataset.paneFocus ? "" : button.dataset.paneFocus;
       prd41ApplyPaneLayout();
+      requestAnimationFrame(prd43DrawGanttRelations);
       return;
+    }
+    if (button.dataset.action==="select-gantt-ti") {prd43ShowGanttRelation(button.dataset.ganttTi);return;}
+    if (button.dataset.action==="prd43-close-ti") {prd43ShowGanttRelation("");return;}
+    if (button.dataset.action==="prd43-update-ti") {
+      const rel=state.relations.find(entry=>entry.id===prd43SelectedTiId);
+      if(!rel){notify("Selecione uma relação TI.","error");return;}
+      try{
+        const origin=document.querySelector("#prd43TiSource")?.value,destination=document.querySelector("#prd43TiTarget")?.value;
+        updateRelation(rel.id,{sourceId:origin,targetId:destination,relationType:"TI",lagDays:rel.lagDays,description:rel.description});
+        saveState();ui.prd43Undo=null;notify("TI alterada: "+getItem(origin).title+" → "+getItem(destination).title+".");render();
+      }catch(error){notify(error.message,"error");}return;
+    }
+    if (button.dataset.action==="prd43-delete-ti") {
+      const rel=state.relations.find(entry=>entry.id===prd43SelectedTiId);
+      if(!rel){notify("Selecione uma relação TI.","error");return;}
+      try {
+        const undo={type:"delete-ti",relation:{sourceId:rel.sourceId,targetId:rel.targetId,lagDays:rel.lagDays,description:rel.description}};
+        removeRelation(rel.id);prd43SelectedTiId="";saveState();ui.prd43Undo=undo;notify("Relação TI removida.");render();
+      }catch(error){notify(error.message,"error");}return;
+    }
+    if (button.dataset.action==="prd43-undo") {
+      const undo=ui.prd43Undo;ui.prd43Undo=null;
+      if(!undo){notify("Não há alteração para desfazer.","error");return;}
+      try{
+        if(undo.type==="create-ti") removeRelation(undo.relationId);
+        else if(undo.type==="delete-ti")createRelation(undo.relation.sourceId,undo.relation.targetId,"TI",undo.relation.lagDays||0,undo.relation.description||"");
+        else if(undo.type==="restore-item")restoreArchivedItem(undo.itemId);
+        saveState();notify("Alteração desfeita.");render();
+      }catch(error){notify(error.message,"error");}return;
     }
     if (button.dataset.createChild) {
       const parent = getItem(button.dataset.createChild);
@@ -1555,7 +1588,7 @@ function bindWorkspace() {
     else if (action === "clear-filters") { state.filters = {query:"",status:"all",type:"all",owner:"all",organization:"all",sector:"all",state:"all"}; saveState(); render(); }
     else if (action === "logout") { closePanel(); state.currentUserId = ""; saveState(); render(); }
     else if (action === "export") exportVisible();
-    else if (action === "dismiss-notice") { ui.notice = ""; document.querySelector("#noticeRoot").innerHTML = ""; }
+    else if (action === "dismiss-notice") { ui.notice = "";ui.prd43Undo=null; document.querySelector("#noticeRoot").innerHTML = ""; }
     else if (action === "toggle-bulk") { ui.bulkOpen = !ui.bulkOpen; render(); }
     else if (action === "zoom-in") graphInstance?.zoom(1.2);
     else if (action === "zoom-out") graphInstance?.zoom(1/1.2);
