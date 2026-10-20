@@ -79,7 +79,7 @@ try {
   });
   assert.ok(layout.buttonBottom<=768&&layout.buttonTop>=0,"save visible without drawer scroll: "+JSON.stringify(layout));
   assert.ok(layout.drawerScroll<=3&&layout.formScroll<=3,"no form-level scrolling: "+JSON.stringify(layout));
-  await page.locator('#panelRoot button[data-action="close-panel"]').click();
+  await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 
   await page.locator('[data-pane-focus="gantt"]').click();
   await page.locator('[data-action="toggle-subitems"]').click();
