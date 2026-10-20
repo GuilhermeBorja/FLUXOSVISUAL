@@ -136,6 +136,7 @@ const FluxosGraph = (() => {
       <svg class="graph-svg" role="group" aria-label="Grafo de processos e suas relações">
         <defs>
           <marker id="graph-arrow" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L9,0L0,4" fill="#a0a7b1"/></marker>
+          <marker id="graph-arrow-reverse" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,-4L9,0L0,4" fill="#168b82"/></marker>
           <marker id="graph-arrow-red" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L9,0L0,4" fill="#cf4047"/></marker>
         </defs>
         <g class="graph-scene">
@@ -246,7 +247,7 @@ const FluxosGraph = (() => {
       propagationTimers.forEach(clearTimeout);
       propagationTimers=[];
       nodeElements.forEach(el=>el.classList.remove("propagation-active","propagation-current","propagation-stop"));
-      edgeElements.forEach(el=>el.classList.remove("propagation-active"));
+      edgeElements.forEach(el=>el.classList.remove("propagation-active","propagation-reverse"));
       svg.querySelectorAll(".prd4-traversal-label").forEach(el=>el.remove());
     }
 
@@ -283,11 +284,17 @@ const FluxosGraph = (() => {
         outgoing.get(link.source.id).push(link.target.id);
         indegree.set(link.target.id,indegree.get(link.target.id)+1);
       }
-      const remaining=new Set(preliminary),sorted=[];
+      const remaining=new Set(preliminary),sorted=[],preferred=[];
       while(remaining.size){
-        let next=preliminary.find(id=>remaining.has(id)&&indegree.get(id)===0);
+        let next=preferred.find(id=>remaining.has(id)&&indegree.get(id)===0)
+          ||preliminary.find(id=>remaining.has(id)&&indegree.get(id)===0);
         if(!next)next=preliminary.find(id=>remaining.has(id)); // invalid legacy graph; never loop infinitely
         sorted.push(next);remaining.delete(next);
+        const pending=preferred.indexOf(next);
+        if(pending>=0)preferred.splice(pending,1);
+        const childPriority=dependencies.filter(link=>link.source.id===next && link.relation.relationType==="contains").map(link=>link.target.id);
+        const temporalPriority=dependencies.filter(link=>link.source.id===next && link.relation.relationType==="TI").map(link=>link.target.id);
+        preferred.unshift(...[...childPriority,...temporalPriority].filter(id=>remaining.has(id)&&!preferred.includes(id)));
         for(const to of outgoing.get(next)){
           indegree.set(to,indegree.get(to)-1);
           levels.set(to,Math.max(levels.get(to),levels.get(next)+1));
@@ -312,8 +319,15 @@ const FluxosGraph = (() => {
         const direct=adjacent.get(from)?.find(edge=>edge.id===to
           && model.links.some(link=>link.relation.id===edge.edgeId && link.relation.relationType==="TI"));
         if(direct && current?.parentId===target?.parentId)return [{nodeId:to,edgeId:direct.edgeId}];
-        // Between different branches, first climb to the immediate parent.
-        const queue=[{id:from,path:[]}],seen=new Set([from]);
+        // On a branch transition first return to the immediate parent. A
+        // downward containment move is not a branch transition.
+        let origin=from,prefix=[];
+        if(current?.parentId && current.parentId!==target?.parentId && target?.parentId!==from){
+          const back=adjacent.get(from)?.find(edge=>edge.id===current.parentId);
+          if(back){prefix=[{nodeId:current.parentId,edgeId:back.edgeId}];origin=current.parentId;}
+        }
+        if(origin===to)return prefix;
+        const queue=[{id:origin,path:prefix}],seen=new Set([origin]);
         while(queue.length){
           const entry=queue.shift();
           const edges=[...(adjacent.get(entry.id)||[])].sort((x,y)=>{
@@ -350,7 +364,10 @@ const FluxosGraph = (() => {
           const nextSteps=previous ? route(previous,id) : [{nodeId:id,edgeId:""}];
           for(const entry of nextSteps){
             if(entry.nodeId===previous)continue;
-            steps.push({nodeIds:[entry.nodeId],edgeIds:entry.edgeId?[entry.edgeId]:[]});
+            const link=entry.edgeId ? model.links.find(link=>link.relation.id===entry.edgeId) : null;
+            const reverse=link && link.target.id===previous && link.source.id===entry.nodeId;
+            steps.push({nodeIds:[entry.nodeId],edgeIds:entry.edgeId?[entry.edgeId]:[],
+              reverseEdgeIds:reverse?[entry.edgeId]:[]});
             previous=entry.nodeId;
           }
         }
@@ -382,7 +399,10 @@ const FluxosGraph = (() => {
           label.textContent=String(animationState.index);
         }
       }
-      for(const id of step.edgeIds)edgeElements.get(id)?.classList.add("propagation-active");
+      for(const id of step.edgeIds){
+        const el=edgeElements.get(id);el?.classList.add("propagation-active");
+        el?.classList.toggle("propagation-reverse",Boolean(step.reverseEdgeIds?.includes(id)));
+      }
       if(animationState.stopAtBlocked && step.nodeIds.some(hasFlowBlocker)){
         animationState.paused=true;
         return;

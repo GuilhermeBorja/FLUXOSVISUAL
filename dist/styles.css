@@ -972,3 +972,5 @@ body.panel-open { overflow: hidden; }
 .prd4-traversal-label {font-size:13px;fill:#155d56;font-weight:700;stroke:var(--surface,#fff);stroke-width:3;paint-order:stroke;pointer-events:none;}
 @media(max-width:800px){.prd4-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:420px){.prd4-summary-card{padding:10px;}.prd4-summary-card strong{font-size:1.2rem;}}
+
+.graph-edge.propagation-reverse .edge-path {marker-end:none;marker-start:url(#graph-arrow-reverse);stroke:#168b82;stroke-width:4;}
