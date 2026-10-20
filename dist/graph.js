@@ -154,7 +154,7 @@ const FluxosGraph = (() => {
               <circle class="node-selection" r="${node.radius + 6}"/>
               <circle class="node-circle" r="${node.radius}" fill="${color.fill}" stroke="${esc(statusColor)}"/>
               <text class="node-number" text-anchor="middle" y="5" fill="${esc(typeColor)}">${esc(number)}</text>
-              <text class="node-title" text-anchor="middle">${lines.map((line, index) => `<tspan x="0" y="${node.radius + 23 + index * 19}">${esc(line)}</tspan>`).join("")}</text>
+              <text class="node-title" text-anchor="middle" xml:space="preserve">${lines.map((line, index) => `<tspan x="0" y="${node.radius + 23 + index * 19}">${esc(line)}</tspan>`).join("")}</text>
               <text class="node-owner" text-anchor="middle" y="${node.radius + 107}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
               <text class="node-status" text-anchor="middle" y="${node.radius + 131}" fill="${esc(statusColor)}">${esc(options.labels.status(node.item))}</text>
               <text class="node-due" text-anchor="middle" y="${node.radius + 148}">Prazo: ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
