@@ -382,7 +382,7 @@ function renderTable(items) {
   ui.bulkSelected ||= new Set();
   const rows = tableRows(items);
   const selectedVisible = rows.filter(({item}) => ui.bulkSelected.has(item.id)).length;
-  return `<div class="table-card">
+  return `${renderPrd4QuickCreate()}<div class="table-card">
     <div class="table-toolbar"><label class="toggle-label"><input type="checkbox" id="showSubitems" ${ui.showSubitems ? "checked" : ""}/>Mostrar subitens</label><label class="toggle-label"><input type="checkbox" id="selectAllRows" ${rows.length && selectedVisible === rows.length ? "checked" : ""}/>Selecionar visíveis</label><span class="secondary">${selectedVisible} selecionados · ${rows.length} linhas</span><button class="button quiet" type="button" data-action="toggle-bulk" ${selectedVisible ? "" : "disabled"}>Editar em lote</button></div>
     ${ui.bulkOpen && selectedVisible ? renderBulkEditor() : ""}
     ${!rows.length ? emptyMarkup() : `<div class="synth-table-wrap"><table class="synth-table"><thead><tr><th><span class="sr-only">Selecionar</span></th><th>ID</th><th>Nome</th><th>Conclusão</th><th>Responsável</th><th>Criação</th><th>Início ideal</th><th>Início real</th><th>Liberada em</th><th>Término ideal</th><th>Término real</th><th>Duração total</th><th>Duração da atividade</th><th>Peso</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
@@ -529,9 +529,26 @@ function renderGraphTree(items) {
   return '<nav class="graph-tree" aria-label="Árvore de itens">' + ownerFilters + '<h3>Navegar itens<small class="tree-hint">Marque caixas para destacar um conjunto</small></h3><div class="graph-tree-list">' + roots.map((item) => visit(item,0)).join("") + '</div></nav>';
 }
 
+function renderPrd4QuickCreate() {
+  if(!canCreateItem(currentUser()))return "";
+  const parent=getItem(ui.selectedItemId), owner=parent?.ownerId||currentUser().id;
+  return `<form id="prd4QuickCreate" class="prd4-quick-create" aria-label="Adicionar atividades">
+    <div class="prd4-quick-top">
+      <label>Nome<input name="title" maxlength="240" placeholder="Nome da atividade" required/></label>
+      <label>Tipo<select name="type">${itemTypes.map(t=>option(t.id,t.label,t.id==="task")).join("")}</select></label>
+      <label>Responsável<select name="ownerId" required>${ownerOptions(owner)}</select></label>
+      <label>Início esperado<input type="date" name="plannedStartAt" value="${today()}" required/></label>
+      <label>Duração (dias)<input type="number" name="plannedDurationDays" value="1" min="0" step="1" required/></label>
+      <button type="submit" class="button primary">${icon("plus")}Adicionar</button>
+    </div>
+    <details><summary>Adicionar vários itens</summary><label>Mais itens, um por linha<textarea name="additionalTitles" rows="3" placeholder="Atividade 2&#10;Atividade 3"></textarea></label></details>
+    ${parent ? `<small class="secondary">Inserindo dentro de: ${escapeHtml(parent.title)}</small>` : ""}
+  </form>`;
+}
+
 function renderGraph(items) {
   const legend = [{signal:"red",label:"Bloqueado / atraso"},{signal:"yellow",label:"Aguardando / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Planejado / cancelado"}];
-  return `<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar">
+  return `${renderPrd4QuickCreate()}<div class="graph-layout"><div class="graph-shell"><div class="graph-toolbar">
     <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map((entry) => option(entry.id,entry.label,ui.grouping === entry.id)).join("")}</select></label>
     <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
     <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
@@ -1084,6 +1101,27 @@ function renderDeletionPanel() {
 }
 
 function bindWorkspace() {
+  app.onsubmit = event => {
+    if(event.target.id!=="prd4QuickCreate")return;
+    event.preventDefault();
+    const data=new FormData(event.target);
+    const names=[String(data.get("title")||"").trim(),...String(data.get("additionalTitles")||"").split("\n").map(v=>v.trim()).filter(Boolean)].filter(Boolean);
+    if(names.length>100){notify("Limite de 100 itens por operação.","error");return;}
+    const saved=JSON.stringify(state);
+    try{
+      const owner=state.users.find(user=>user.id===String(data.get("ownerId")));
+      if(!owner)throw new Error("Selecione um responsável.");
+      let first=null;
+      for(const title of names){
+        const item=createItem({title,type:String(data.get("type")||"task"),ownerId:owner.id,
+          organizationId:owner.organizationId,sectorId:owner.sectorId,state:owner.state,
+          parentId:ui.selectedItemId||"",plannedStartAt:String(data.get("plannedStartAt")||today()),
+          plannedDurationDays:Number(data.get("plannedDurationDays")||0),status:"backlog"});
+        first||=item;
+      }
+      ui.selectedItemId=first?.id||"";saveState();notify(names.length+" item(ns) criado(s).");render();
+    }catch(error){const restored=JSON.parse(saved);for(const key of Object.keys(state))delete state[key];Object.assign(state,restored);notify(error.message,"error");}
+  };
   app.onclick = (event) => {
     const button = event.target.closest("button,[data-action]");
     if (!button || button.closest("#panelRoot")) return;
