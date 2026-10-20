@@ -9,6 +9,8 @@ try {
   await page.goto("http://127.0.0.1:8080",{waitUntil:"networkidle"});
   await page.evaluate(()=>{
     const seed=seedState();seed.setupComplete=true;seed.currentUserId="u_luis";
+    // Isolar a arvore de teste da estrutura demonstrativa do seed.
+    seed.items=[];seed.relations=[];seed.events=[];
     localStorage.setItem("fluxosVisualState.prd4",JSON.stringify(seed));
   });
   await page.reload({waitUntil:"networkidle"});
