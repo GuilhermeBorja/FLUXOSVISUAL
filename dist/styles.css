@@ -1609,3 +1609,8 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 #updateItemForm{grid-template-columns:1fr}
 .prd5-history-filters{grid-template-columns:1fr}
 }
+/* PRD5: títulos do grafo sem compressão visual de palavras. */
+.graph-node .node-title,.graph-node .node-title tspan{stroke:none!important;stroke-width:0!important;word-spacing:2px;letter-spacing:.15px;paint-order:normal}
+.prd5-two-pane .graph-node .node-title{font-size:12px;fill:#243746}
+.prd5-two-pane .graph-node .node-owner{font-size:10px}
+.prd5-two-pane .prd43-gantt-row .gantt-track{overflow:visible}
