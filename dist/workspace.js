@@ -764,7 +764,7 @@ function renderGantt(items) {
     const toggle=row.children?.length?`<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${ui.showSubitems&&!ui.collapsed?.has(item.id)?"Recolher":"Expandir"} subitens">${icon(ui.showSubitems&&!ui.collapsed?.has(item.id)?"chevron-down":"chevron-right")}</button>`:'<span class="tree-spacer"></span>';
     const mayMove=canChangeHierarchy(currentUser(),item);
     const siblingActions=mayMove?`<details class="prd5-gantt-more"><summary title="Organizar ou criar" aria-label="Ações de ${escapeHtml(item.title)}">${icon("ellipsis")}</summary><div class="prd5-gantt-menu">
-      <button data-create-child="${escapeHtml(item.id)}" type="button">Adicionar subitem</button>
+      <button data-action="create" type="button">Criar estrutura</button>
       <button data-order-up="${escapeHtml(item.id)}" type="button">Mover para cima</button><button data-order-down="${escapeHtml(item.id)}" type="button">Mover para baixo</button><button data-indent="${escapeHtml(item.id)}" type="button">Indentar</button>
       ${item.parentId?`<button data-outdent="${escapeHtml(item.id)}" type="button">Recuar</button>`:""}</div></details>`:"";
     return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)}">
@@ -1279,7 +1279,7 @@ function renderItemPanel(item) {
   if (item.type === "approval") tabs.push({id:"approval",label:"Aprovação"});
   const canAddChild = editable && canCreateItem(currentUser(),{...item,createdBy:currentUser().id}) && gpoDecision(currentUser(),"create_relation",item)===true;
   let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title,
-    (canAddChild ? '<button class="button quiet" data-action="new-subitem">' + icon("plus") + 'Criar subitem</button>' : "")
+    ""
     + (editable ? '<button class="button quiet" data-action="archive-item">' + icon("archive") + 'Arquivar</button>' : "")
     + (canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""));
   html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + '</span>' + (prd43ProgressBasis(item)?'<small class="prd43-progress-basis">'+escapeHtml(prd43ProgressBasis(item))+' · '+Math.round(Number(item.progressPercent||0))+'% consolidado</small>':"") + '</div>';
