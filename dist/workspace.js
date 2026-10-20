@@ -568,9 +568,10 @@ function applyTableColumnLayout() {
   if(!available) return;
   const manuallyHidden=new Set(state.hiddenTableColumns || []);
   const pinned=new Set(state.tableColumnPinned || []);
-  const mandatory=new Set(["select","name","status","owner","due","actions"]);
+  const compact=available<730;
+  const mandatory=new Set(compact?["select","name","actions"]:["select","name","status","owner","due","actions"]);
   const visible=new Set();
-  const widthFor=(key)=>tableColumnMinimums[key] || 90;
+  const widthFor=(key)=>compact?(key==="select"?28:key==="actions"?37:Math.max(180,available-65)):(tableColumnMinimums[key]||90);
   let occupied=0;
   // Keep the identity, item title and actions available at every viewport.
   for(const key of tableColumnPriority){
@@ -579,6 +580,7 @@ function applyTableColumnLayout() {
     }
   }
   for(const key of tableColumnPriority){
+    if(compact && !mandatory.has(key))continue;
     if(visible.has(key)||manuallyHidden.has(key))continue;
     const width=widthFor(key);
     if(occupied+width<=available || pinned.has(key)){
@@ -596,6 +598,7 @@ function applyTableColumnLayout() {
   }
   const autoHidden=new Set(tableColumnOptions.map(([key])=>key).filter(key=>!visible.has(key)&&!manuallyHidden.has(key)));
   ui.autoHiddenTableColumns=autoHidden;
+  table.classList.toggle("prd44-compact-table",compact);
   const headers=[...table.querySelectorAll("thead th")];
   const weights=tableColumnOptions.map(([key])=>visible.has(key)?widthFor(key):0);
   const sum=weights.reduce((a,b)=>a+b,0)||1;
@@ -637,7 +640,7 @@ function renderTable(items) {
     ${ui.bulkOpen && selectedVisible ? renderBulkEditor() : ""}
     ${!rows.length ? emptyMarkup() : `<div class="synth-table-wrap"><table class="synth-table"><thead><tr><th><span class="sr-only">Selecionar</span></th><th>ID</th><th>Nome</th><th>Conclusão</th><th>Responsável</th><th>Criação</th><th>Início projetado</th><th>Início real</th><th>Liberada em</th><th>Término projetado</th><th>Término real</th><th>Duração total</th><th>Duração da atividade</th><th>Peso</th><th>Status</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>
       ${rows.map(({item, depth, children}) => `<tr data-row="${escapeHtml(item.id)}" data-depth="${depth}" data-type="${escapeHtml(item.type)}" data-row-draggable="${canChangeHierarchy(currentUser(),item) ? "true" : "false"}" draggable="${canChangeHierarchy(currentUser(),item)}" class="${item.id === ui.selectedItemId ? "selected" : ""} ${depth ? "child-row" : "root-row"}" style="--row-fill:${rowFillColor(item,depth)}">
-        <td><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" aria-label="Selecionar ${escapeHtml(item.title)}" ${ui.bulkSelected.has(item.id) ? "checked" : ""}/></td><td class="id-cell">${shortId(item)}</td><td class="title-cell"><div class="tree-cell" style="--depth:${Math.min(depth, 8)}">${children.length ? `<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${!ui.showSubitems || ui.collapsed?.has(item.id) ? "Expandir" : "Recolher"} subitens" aria-expanded="${ui.showSubitems && !ui.collapsed?.has(item.id)}">${icon(ui.showSubitems && !ui.collapsed?.has(item.id) ? "chevron-down" : "chevron-right")}</button>` : '<span class="tree-spacer"></span>'}<button class="item-title" data-select="${escapeHtml(item.id)}">${escapeHtml(item.title)}<span>${icon(itemTypeConfig(item.type,item.organizationId).icon)}${escapeHtml(itemTypeConfig(item.type,item.organizationId).label)}${children.length ? ` · ${children.length} subitens` : ""}</span></button>${canEditItem(currentUser(),item) && canCreateItem(currentUser(),{...item,createdBy:currentUser().id}) && gpoDecision(currentUser(),"create_relation",item)===true ?
+        <td><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" aria-label="Selecionar ${escapeHtml(item.title)}" ${ui.bulkSelected.has(item.id) ? "checked" : ""}/></td><td class="id-cell">${shortId(item)}</td><td class="title-cell"><div class="tree-cell" style="--depth:${Math.min(depth, 8)}">${children.length ? `<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${!ui.showSubitems || ui.collapsed?.has(item.id) ? "Expandir" : "Recolher"} subitens" aria-expanded="${ui.showSubitems && !ui.collapsed?.has(item.id)}">${icon(ui.showSubitems && !ui.collapsed?.has(item.id) ? "chevron-down" : "chevron-right")}</button>` : '<span class="tree-spacer"></span>'}<button class="item-title" data-select="${escapeHtml(item.id)}">${escapeHtml(item.title)}<span>${icon(itemTypeConfig(item.type,item.organizationId).icon)}${escapeHtml(itemTypeConfig(item.type,item.organizationId).label)}${children.length ? ` · ${children.length} subitens` : ""}</span></button><span class="prd44-row-facts" title="Status, responsável e término projetado"><span class="prd44-fact-status ${signalOf(item)}">${escapeHtml(statusDisplayLabel(item))}</span><span class="prd44-fact-owner">${escapeHtml(userName(item.ownerId))}</span><time class="prd44-fact-due">${dateCell(item.dueAt)}</time></span>${canEditItem(currentUser(),item) && canCreateItem(currentUser(),{...item,createdBy:currentUser().id}) && gpoDecision(currentUser(),"create_relation",item)===true ?
           `<button class="prd42-add-child" type="button" data-create-child="${escapeHtml(item.id)}" title="Criar subitem de ${escapeHtml(item.title)}" aria-label="Adicionar subitem de ${escapeHtml(item.title)}">${icon("plus")}</button>` : ""}</div></td>
         <td>${progressCell(item)}</td><td>${escapeHtml(userName(item.ownerId))}</td><td class="date-cell">${dateCell(item.createdAt, true)}</td><td class="date-cell">${dateCell(item.plannedStartAt)}</td><td class="date-cell">${dateCell(item.actualStartAt, true)}</td><td class="date-cell">${dateCell(activityStartAt(item), true)}</td><td class="date-cell ${isOverdue(item) ? "overdue" : ""}">${dateCell(item.dueAt)}</td><td class="date-cell">${dateCell(item.completedAt, true)}</td><td class="duration-cell">${elapsedLabel(item)}</td><td class="duration-cell">${activityDurationLabel(item)}</td><td class="weight-cell">${Number(item.weight ?? 1)}</td><td>${statusBadge(item)}</td><td><div class="row-actions prd42-row-actions"><button class="icon-button" data-select="${escapeHtml(item.id)}" title="Editar item" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>
         <details class="prd42-row-more"><summary aria-label="Mais ações para ${escapeHtml(item.title)}" title="Mais ações">${icon("ellipsis")}</summary>
