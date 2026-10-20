@@ -81,8 +81,9 @@ try {
   assert.ok(layout.drawerScroll<=3&&layout.formScroll<=3,"no form-level scrolling: "+JSON.stringify(layout));
   await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 
+  // Reabrir todos os ramos para validar a conexão no próprio Gantt.
+  await page.evaluate(()=>{ui.showSubitems=true;ui.collapsed=new Set();render();});
   await page.locator('[data-pane-focus="gantt"]').click();
-  await page.locator('[data-action="toggle-subitems"]').click();
   const handle=page.locator('[data-gantt-handle="'+ids.b+'"]');
   await handle.scrollIntoViewIfNeeded();
   await handle.click();
