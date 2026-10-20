@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/build-vendor.mjs && node scripts/build-version.mjs",
     "check": "node --check dist/app.js && node --check dist/graph.js && node --check dist/workspace.js",
-    "test": "node --test tests/prd5.test.mjs",
+    "test": "node --test tests/prd5.test.mjs tests/prd4.test.mjs tests/prd41.test.mjs tests/prd42.test.mjs tests/prd43.test.mjs",
     "test:legacy": "node --test tests/*.test.mjs"
   },
   "dependencies": {
