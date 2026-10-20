@@ -47,7 +47,9 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     environment:
-      name: github-pages
+      # PRD5 usa um ambiente especifico para nao conflitar com a restricao de branch do antigo github-pages.
+      # A publicacao continua usando o mesmo site GitHub Pages do repositorio.
+      name: prd5-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy PRD5 to GitHub Pages
