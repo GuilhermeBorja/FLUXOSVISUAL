@@ -1335,7 +1335,9 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   validateItemInput(input,item);
   if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro das regras GPO.");
   const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && !entry.archivedAt);
-  if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
+  const calculatedFields = ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays"];
+  const attemptedChanges = calculatedFields.filter(field => input[field] !== undefined && input[field] !== item[field]);
+  if (hasActiveChildren && attemptedChanges.length) throw new Error("Estas propriedades do pai são calculadas pelos filhos e não podem ser editadas: " + attemptedChanges.join(", ") + ".");
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
   // M-03: Em análise e Em correção só fazem sentido no fluxo de aprovação. Sem estas travas, uma
