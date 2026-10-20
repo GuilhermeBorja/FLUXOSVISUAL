@@ -83,33 +83,46 @@ function buildLabel() {
 }
 
 function signalLabel(item) {
-  if (isBlocked(item)) return "Bloqueado";
-  if (item?.inheritedBlockedFrom?.length) return statusDisplayLabel(item)+" · impedimento";
-  if (isOverdue(item)) return "Atrasado";
+  const alerts=prd43DescendantAlerts(item);
+  if(isBlocked(item))return "Bloqueado";
+  if(alerts.blocked)return statusDisplayLabel(item)+" · "+alerts.blocked+" bloqueado(s)";
+  if(item?.inheritedBlockedFrom?.length)return statusDisplayLabel(item)+" · impedimento";
+  if(isOverdue(item)||alerts.late)return statusDisplayLabel(item)+" · prazo em atraso";
+  if(alerts.approvals)return statusDisplayLabel(item)+" · aprovação pendente";
+  if(isAtRisk(item)||alerts.risk)return statusDisplayLabel(item)+" · risco";
   return statusDisplayLabel(item);
 }
 
-const statusDefaults = {
-  backlog:{icon:"list-todo",color:"#687780"}, ready:{icon:"circle-play",color:"#287d62"},
-  in_progress:{icon:"loader-circle",color:"#2679a5"}, waiting:{icon:"clock-3",color:"#b58a2a"}, blocked:{icon:"ban",color:"#c2474d"},
-  under_review:{icon:"stamp",color:"#7561a8"},
-  correction:{icon:"wrench",color:"#b56c2a"}, done:{icon:"check-circle-2",color:"#287d62"},
-  cancelled:{icon:"circle-x",color:"#687780"}
+const prd43Colors={gray:"#596872",blue:"#238254",green:"#115e38",yellow:"#9f6a00",red:"#b42332"};
+const statusDefaults={
+  backlog:{icon:"list-todo",color:prd43Colors.gray},ready:{icon:"circle-play",color:prd43Colors.blue},
+  in_progress:{icon:"loader-circle",color:prd43Colors.blue},waiting:{icon:"clock-3",color:prd43Colors.yellow},
+  blocked:{icon:"ban",color:prd43Colors.red},under_review:{icon:"stamp",color:prd43Colors.yellow},
+  correction:{icon:"wrench",color:prd43Colors.yellow},done:{icon:"check-circle-2",color:prd43Colors.green},
+  cancelled:{icon:"circle-x",color:prd43Colors.gray}
 };
-function statusConfig(id) { return {...(statusDefaults[id] || {icon:"circle-help",color:"#687780"}),...(state.statusSettings?.[id] || {})}; }
+function statusConfig(id){
+  const signal=id==="blocked"?"red":id==="done"?"green":["in_progress","ready"].includes(id)?"blue":["waiting","under_review","correction"].includes(id)?"yellow":"gray";
+  return {...(statusDefaults[id]||{icon:"circle-help"}),...(state.statusSettings?.[id]||{}),color:prd43Colors[signal]};
+}
 // R2-14: "Em análise" e "Em correção" ficam fora das escolhas comuns, mas um registro que já
 // está em um desses estados precisa continuar representável; sem isso o seletor cairia na
 // primeira opção e a gravação alteraria o status sem que o usuário percebesse.
 function statusChoices(currentStatus) { return statusCatalog.filter((status) => !["under_review","correction"].includes(status.id) || status.id === currentStatus); }
 function statusOption(status, selected = false) { return `<option value="${escapeHtml(status.id)}" style="color:${escapeHtml(statusConfig(status.id).color)}" ${selected ? "selected" : ""}>${escapeHtml(status.label)}</option>`; }
 
-function statusBadge(item) {
-  const delta = dueDeltaDays(item), config=statusConfig(item.status);
-  const blockedMark = item.inheritedBlockedFrom?.length ? `<span class="overdue-mark blocked-mark" title="Impedimento herdado: ${escapeHtml(item.inheritedBlockedFrom.map(id=>getItem(id)?.title||id).join(", "))}">· impedimento herdado</span>` : "";
-  const indicator = isOverdue(item) ? `<span class="overdue-mark" title="Prazo vencido há ${Math.abs(delta)} dias">· ${Math.abs(delta)}d atraso</span>` : isAtRisk(item) ? `<span class="overdue-mark" title="Prazo a ${delta} dias; limite de risco ${Number(state.riskThresholdDays) || 3} dias">· risco ${delta}d</span>` : "";
-  return `<span class="status-badge ${signalOf(item)}" style="--status-color:${escapeHtml(config.color)}"><span class="status-symbol">${icon(config.icon)}</span>${escapeHtml(statusDisplayLabel(item))}${blockedMark}${indicator}</span>`;
+function statusBadge(item){
+  const signal=signalOf(item),config=statusConfig(item.status),delta=dueDeltaDays(item);
+  const alerts=prd43DescendantAlerts(item),flags=[];
+  if(alerts.blocked)flags.push(alerts.blocked+" bloqueado"+(alerts.blocked===1?"":"s"));
+  if(alerts.late)flags.push(alerts.late+" atrasado"+(alerts.late===1?"":"s"));
+  if(alerts.approvals)flags.push(alerts.approvals+" aprovação pendente");
+  if(!flags.length&&item.inheritedBlockedFrom?.length)flags.push("impedimento herdado");
+  if(!flags.length&&isOverdue(item))flags.push(Math.abs(delta)+"d de atraso");
+  if(!flags.length&&isAtRisk(item))flags.push("risco");
+  const detail=flags.length?`<span class="prd43-status-alert" title="${escapeHtml(alerts.source||flags.join(" · "))}">${escapeHtml(flags.join(" · "))}</span>`:"";
+  return `<span class="status-badge ${signal}" style="--status-color:${escapeHtml(prd43Colors[signal])}" title="${escapeHtml(signalLabel(item))}"><span class="status-symbol">${icon(config.icon)}</span><span class="prd43-status-name">${escapeHtml(statusDisplayLabel(item))}</span>${detail}</span>`;
 }
-
 function dateCell(value, withTime = false) {
   if (!value) return "—";
   return withTime ? formatDateTime(value) : formatDate(value.slice(0, 10));
@@ -792,7 +805,7 @@ function renderPrd4Overview(items){
     {label:"Atrasos",value:late.length,description:"Prazos vencidos",focus:late[0]?.id||""},
     {label:"Aprovações",value:approvals.length,description:"Aguardando decisão ou correção",focus:approvals[0]?.id||""}];
   return `<section class="prd42-summary" aria-label="Indicadores de acompanhamento">
-    ${options.map(item=>`<button type="button" class="prd42-indicator" ${item.focus ? `data-prd4-focus="${escapeHtml(item.focus)}"` : "disabled"} title="${escapeHtml(item.description)}">
+    ${options.map(item=>`<button type="button" class="prd42-indicator ${item.value && item.label==='Impedimentos'?'prd43-indicator-blocked':item.value && item.label==='Atrasos'?'prd43-indicator-risk':''}" ${item.focus ? `data-prd4-focus="${escapeHtml(item.focus)}"` : "disabled"} title="${escapeHtml(item.description)}">
       <strong>${item.value}</strong><span>${item.label}</span></button>`).join("")}
   </section>`;
 }
@@ -834,7 +847,7 @@ function mountGraph(items) {
     labels: {
       owner: userName, organization: orgName, relation: (id) => labelOf(relationTypes, id),
       type: (item) => itemTypeConfig(item.type,item.organizationId).label, typeColor: (item) => itemTypeConfig(item.type,item.organizationId).color, status: (item) => signalLabel(item),
-      signal: signalOf, statusColor: (item) => statusConfig(item.status).color, duration: elapsedLabel, ownerTimer: ownerElapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
+      signal: signalOf, statusColor: (item) => prd43Colors[signalOf(item)], duration: elapsedLabel, ownerTimer: ownerElapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
       progress: (item) => Math.round(Number(item.progressPercent || 0)),
       expected: (item) => forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
       deviation: (item) => {
