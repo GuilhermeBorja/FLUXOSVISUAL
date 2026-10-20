@@ -879,11 +879,35 @@ function isAtRisk(item) {
   return daysLeft <= (Number(state.riskThresholdDays) || 3) && Number(item.progressPercent || 0) < 75;
 }
 
+// A gravidade visual dos pais reflete a pior excecao dos descendentes,
+ // sem sobrescrever status, percentual consolidado ou datas de planejamento.
+function prd43DescendantAlerts(item) {
+  if (!item) return {blocked:0,late:0,risk:0,approvals:0,source:""};
+  const queue=[item.id],seen=new Set(queue),counts={blocked:0,late:0,risk:0,approvals:0,source:""};
+  while(queue.length){
+    const parentId=queue.shift();
+    for(const child of state.items){
+      if(child.parentId!==parentId||child.archivedAt||seen.has(child.id))continue;
+      seen.add(child.id);queue.push(child.id);
+      const blocked=child.status==="blocked"||Boolean(child.inheritedBlockedFrom?.length);
+      const late=!blocked && isOverdue(child);
+      const approval=child.type==="approval"&&["under_review","correction"].includes(child.status);
+      if(blocked){counts.blocked++;if(!counts.source)counts.source=child.title;}
+      else if(late){counts.late++;if(!counts.source)counts.source=child.title;}
+      else if(approval){counts.approvals++;if(!counts.source)counts.source=child.title;}
+      else if(isAtRisk(child))counts.risk++;
+    }
+  }
+  return counts;
+}
 function signalOf(item) {
-  if (isBlocked(item) || isOverdue(item)) return "red";
-  if (completeStatus(item.status)) return "green";
-  if (["in_progress"].includes(item.status)) return "blue";
-  if (["waiting", "under_review", "ready", "correction"].includes(item.status) || isAtRisk(item)) return "yellow";
+  if(!item)return "gray";
+  const alerts=prd43DescendantAlerts(item);
+  if(isBlocked(item)||alerts.blocked)return "red";
+  if(isOverdue(item)||isAtRisk(item)||alerts.late||alerts.risk||alerts.approvals
+      ||["waiting","under_review","correction"].includes(item.status))return "yellow";
+  if(completeStatus(item.status))return "green";
+  if(item.status==="in_progress"||item.status==="ready")return "blue";
   return "gray";
 }
 
