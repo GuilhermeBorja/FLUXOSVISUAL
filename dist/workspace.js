@@ -420,12 +420,12 @@ function renderColumnSettings() {
 // Adaptive sizing uses the available space rather than old persisted pixel widths.
 // Manual visibility preferences remain separate from columns hidden temporarily to fit.
 const tableColumnMinimums = {
-  select:38,id:65,name:250,progress:90,owner:105,created:105,start:105,
+  select:32,id:55,name:185,progress:78,owner:95,created:105,start:105,
   actualStart:100,released:105,due:110,completed:105,elapsed:96,
-  activityDuration:110,weight:58,status:158,actions:142
+  activityDuration:110,weight:58,status:105,actions:68
 };
-const tableColumnPriority = ["select","id","name","actions","status","progress","owner",
-  "due","start","elapsed","created","weight","released","completed","actualStart","activityDuration"];
+const tableColumnPriority = ["select","name","status","actions","owner","progress",
+  "due","start","id","elapsed","weight","created","released","completed","actualStart","activityDuration"];
 
 function applyTableColumnLayout() {
   const table=document.querySelector(".synth-table");
@@ -435,7 +435,7 @@ function applyTableColumnLayout() {
   if(!available) return;
   const manuallyHidden=new Set(state.hiddenTableColumns || []);
   const pinned=new Set(state.tableColumnPinned || []);
-  const mandatory=new Set(["select","id","name","actions"]);
+  const mandatory=new Set(["select","name","status","actions"]);
   const visible=new Set();
   const widthFor=(key)=>tableColumnMinimums[key] || 90;
   let occupied=0;
