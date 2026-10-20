@@ -112,7 +112,7 @@ test("PRD4: cadastro contextual preserva lotes, tipo, responsavel, inicio e dura
   for(const name of ["createItemForm","additionalTitles","quickSteps","plannedDurationDays","plannedStartAt","ownerId","type"])
     assert.ok(workspace.includes(name),name);
   assert.doesNotMatch(workspace,/id="prd4QuickCreate"/);
-  assert.match(workspace,/additionalTitles\.length > 99/);
+  assert.match(workspace,/additionalTitles\.length\s*>\s*99/);
 });
 
 test("PRD4: graph tem conector independente, exclusao Delete e animacao pausavel",()=>{
