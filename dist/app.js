@@ -263,6 +263,9 @@ function loadState() {
           item.baselineStartAt ||= item.plannedStartAt || "";
           item.baselineDueAt ||= item.dueAt || inclusiveFinishDate(item.baselineStartAt || item.plannedStartAt || today(), item.plannedDurationDays || 0);
           item.replannedDueAt ??= "";
+          // PRD4.2: meta vigente separada da baseline e da projeção calculada.
+          item.targetStartAt ??= "";
+          item.targetDueAt ??= "";
           if (item.status === "approved") item.status = "done";
           if (item.status === "rejected") item.status = "correction";
           item.progressPercent ??= completeStatus(item.status) ? 100 : item.status === "in_progress" ? 50 : 0;
@@ -482,6 +485,8 @@ function createSeedItem(base, input) {
     baselineStartAt: input.plannedStartAt || today(),
     baselineDueAt: input.baselineDueAt || input.dueAt || inclusiveFinishDate(input.plannedStartAt || today(), itemDurationDays(input)),
     replannedDueAt: "",
+    targetStartAt: input.targetStartAt || "",
+    targetDueAt: input.targetDueAt || "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (["done","cancelled"].includes(input.status) ? 100 : 0)),
     completedAt: completeStatus(input.status) ? nowIso() : "",
@@ -922,6 +927,8 @@ function createItem(input) {
     baselineStartAt: input.plannedStartAt || today(),
     baselineDueAt: input.baselineDueAt || input.dueAt || inclusiveFinishDate(input.plannedStartAt || today(), itemDurationDays(input)),
     replannedDueAt: "",
+    targetStartAt: input.targetStartAt || "",
+    targetDueAt: input.targetDueAt || "",
     weight: Number(input.weight ?? 1),
     progressPercent: Number(input.progressPercent ?? (completeStatus(input.status) ? 100 : 0)),
     completedAt: completeStatus(input.status) ? nowIso() : "",
@@ -1298,6 +1305,12 @@ function validateItemInput(input, existing = null) {
   if (input.progressPercent !== undefined && (!Number.isFinite(Number(input.progressPercent)) || Number(input.progressPercent) < 0 || Number(input.progressPercent) > 100)) throw new Error("O percentual deve ficar entre 0 e 100.");
   if (input.plannedDurationDays !== undefined && (!Number.isInteger(Number(input.plannedDurationDays)) || Number(input.plannedDurationDays) < 0)) throw new Error("A duração deve ser um número inteiro de dias corridos igual ou maior que zero.");
   if (input.replannedDueAt && (!/^\d{4}-\d{2}-\d{2}$/.test(input.replannedDueAt) || !Number.isFinite(new Date(input.replannedDueAt + "T12:00:00").getTime()))) throw new Error("Informe uma data válida para a repactuação.");
+  for (const field of ["targetStartAt","targetDueAt"]) {
+    if (input[field] && (!/^\d{4}-\d{2}-\d{2}$/.test(input[field]) || !Number.isFinite(new Date(input[field] + "T12:00:00").getTime()))) throw new Error("Informe uma data-meta válida.");
+  }
+  const targetStart = input.targetStartAt || existing?.targetStartAt || existing?.baselineStartAt || "";
+  const targetEnd = input.targetDueAt || existing?.targetDueAt || existing?.baselineDueAt || "";
+  if (targetStart && targetEnd && targetEnd < targetStart) throw new Error("O término-meta não pode ser anterior ao início-meta.");
   for (const field of ["plannedStartAt", "dueAt"]) {
     if (input[field] && (!/^\d{4}-\d{2}-\d{2}$/.test(input[field]) || !Number.isFinite(new Date(`${input[field]}T12:00:00`).getTime()))) throw new Error("Informe uma data válida.");
   }
@@ -1339,14 +1352,14 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (complete) input = { ...input, progressPercent: 100 };
   if (input.status === "cancelled") input = { ...input, progressPercent: item.progressPercent ?? 0 };
   if (wasComplete && complete && ((input.plannedStartAt ?? item.plannedStartAt) !== item.plannedStartAt || (input.dueAt ?? item.dueAt) !== item.dueAt)) throw new Error("As datas previstas ficam bloqueadas após a conclusão.");
-  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",replannedDueAt:"replanned_due_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
+  const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",replannedDueAt:"replanned_due_changed",targetStartAt:"target_start_changed",targetDueAt:"target_due_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
   // Preflight operation-specific permissions before mutating any field. Without
   // this pass, a denied date/weight change could leave earlier fields updated.
   for (const field of Object.keys(fields)) {
     const rawNext = input[field] ?? item[field];
     const next = ["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
     if (next === item[field]) continue;
-    const operation = field === "ownerId" ? "change_owner" : ["dueAt","plannedStartAt","plannedDurationDays","replannedDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
+    const operation = field === "ownerId" ? "change_owner" : ["dueAt","plannedStartAt","plannedDurationDays","replannedDueAt","targetStartAt","targetDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
     if (operation && gpoDecision(user,operation,item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
   }
   let changed = false;
@@ -1354,7 +1367,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
     const rawNext = input[field] ?? item[field];
     const next = ["weight","plannedDurationDays"].includes(field) || (field === "progressPercent" && rawNext !== null) ? Number(rawNext) : rawNext;
     if (next === item[field]) continue;
-    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt","plannedDurationDays","replannedDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
+    const operation = field === "ownerId" ? "change_owner" : ["dueAt", "plannedStartAt","plannedDurationDays","replannedDueAt","targetStartAt","targetDueAt"].includes(field) ? "change_duration" : field === "weight" ? "change_weight" : "";
     if (operation && gpoDecision(user, operation, item) !== true) throw new Error("O GPO não permite esta alteração neste escopo.");
     createEvent(id,eventType,item[field],next,eventType === "context_changed" ? { organizationId: "Empresa", sectorId: "Setor", state: "UF" }[field] : "",effectiveAt);
     item[field] = next; changed = true;
