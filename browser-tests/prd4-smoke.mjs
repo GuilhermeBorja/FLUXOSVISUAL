@@ -40,6 +40,7 @@ try{
     return {root:root.id,first:first.id,second:second.id};
   });
   await page.locator('[data-node="'+ids.first+'"]').waitFor();
+  await page.locator('[data-node="'+ids.first+'"] .graph-connector').scrollIntoViewIfNeeded();
   const coords=await page.evaluate(({first,second})=>{
     const from=document.querySelector('[data-node="'+first+'"] .graph-connector').getBoundingClientRect();
     const target=document.querySelector('[data-node="'+second+'"] .node-circle').getBoundingClientRect();
