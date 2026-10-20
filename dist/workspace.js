@@ -189,7 +189,7 @@ function prd41LoadPaneWidths() {
     if (data && ["table","graph","gantt"].every(name => Number.isFinite(data[name]) && data[name] >= 12 && data[name] <= 75)
         && Math.abs(data.table + data.graph + data.gantt - 100) < .2) return data;
   } catch {}
-  return {table:34,graph:36,gantt:30};
+  return {table:38,graph:32,gantt:30};
 }
 function prd41SavePaneWidths() {
   try { localStorage.setItem("fluxosVisual.panes.prd41." + currentUser().id, JSON.stringify(prd41PaneWidths)); } catch {}
@@ -475,12 +475,12 @@ function renderColumnSettings() {
 // Adaptive sizing uses the available space rather than old persisted pixel widths.
 // Manual visibility preferences remain separate from columns hidden temporarily to fit.
 const tableColumnMinimums = {
-  select:32,id:55,name:185,progress:78,owner:95,created:105,start:105,
-  actualStart:100,released:105,due:110,completed:105,elapsed:96,
-  activityDuration:110,weight:58,status:105,actions:68
+  select:27,id:48,name:157,progress:73,owner:92,created:93,start:93,
+  actualStart:93,released:93,due:87,completed:93,elapsed:86,
+  activityDuration:96,weight:50,status:108,actions:48
 };
-const tableColumnPriority = ["select","name","status","actions","owner","progress",
-  "due","start","id","elapsed","weight","created","released","completed","actualStart","activityDuration"];
+const tableColumnPriority = ["select","name","status","owner","due","actions","progress",
+  "start","id","elapsed","weight","created","released","completed","actualStart","activityDuration"];
 
 function applyTableColumnLayout() {
   const table=document.querySelector(".synth-table");
@@ -490,7 +490,7 @@ function applyTableColumnLayout() {
   if(!available) return;
   const manuallyHidden=new Set(state.hiddenTableColumns || []);
   const pinned=new Set(state.tableColumnPinned || []);
-  const mandatory=new Set(["select","name","status","actions"]);
+  const mandatory=new Set(["select","name","status","owner","due","actions"]);
   const visible=new Set();
   const widthFor=(key)=>tableColumnMinimums[key] || 90;
   let occupied=0;
