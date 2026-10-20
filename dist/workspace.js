@@ -1921,6 +1921,7 @@ function bindPanel() {
       const restored=JSON.parse(snapshot);for(const key of Object.keys(state))delete state[key];Object.assign(state,restored);
       throw error;
     }
+    if(quickSteps.length){ui.showSubitems=true;ui.collapsed ||= new Set();ui.collapsed.delete(item.id);}
     ui.selectedItemId=item.id;ui.panel="item";ui.panelTab="details";saveState();
     notify(`Criado: ${item.title}${quickSteps.length?" + "+quickSteps.length+" subitens":""}${sequence&&quickSteps.length>1?" · "+(quickSteps.length-1)+" relações TI":""}.`);
     render();
