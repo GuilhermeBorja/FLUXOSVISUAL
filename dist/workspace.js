@@ -1873,7 +1873,8 @@ function itemInput(form) {
   // O formulário de metas e responsável não pode reenviar cópias defasadas
   // desses valores e ser confundido com uma tentativa de alteração manual.
   if (existing && state.items.some(child=>child.parentId===existing.id && !child.archivedAt)) {
-    for (const field of ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays"]) delete result[field];
+    for (const field of ["progressPercent","plannedStartAt","dueAt","plannedDurationDays"]) delete result[field];
+    result.status = existing.status; // preservar inclusive Concluido ao editar meta ou responsavel
   }
   return result;
 }
