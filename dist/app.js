@@ -5,22 +5,21 @@ const statusCatalog = [
   { id: "ready", label: "Liberado para execução" },
   { id: "in_progress", label: "Em execução" },
   { id: "waiting", label: "Aguardando" },
+  { id: "blocked", label: "Bloqueado" },
   { id: "under_review", label: "Em análise" },
   { id: "correction", label: "Em correção" },
   { id: "done", label: "Concluído" },
   { id: "cancelled", label: "Cancelado" },
 ];
 
-// M-05: "Bloqueado" deixou de ser status operacional e passou a ser indicador (item.blocked).
-// O id legado continua rotulado para que eventos antigos sigam legíveis no histórico.
+// PRD4: Bloqueado e um status operacional; alertas herdados sao separados do status.
 const legacyStatusLabels = { blocked: "Bloqueado" };
-function isBlocked(item) { return item?.blocked === true && !["done","cancelled"].includes(item.status); }
+function isBlocked(item) { return item?.status === "blocked"; }
 // Entradas antigas (modelos, importações, dados salvos) que ainda tragam status "blocked" viram
 // o indicador, sem inventar progresso: com avanço > 0 o item segue em execução; senão, aguardando.
-function normalizeLegacyBlocked(input, fallbackStatus = "waiting") {
-  if (input?.status !== "blocked") return input;
-  const resumed = Number(input.progressPercent ?? 0) > 0 ? "in_progress" : fallbackStatus;
-  return { ...input, status: resumed, blocked: true, blockedReason: String(input.blockedReason || "").trim() || "Migrado do status Bloqueado" };
+function normalizeLegacyBlocked(input) {
+  if(input?.blocked === true && input.status !== "done" && input.status !== "cancelled") return {...input,status:"blocked"};
+  return input;
 }
 
 const itemTypes = [
@@ -30,7 +29,6 @@ const itemTypes = [
   { id: "substage", label: "Subetapa", icon: "list-tree", color: "#8b77b5" },
   { id: "task", label: "Tarefa", icon: "square-check", color: "#287d62" },
   { id: "approval", label: "Aprovação", icon: "stamp", color: "#bd8b22" },
-  { id: "blocker", label: "Bloqueio", icon: "circle-alert", color: "#c2474d" },
   { id: "deliverable", label: "Entrega", icon: "package-check", color: "#2679a5" },
   { id: "milestone", label: "Marco", icon: "flag", color: "#ca6e32" },
   { id: "document", label: "Documento", icon: "file-text", color: "#687780" },
@@ -41,12 +39,6 @@ const availableItemIcons = ["folder-kanban","workflow","layers-2","list-tree","s
 const relationTypes = [
   { id: "contains", label: "Contém" },
   { id: "TI", label: "TI · Término / Início" },
-  { id: "II", label: "II · Início / Início" },
-  { id: "TT", label: "TT · Término / Término" },
-  { id: "IF", label: "IF · Início / Fim" },
-  { id: "blocks", label: "Bloqueia" },
-  { id: "approves", label: "Aprova" },
-  { id: "relates_to", label: "Conecta" },
 ];
 
 const permissionOperationLabels = {
@@ -212,14 +204,9 @@ function saveState() {
 // M-05: itens salvos com status "blocked" passam a ter o indicador. O status anterior vem do
 // histórico quando existe; sem histórico, avanço > 0 vira "Em execução" e o restante "Aguardando".
 function migrateBlockedStatus(parsed) {
-  for (const item of parsed.items || []) {
-    if (item.status !== "blocked") continue;
-    const previous = [...(parsed.events || [])].reverse().find((event) => event.itemId === item.id && event.eventType === "status_changed" && event.toValue === "blocked" && statusCatalog.some((status) => status.id === event.fromValue))?.fromValue;
-    item.status = previous || (Number(item.progressPercent || 0) > 0 ? "in_progress" : "waiting");
-    item.blocked = true;
-    item.blockedReason = item.blockedReason || "Migrado do status Bloqueado";
-    item.blockedAt = item.blockedAt || item.lastChangeAt || item.updatedAt || "";
-    (parsed.events ||= []).push({ id: uid("event"), itemId: item.id, eventType: "blocked_set", fromValue: "blocked", toValue: item.blockedReason, userId: "system", actorNameSnapshot: "Sistema", comment: "Status Bloqueado convertido em indicador de bloqueio.", createdAt: nowIso(), effectiveAt: nowIso() });
+  for(const item of parsed.items || []){
+    if(item.blocked === true && !["done","cancelled"].includes(item.status)) item.status="blocked";
+    item.blocked=false;
   }
 }
 
@@ -252,7 +239,7 @@ function loadState() {
         parsed.filters ||= { query: "", status: "all", type: "all", owner: "all" };
         parsed.filters.organization ??= "all";
         parsed.filters.indicator ??= "all";
-        if (parsed.filters.status === "blocked") { parsed.filters.status = "all"; parsed.filters.indicator = "blocked"; }
+        if (parsed.filters.status === "blocked") parsed.filters.indicator = "blocked";
         migrateBlockedStatus(parsed);
         parsed.filters.sector ??= "all";
         parsed.filters.state ??= "all";
@@ -648,7 +635,7 @@ function removePermissionRule(id) {
 function approvalGate(itemOrId) {
   const item = typeof itemOrId === "string" ? getItem(itemOrId) : itemOrId;
   if (!item || item.type !== "approval") return { released: false, blockers: [] };
-  const prerequisiteTypes = new Set(["TI", "II", "TT", "IF", "blocks", "approves"]);
+  const prerequisiteTypes = new Set(["TI"]);
   const blockers = (state.relations || [])
     .filter((relation) => relation.targetId === item.id && prerequisiteTypes.has(relation.relationType))
     .map((relation) => getItem(relation.sourceId))
@@ -746,7 +733,7 @@ function decideApproval(id, outcome, reason = "", correctionOwnerId = "") {
     state.items.push(correction);
     const correctionRelation = {
       id:uid("rel"), sourceId:correction.id,targetId:item.id,
-      relationType:"blocks",lagDays:0,
+      relationType:"TI",lagDays:0,
       description:"Correção obrigatória antes do reenvio.",
       createdBy:user.id,createdAt:timestamp
     };
@@ -754,7 +741,7 @@ function decideApproval(id, outcome, reason = "", correctionOwnerId = "") {
     item.correctionItemId=correction.id;
     decision.correctionItemId=correction.id;
     createEvent(correction.id,"created","",correction.title,"Correção vinculada à aprovação original.");
-    createEvent(item.id,"relation_created","","blocks","A correção impede o reenvio até sua conclusão.");
+    createEvent(item.id,"relation_created","","TI","Correção vinculada por precedência TI.");
     recalculatePlannedDates();
     setApprovalStatus(item, "correction", "approval_decided", reason.trim());
     createEvent(correction.id, "approval_revision_started", item.id, correction.id, reason.trim());
@@ -914,8 +901,8 @@ function createItem(input) {
     id: uid("item"),
     title: input.title,
     type: input.type || "task",
-    status: input.status || "backlog",
-    blocked: input.blocked === true,
+    status: input.blocked === true ? "blocked" : (input.status || "backlog"),
+    blocked: false,
     blockedReason: input.blocked === true ? String(input.blockedReason || "").trim() : "",
     blockedAt: input.blocked === true ? nowIso() : "",
     priority: input.priority || "media",
@@ -943,7 +930,7 @@ function createItem(input) {
   };
   state.items.push(item);
   createEvent(item.id, "created", "", item.status, "Item criado.", item.createdAt);
-  if (item.blocked) createEvent(item.id, "blocked_set", "", item.blockedReason, "Bloqueio sinalizado na criação.", item.createdAt);
+  if (item.status==="blocked") createEvent(item.id,"status_changed","", "blocked","Bloqueio registrado na criação.",item.createdAt);
   if (item.parentId) createRelation(item.parentId, item.id, "contains", 0);
   if (item.parentId) syncContainsRelations(item.id);
   const schedule = recalculatePlannedDates();
@@ -1239,32 +1226,40 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   const children = state.items.filter((item) => item.parentId === parentId && item.status !== "cancelled" && !item.archivedAt);
   if (!parent.baselineStartAt) parent.baselineStartAt = children.map((item)=>item.baselineStartAt || item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "";
   if (!parent.baselineDueAt) parent.baselineDueAt = children.map((item)=>item.baselineDueAt || item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "";
-  if (!children.length) return;
-  const wasComplete = completeStatus(parent.status);
-  const rank = { backlog: 0, waiting: 1, correction: 1, ready: 1, in_progress: 2, under_review: 3, done: 4 };
-  const leastAdvanced = [...children].sort((left, right) => (rank[left.status] ?? 0) - (rank[right.status] ?? 0) || Number(left.progressPercent || 0) - Number(right.progressPercent || 0))[0];
-  const descendants = [];
-  const visited = new Set();
-  function collectLeaves(itemId) {
-    if (visited.has(itemId)) return;
-    visited.add(itemId);
-    const nested = state.items.filter((item) => item.parentId === itemId && item.status !== "cancelled" && !item.archivedAt);
-    if (!nested.length) { const item = getItem(itemId); if (item && !["project", "process"].includes(item.type)) descendants.push(item); }
-    else nested.forEach((item) => collectLeaves(item.id));
+  if (!state.items.some(child=>child.parentId===parentId && !child.archivedAt)) return;
+  const wasComplete=completeStatus(parent.status);
+  const allChildren=state.items.filter(child=>child.parentId===parent.id && !child.archivedAt);
+  const active=allChildren.filter(child=>child.status!=="cancelled");
+  const leaves=[],seen=new Set();
+  function collect(id){
+    if(seen.has(id))return;seen.add(id);
+    const nested=state.items.filter(child=>child.parentId===id && !child.archivedAt);
+    if(!nested.length){const leaf=getItem(id);if(leaf?.status!=="cancelled")leaves.push(leaf);}
+    else nested.forEach(child=>collect(child.id));
   }
-  children.forEach((item) => collectLeaves(item.id));
-  const weighted = descendants.reduce((total, item) => {
-    const weight = Number(item.weight ?? 1);
-    if (!Number.isFinite(weight) || weight <= 0) return total;
-    const percent = completeStatus(item.status) ? 100 : Math.max(0, Math.min(100, Number(item.progressPercent || 0)));
-    total.weighted += weight * percent; total.weight += weight; return total;
-  }, { weighted: 0, weight: 0 });
-  const next = {
-    status: leastAdvanced.status,
-    progressPercent: weighted.weight ? Math.round(weighted.weighted / weighted.weight) : null,
-    plannedDurationDays: children.some((child)=>!child.plannedStartAt || !child.dueAt) ? 0 : inclusiveDurationDays(children.map((item)=>item.plannedStartAt).sort()[0], children.map((item)=>item.dueAt).sort().at(-1)),
-    plannedStartAt: children.map((item) => item.plannedStartAt).filter(Boolean).sort()[0] || parent.plannedStartAt || "",
-    dueAt: children.map((item) => item.dueAt).filter(Boolean).sort().at(-1) || parent.dueAt || "",
+  allChildren.forEach(child=>collect(child.id));
+  const weighted=leaves.reduce((acc,leaf)=>{
+    const weight=Number(leaf.weight??1);
+    if(Number.isFinite(weight)&&weight>0){
+      acc.value+=weight*(leaf.status==="done"?100:Math.max(0,Math.min(100,Number(leaf.progressPercent||0))));
+      acc.weight+=weight;
+    }
+    return acc;
+  },{value:0,weight:0});
+  // Regra provisoria explicita: a matriz completa sera homologada separadamente.
+  let nextStatus="backlog";
+  if(!active.length)nextStatus="cancelled";
+  else if(active.every(child=>child.status==="done"))nextStatus="done";
+  else if(active.some(child=>["in_progress","under_review","correction","done"].includes(child.status)))nextStatus="in_progress";
+  else if(active.every(child=>child.status==="blocked"))nextStatus="blocked";
+  else if(active.some(child=>child.status==="ready"))nextStatus="ready";
+  else if(active.some(child=>child.status==="waiting"))nextStatus="waiting";
+  const next={
+    status:nextStatus,
+    progressPercent:weighted.weight?Math.round(weighted.value/weighted.weight):0,
+    plannedDurationDays:active.every(child=>child.plannedStartAt&&child.dueAt)?inclusiveDurationDays(active.map(child=>child.plannedStartAt).sort()[0],active.map(child=>child.dueAt).sort().at(-1)):0,
+    plannedStartAt:active.map(child=>child.plannedStartAt).filter(Boolean).sort()[0]||parent.plannedStartAt||"",
+    dueAt:active.map(child=>child.dueAt).filter(Boolean).sort().at(-1)||parent.dueAt||"",
   };
   let changed = false;
   for (const field of Object.keys(next)) {
@@ -1285,7 +1280,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
 
 function validateItemInput(input, existing = null) {
   if (!input.title?.trim()) throw new Error("Informe o nome do item.");
-  if (input.blocked === true && !String(input.blockedReason || "").trim()) throw new Error("Informe o motivo do bloqueio.");
+  // O motivo do impedimento e opcional na PRD4.
   if (!itemTypes.some((type) => type.id === input.type)) throw new Error("Tipo de item inválido.");
   if (input.status !== undefined && !statusCatalog.some((status) => status.id === input.status)) throw new Error("Status inválido.");
   if (!state.organizations.some((org) => org.id === input.organizationId)) throw new Error("Selecione uma empresa.");
@@ -1320,7 +1315,7 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   validateItemInput(input,item);
   if (!canEditItem(user,{...item,...input})) throw new Error("O novo contexto deve permanecer dentro das regras GPO.");
   const hasActiveChildren = state.items.some((entry) => entry.parentId === item.id && entry.status !== "cancelled");
-  if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays","weight"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
+  if (hasActiveChildren && ["status","progressPercent","plannedStartAt","dueAt","plannedDurationDays"].some((field) => input[field] !== undefined && input[field] !== item[field])) throw new Error("Status, progresso, duração e peso de um grupo são herdados dos subitens ativos.");
   if (!Number.isFinite(new Date(effectiveAt).getTime())) throw new Error("Informe a data e hora da mudança.");
   if (item.type === "approval" && input.status !== item.status) throw new Error("Use a aba Aprovação para enviar, aprovar, reprovar ou iniciar uma correção.");
   // M-03: Em análise e Em correção só fazem sentido no fluxo de aprovação. Sem estas travas, uma
@@ -1328,13 +1323,14 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   if (item.type === "approval" && input.type !== "approval" && ["under_review","correction"].includes(item.status)) throw new Error("Conclua a decisão de aprovação em andamento antes de mudar o tipo do item.");
   if (input.type !== "approval" && ["under_review","correction"].includes(input.status) && input.status !== item.status) throw new Error("Em análise e Em correção pertencem ao fluxo de aprovação.");
   if (input.type === "approval" && item.type !== "approval") { item.approvalRound ||= 1; item.approvalReviewerId ||= input.ownerId || ""; }
-  if (input.status === "cancelled") input = { ...input, progressPercent: 100 };
-  else if (Number(input.progressPercent ?? item.progressPercent ?? 0) > 0 && !["done","cancelled"].includes(input.status)) input = { ...input, status: "in_progress" };
+  if (input.status === "cancelled") input = { ...input, progressPercent: item.progressPercent ?? 0 };
+  else if (Number(input.progressPercent ?? item.progressPercent ?? 0) === 100 && input.status !== "blocked" && !isBlocked(item) && item.type !== "approval") input = { ...input, status: "done" };
+  else if (Number(input.progressPercent ?? item.progressPercent ?? 0) > 0 && ["backlog","ready"].includes(input.status)) input = { ...input, status: "in_progress" };
   const wasComplete = completeStatus(item.status);
   const complete = completeStatus(input.status);
   if (wasComplete && !complete && (input.progressPercent === undefined || Number(input.progressPercent) === Number(item.progressPercent))) throw new Error("Informe um novo percentual ao reabrir uma atividade concluída.");
   if (complete) input = { ...input, progressPercent: 100 };
-  if (input.status === "cancelled") input = { ...input, progressPercent: 100 };
+  if (input.status === "cancelled") input = { ...input, progressPercent: item.progressPercent ?? 0 };
   if (wasComplete && complete && ((input.plannedStartAt ?? item.plannedStartAt) !== item.plannedStartAt || (input.dueAt ?? item.dueAt) !== item.dueAt)) throw new Error("As datas previstas ficam bloqueadas após a conclusão.");
   const fields = {title:"title_changed",type:"type_changed",status:"status_changed",ownerId:"owner_changed",dueAt:"due_changed",plannedStartAt:"start_changed",plannedDurationDays:"duration_changed",replannedDueAt:"replanned_due_changed",weight:"weight_changed",progressPercent:"progress_changed",description:"description_changed",organizationId:"context_changed",sectorId:"context_changed",state:"context_changed"};
   // Preflight operation-specific permissions before mutating any field. Without
@@ -1356,24 +1352,19 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
     createEvent(id,eventType,item[field],next,eventType === "context_changed" ? { organizationId: "Empresa", sectorId: "Setor", state: "UF" }[field] : "",effectiveAt);
     item[field] = next; changed = true;
   }
-  if (input.blocked !== undefined) {
-    const nextBlocked = input.blocked === true;
-    const nextReason = nextBlocked ? String(input.blockedReason ?? item.blockedReason ?? "").trim() : "";
-    if (nextBlocked !== (item.blocked === true)) {
-      createEvent(id, nextBlocked ? "blocked_set" : "blocked_cleared", item.blocked ? (item.blockedReason || "bloqueado") : "", nextReason, "", effectiveAt);
-      item.blocked = nextBlocked; item.blockedReason = nextReason; item.blockedAt = nextBlocked ? effectiveAt : ""; changed = true;
-    } else if (nextBlocked && nextReason !== (item.blockedReason || "")) {
-      createEvent(id, "blocked_reason_changed", item.blockedReason || "", nextReason, "", effectiveAt);
-      item.blockedReason = nextReason; changed = true;
-    }
-  }
+  if(item.status === "blocked" && !item.blockedAt) item.blockedAt=effectiveAt;
+  if(item.status !== "blocked") {item.blocked=false; item.blockedAt="";}
   if (complete && !wasComplete) { item.completedAt = effectiveAt; createEvent(id,"completed","",item.status,"",effectiveAt); }
   if (wasComplete && !complete) { item.completedAt = ""; createEvent(id,"reopened","done",item.status,"Item reaberto.",effectiveAt); }
-  if (item.blocked && (completeStatus(item.status) || item.status === "cancelled")) { createEvent(id,"blocked_cleared",item.blockedReason || "bloqueado","","Bloqueio removido ao encerrar o item.",effectiveAt); item.blocked = false; item.blockedReason = ""; item.blockedAt = ""; changed = true; }
+
   if (item.status === "in_progress" && !item.actualStartAt) { item.actualStartAt = effectiveAt; createEvent(id,"started","",effectiveAt,"Atividade iniciada.",effectiveAt); changed = true; }
   if (comment.trim()) { createEvent(id,"comment","","",comment.trim(),effectiveAt); changed = true; }
+  if(changed && item.blockedByPropagation && item.status!=="blocked") {
+    item.blockedByPropagation=false;item.statusBeforeInheritedBlock="";item.manualBlockOverride=true;
+  }
   if (changed) {
     item.updatedAt = nowIso(); item.lastChangeAt = effectiveAt;
+    recalculateBlocking(effectiveAt);
     if (item.parentId) syncParentSummary(item.parentId,effectiveAt);
     const schedule = recalculatePlannedDates();
     if (!schedule.valid) { state.items = rollbackItems; state.events.length = rollbackEventCount; throw new Error(schedule.message); }
@@ -1704,7 +1695,7 @@ function itemDurationDays(item) {
 }
 
 function recalculatePlannedDates() {
-  const temporal = new Set(["TI","II","TT","IF"]);
+  const temporal = new Set(["TI"]);
   const items = state.items.filter((item)=>!item.archivedAt), byId = new Map(items.map((item) => [item.id,item]));
   const dependencies = state.relations.filter((r) => temporal.has(r.relationType) && byId.has(r.sourceId) && byId.has(r.targetId));
   const incoming = new Map(items.map((item) => [item.id,[]])), outgoing = new Map(items.map((item) => [item.id,[]]));
@@ -1713,18 +1704,7 @@ function recalculatePlannedDates() {
   const queue = items.filter((item) => indegree.get(item.id) === 0).map((item) => item.id), order = [];
   while (queue.length) { const id = queue.shift(); order.push(id); for (const r of outgoing.get(id)) { const n = indegree.get(r.targetId)-1; indegree.set(r.targetId,n); if (n === 0) queue.push(r.targetId); } }
   if (order.length !== items.length) return {valid:false,message:"Há um ciclo nas dependências temporais. As datas não foram recalculadas."};
-  // R2-10: o status de um grupo é resumo dos subitens (syncParentSummary). Liberá-lo aqui o fazia
-  // alternar entre Liberado e Lista de pendências, gravando eventos falsos a cada recálculo.
-  const summaryGroupIds = new Set(items.filter((entry) => entry.parentId && entry.status !== "cancelled").map((entry) => entry.parentId));
-  for (const item of items) {
-    const deps = incoming.get(item.id) || [];
-    if (!["backlog","ready"].includes(item.status)) continue;
-    if (summaryGroupIds.has(item.id)) continue;
-    const blockers = state.relations.filter((r)=>r.targetId===item.id && r.relationType==="blocks");
-    const released = !isBlocked(item) && deps.every((r) => { const pred=byId.get(r.sourceId); if (!pred || isBlocked(pred)) return false; if (r.relationType === "II" || r.relationType === "IF") return ["in_progress","done"].includes(pred.status); return pred.status === "done"; }) && blockers.every((r)=>{const source=byId.get(r.sourceId);return source && !isBlocked(source) && ["done","cancelled"].includes(source.status);});
-    const nextStatus = released ? "ready" : "backlog";
-    if (item.status !== nextStatus) { createEvent(item.id,"status_changed",item.status,nextStatus,"Liberação calculada automaticamente pelas predecessoras."); item.status=nextStatus; }
-  }
+  // PRD4: dependencia TI altera exclusivamente previsoes; status nao e liberado automaticamente.
   const durations = new Map(items.map((item) => [item.id,itemDurationDays(item)]));
   const starts = new Map(items.map((item) => [item.id,item.baselineStartAt || item.plannedStartAt || today()]));
   for (const id of order) {
@@ -1756,6 +1736,48 @@ function recalculatePlannedDates() {
   const summaryGroups = [...groups].sort((a,b)=>depthOf(b)-depthOf(a));
   for (const group of summaryGroups) syncParentSummary(group.id);
   return {valid:true};
+}
+
+/* PRD4 — Propagacao do estado de bloqueio. Separar fonte manual de estado herdado;
+   um desbloqueio nunca deve apagar uma alteracao manual do responsavel. */
+function recalculateBlocking(effectiveAt=nowIso()){
+  const items=state.items.filter(item=>!item.archivedAt);
+  const byId=new Map(items.map(item=>[item.id,item]));
+  const outgoing=new Map(items.map(item=>[item.id,[]]));
+  for(const rel of state.relations){
+    if(rel.relationType==="TI" && byId.has(rel.sourceId)&&byId.has(rel.targetId))
+      outgoing.get(rel.sourceId).push(rel.targetId);
+  }
+  const sources=new Map(items.map(item=>[item.id,new Set()]));
+  const queue=items.filter(item=>item.status==="blocked" && !item.inheritedBlockedFrom?.length)
+    .map(item=>({id:item.id,source:item.id}));
+  const seen=new Set();
+  while(queue.length){
+    const {id,source}=queue.shift(),key=id+"|"+source;
+    if(seen.has(key))continue;seen.add(key);
+    for(const target of outgoing.get(id)||[]){
+      sources.get(target).add(source);
+      queue.push({id:target,source});
+    }
+  }
+  for(const item of items){
+    const next=[...sources.get(item.id)].sort(),prior=item.inheritedBlockedFrom||[];
+    if(next.join("|")!==prior.join("|")){
+      createEvent(item.id,"blocker_sources_changed",prior.join(", "),next.join(", "),"Impedimentos herdados recalculados automaticamente.",effectiveAt);
+      item.inheritedBlockedFrom=next;
+    }
+    const eligible=!["done","cancelled","in_progress","under_review","correction"].includes(item.status);
+    if(next.length && eligible && item.status!=="blocked" && !item.manualBlockOverride && item.id!==next[0]){
+      item.statusBeforeInheritedBlock=item.status;
+      const previous=item.status;item.status="blocked";item.blockedByPropagation=true;
+      createEvent(item.id,"status_changed",previous,"blocked","Bloqueio herdado automaticamente.",effectiveAt);
+    } else if(!next.length && item.blockedByPropagation && item.status==="blocked"){
+      const previous=item.status;item.status=item.statusBeforeInheritedBlock||"backlog";
+      item.blockedByPropagation=false;item.statusBeforeInheritedBlock="";
+      createEvent(item.id,"status_changed",previous,item.status,"Desbloqueio herdado: status restaurado.",effectiveAt);
+    }
+    if(!next.length)item.manualBlockOverride=false;
+  }
 }
 
 // Run the one-time calendar migration after all state and function dependencies are initialized.
