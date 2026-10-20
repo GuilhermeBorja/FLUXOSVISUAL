@@ -263,7 +263,29 @@ function renderPrd41Workspace(items) {
   </div>`;
 }
 
+function prd42CaptureWorkspaceScroll() {
+  const workspace=document.querySelector(".prd41-workspace");
+  if (!workspace) return null;
+  const captured={pageY:window.scrollY||0,panes:{}};
+  workspace.querySelectorAll(".prd41-pane").forEach(pane=>{
+    const key=pane.dataset.pane,body=pane.querySelector(".prd41-pane-body");
+    const inner=pane.querySelector(".synth-table-wrap,.gantt-scroll");
+    captured.panes[key]={top:body?.scrollTop||0,left:body?.scrollLeft||0,innerLeft:inner?.scrollLeft||0,innerTop:inner?.scrollTop||0};
+  });
+  return captured;
+}
+function prd42RestoreWorkspaceScroll(captured) {
+  if(!captured)return;
+  document.querySelectorAll(".prd41-pane").forEach(pane=>{
+    const previous=captured.panes[pane.dataset.pane];if(!previous)return;
+    const body=pane.querySelector(".prd41-pane-body"),inner=pane.querySelector(".synth-table-wrap,.gantt-scroll");
+    if(body){body.scrollTop=previous.top;body.scrollLeft=previous.left;}
+    if(inner){inner.scrollLeft=previous.innerLeft;inner.scrollTop=previous.innerTop;}
+  });
+  window.scrollTo(0,captured.pageY);
+}
 function render() {
+  const prd42Scroll = prd42CaptureWorkspaceScroll();
   if (state.setupComplete === false) { renderMasterSetup(); return; }
   if (graphInstance) { ui.graphTransform = graphInstance.getTransform(); graphInstance.destroy(); graphInstance = null; }
   if (!currentUser() || currentUser().disabled) {
@@ -318,6 +340,7 @@ function render() {
   prd41BindSplitters();
   prd41ApplyPaneLayout();
   mountIcons();
+  requestAnimationFrame(()=>prd42RestoreWorkspaceScroll(prd42Scroll));
 }
 
 function renderMasterSetup() {
@@ -663,7 +686,7 @@ function renderPrd4Overview(items){
     {label:"Atrasos",value:late.length,description:"Prazos vencidos",focus:late[0]?.id||""},
     {label:"Aprovações",value:approvals.length,description:"Aguardando decisão ou correção",focus:approvals[0]?.id||""}];
   return `<section class="prd42-summary" aria-label="Indicadores de acompanhamento">
-    ${options.map(item=>`<button type="button" class="prd42-indicator" ${item.focus ? `data-prd4-focus="${escapeHtml(item.focus)}"` : 'disabled title="Nenhum item nesta condição"' } title="${escapeHtml(item.description)}">
+    ${options.map(item=>`<button type="button" class="prd42-indicator" ${item.focus ? `data-prd4-focus="${escapeHtml(item.focus)}"` : "disabled"} title="${escapeHtml(item.description)}">
       <strong>${item.value}</strong><span>${item.label}</span></button>`).join("")}
   </section>`;
 }
@@ -1309,7 +1332,6 @@ function bindWorkspace() {
     if (button.dataset.paneFocus) {
       prd41FocusedPane = prd41FocusedPane === button.dataset.paneFocus ? "" : button.dataset.paneFocus;
       prd41ApplyPaneLayout();
-      if (prd41FocusedPane === "graph") requestAnimationFrame(() => graphInstance?.fit());
       return;
     }
     if (button.dataset.createChild) {
