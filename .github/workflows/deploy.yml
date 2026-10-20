@@ -1,7 +1,7 @@
 name: Deploy FLUXOSVISUAL
 on:
   push:
-    branches: [PRD4]
+    branches: [PRD5]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,10 +12,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    if: github.ref == 'refs/heads/PRD4'
+    if: github.ref == 'refs/heads/PRD5'
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout PRD4
+      - name: Checkout PRD5
         uses: actions/checkout@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,7 +36,7 @@ jobs:
         run: |
           nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &
           timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
-          node browser-tests/prd4-smoke.mjs
+          node browser-tests/prd5-smoke.mjs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
@@ -50,7 +50,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy PRD4 to GitHub Pages
+      - name: Deploy PRD5 to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
       - name: Verify published version
@@ -60,7 +60,7 @@ jobs:
         run: |
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error "${SITE_URL}version.js?verify=${EXPECTED_BUILD}-${attempt}" | grep -F "${EXPECTED_BUILD:0:7}"; then
-              echo "Published PRD4 commit ${EXPECTED_BUILD} at ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
+              echo "Published PRD5 commit ${EXPECTED_BUILD} at ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 5
