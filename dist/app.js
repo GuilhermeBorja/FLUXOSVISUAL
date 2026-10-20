@@ -481,9 +481,9 @@ function createSeedItem(base, input) {
     description: input.description || "",
     plannedStartAt: input.plannedStartAt || today(),
     dueAt: input.dueAt || "",
-    plannedDurationDays: itemDurationDays(input),
+    plannedDurationDays: input.plannedDurationDays === null ? null : itemDurationDays(input),
     baselineStartAt: input.plannedStartAt || today(),
-    baselineDueAt: input.baselineDueAt || input.dueAt || inclusiveFinishDate(input.plannedStartAt || today(), itemDurationDays(input)),
+    baselineDueAt: input.baselineDueAt || input.dueAt || (input.plannedDurationDays === null ? "" : inclusiveFinishDate(input.plannedStartAt || today(), itemDurationDays(input))),
     replannedDueAt: "",
     targetStartAt: input.targetStartAt || "",
     targetDueAt: input.targetDueAt || "",
@@ -1302,7 +1302,7 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
   const next={
     status:nextStatus,
     progressPercent:weighted.weight?Math.round(weighted.value/weighted.weight):0,
-    plannedDurationDays:active.every(child=>child.plannedStartAt&&child.dueAt)?inclusiveDurationDays(active.map(child=>child.plannedStartAt).sort()[0],active.map(child=>child.dueAt).sort().at(-1)):0,
+    plannedDurationDays:active.every(child=>child.plannedStartAt&&child.dueAt)?inclusiveDurationDays(active.map(child=>child.plannedStartAt).sort()[0],active.map(child=>child.dueAt).sort().at(-1)):null,
     plannedStartAt:active.map(child=>child.plannedStartAt).filter(Boolean).sort()[0]||parent.plannedStartAt||"",
     dueAt:active.map(child=>child.dueAt).filter(Boolean).sort().at(-1)||parent.dueAt||"",
   };
@@ -1335,7 +1335,7 @@ function validateItemInput(input, existing = null) {
   if (input.ownerId && !state.users.some((user) => user.id === input.ownerId && (!user.disabled || existing?.ownerId === user.id))) throw new Error("Selecione um responsável ativo.");
   if (input.weight !== undefined && (!Number.isFinite(Number(input.weight)) || Number(input.weight) <= 0)) throw new Error("O peso deve ser maior que zero.");
   if (input.progressPercent !== undefined && (!Number.isFinite(Number(input.progressPercent)) || Number(input.progressPercent) < 0 || Number(input.progressPercent) > 100)) throw new Error("O percentual deve ficar entre 0 e 100.");
-  if (input.plannedDurationDays !== undefined && (!Number.isInteger(Number(input.plannedDurationDays)) || Number(input.plannedDurationDays) < 0)) throw new Error("A duração deve ser um número inteiro de dias corridos igual ou maior que zero.");
+  if (input.plannedDurationDays !== undefined && input.plannedDurationDays !== null && input.plannedDurationDays !== "" && (!Number.isInteger(Number(input.plannedDurationDays)) || Number(input.plannedDurationDays) < 0)) throw new Error("A duração deve ser um número inteiro de dias corridos igual ou maior que zero.");
   if (input.replannedDueAt && (!/^\d{4}-\d{2}-\d{2}$/.test(input.replannedDueAt) || !Number.isFinite(new Date(input.replannedDueAt + "T12:00:00").getTime()))) throw new Error("Informe uma data válida para a repactuação.");
   for (const field of ["targetStartAt","targetDueAt"]) {
     if (input[field] && (!/^\d{4}-\d{2}-\d{2}$/.test(input[field]) || !Number.isFinite(new Date(input[field] + "T12:00:00").getTime()))) throw new Error("Informe uma data-meta válida.");
@@ -1771,7 +1771,7 @@ function recalculatePlannedDates() {
   while (queue.length) { const id = queue.shift(); order.push(id); for (const r of outgoing.get(id)) { const n = indegree.get(r.targetId)-1; indegree.set(r.targetId,n); if (n === 0) queue.push(r.targetId); } }
   if (order.length !== items.length) return {valid:false,message:"Há um ciclo nas dependências temporais. As datas não foram recalculadas."};
   // PRD4: dependencia TI altera exclusivamente previsoes; status nao e liberado automaticamente.
-  const durations = new Map(items.map((item) => [item.id,itemDurationDays(item)]));
+  const durations = new Map(items.map((item) => [item.id,hasPlannedDuration(item) ? itemDurationDays(item) : item.plannedStartAt && item.dueAt ? inclusiveDurationDays(item.plannedStartAt,item.dueAt) : null]));
   const starts = new Map(items.map((item) => [item.id,item.baselineStartAt || item.plannedStartAt || today()]));
   for (const id of order) {
     const duration = durations.get(id), candidates = [];
@@ -1779,14 +1779,16 @@ function recalculatePlannedDates() {
       const pred = byId.get(r.sourceId);
       if (pred.status === "cancelled") continue;
       const ps = starts.get(pred.id);
-      candidates.push(datePlusDays(ps,temporalStartOffset(r,durations.get(pred.id),duration)));
+      // Sem duração da predecessora, TI permanece registrada, mas não inventa previsão.
+      if(durations.get(pred.id)===null || !ps)continue;
+      candidates.push(datePlusDays(ps,temporalStartOffset(r,durations.get(pred.id),duration??0)));
     }
     if (candidates.length) { const earliestAllowed=starts.get(id); const dependencyStart=candidates.filter(Boolean).sort().at(-1); starts.set(id,earliestAllowed && dependencyStart ? (earliestAllowed > dependencyStart ? earliestAllowed : dependencyStart) : earliestAllowed || dependencyStart); }
   }
   for (const item of items) {
     if (items.some((child) => child.parentId === item.id && child.status !== "cancelled")) continue;
     const nextStart=starts.get(item.id)||item.baselineStartAt||item.plannedStartAt||today();
-    const nextEnd=inclusiveFinishDate(nextStart,durations.get(item.id));
+    const nextEnd=durations.get(item.id)===null ? "" : inclusiveFinishDate(nextStart,durations.get(item.id));
     if(item.plannedStartAt!==nextStart){
       createEvent(item.id,"start_changed",item.plannedStartAt||"",nextStart,"Recalculo automatico da previsao TI.");
       item.plannedStartAt=nextStart;
@@ -1806,6 +1808,7 @@ function recalculatePlannedDates() {
     const delta = (new Date(group.replannedDueAt+"T12:00:00")-new Date(latest+"T12:00:00"))/86400000;
     if (!Number.isFinite(delta)) continue;
     for(const leaf of descendants){
+      if(!leaf.plannedStartAt||!leaf.dueAt)continue;
       const nextStart=datePlusDays(leaf.plannedStartAt,delta),nextEnd=datePlusDays(leaf.dueAt,delta);
       if(leaf.plannedStartAt!==nextStart)createEvent(leaf.id,"start_changed",leaf.plannedStartAt,nextStart,"Repactuacao automatica.");
       if(leaf.dueAt!==nextEnd)createEvent(leaf.id,"due_changed",leaf.dueAt,nextEnd,"Repactuacao automatica.");
