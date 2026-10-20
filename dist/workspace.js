@@ -232,7 +232,7 @@ function prd41LoadPaneWidths() {
     if (data && ["table","graph","gantt"].every(name => Number.isFinite(data[name]) && data[name] >= 12 && data[name] <= 75)
         && Math.abs(data.table + data.graph + data.gantt - 100) < .2) return data;
   } catch {}
-  return {table:38,graph:32,gantt:30};
+  return {table:0,graph:38,gantt:62};
 }
 function prd41SavePaneWidths() {
   try { localStorage.setItem("fluxosVisual.panes.prd41." + currentUser().id, JSON.stringify(prd41PaneWidths)); } catch {}
@@ -240,6 +240,7 @@ function prd41SavePaneWidths() {
 function prd41ApplyPaneLayout() {
   const container = document.querySelector(".prd41-workspace");
   if (!container || !prd41PaneWidths) return;
+  if(container.classList.contains("prd5-two-pane")){container.classList.toggle("is-focused",!!prd41FocusedPane);container.dataset.focus=prd41FocusedPane||"all";container.querySelectorAll(".prd41-pane").forEach(el=>el.classList.toggle("is-focus-target",el.dataset.pane===prd41FocusedPane));container.querySelectorAll("[data-pane-focus]").forEach(el=>{const selected=el.dataset.paneFocus===prd41FocusedPane;el.setAttribute("aria-pressed",String(selected));el.setAttribute("title",selected?"Restaurar painéis":"Maximizar painel");el.setAttribute("aria-label",selected?"Restaurar painéis":"Maximizar "+el.dataset.paneFocus);el.innerHTML=selected?'<span aria-hidden="true">▣</span>':'<span aria-hidden="true">□</span>';});requestAnimationFrame(prd43DrawGanttRelations);return;}
   const values = prd41PaneWidths;
   container.style.setProperty("--pane-table", values.table + "fr");
   container.style.setProperty("--pane-graph", values.graph + "fr");
@@ -262,6 +263,7 @@ function prd41ApplyPaneLayout() {
 }
 function prd41UpdateWidths(split,deltaPx) {
   if (!prd41PaneWidths) return false;
+  if(split==="gantt-graph")return prd5ResizePanes(deltaPx);
   const container = document.querySelector(".prd41-workspace");
   if (!container || prd41FocusedPane) return false;
   const available = container.getBoundingClientRect().width - 20;
@@ -277,6 +279,14 @@ function prd41UpdateWidths(split,deltaPx) {
   prd41PaneWidths[first] = Math.round(next * 10) / 10;
   prd41PaneWidths[second] = Math.round((prd41PaneWidths[second] + before - prd41PaneWidths[first]) * 10) / 10;
   prd41ApplyPaneLayout();
+  return true;
+}
+let prd5GanttWidth=62;
+function prd5ResizePanes(delta){
+  const el=document.querySelector(".prd5-two-pane");if(!el||prd41FocusedPane)return false;
+  const width=el.getBoundingClientRect().width;if(width<200)return false;
+  prd5GanttWidth=Math.max(35,Math.min(80,prd5GanttWidth+delta/width*100));
+  el.style.setProperty("--prd5-gantt-width",prd5GanttWidth+"%");
   return true;
 }
 function prd41BindSplitters() {
@@ -361,15 +371,11 @@ function renderPrd41Workspace(items) {
         <button type="button" class="prd41-focus-button" data-pane-focus="${id}" aria-label="Maximizar ${label}" aria-pressed="${prd41FocusedPane===id}">${icon(prd41FocusedPane===id?"minimize-2":"maximize-2")}</button>
       </div></header>
     <div class="prd41-pane-body">${content}</div></section>`;
-  return `<div class="prd41-workspace-viewport">
-    <div class="prd41-workspace ${prd41FocusedPane?"is-focused":""}" data-focus="${prd41FocusedPane||"all"}" style="--pane-table:${prd41PaneWidths.table}fr;--pane-graph:${prd41PaneWidths.graph}fr;--pane-gantt:${prd41PaneWidths.gantt}fr;">
-      ${pane("table","Sintética","Cadastro e atividades",renderTable(items))}
-      <div class="prd41-splitter" role="separator" tabindex="0" data-pane-split="table-graph" aria-label="Redimensionar Sintética e Analítica" aria-orientation="vertical" aria-valuemin="10" aria-valuemax="80" aria-valuenow="${Math.round(prd41PaneWidths.table)}" title="Arraste para ajustar os painéis; use as setas para ajuste fino"><span aria-hidden="true"></span></div>
-      ${pane("graph","Analítica","Relações e animação",renderGraph(items))}
-      <div class="prd41-splitter" role="separator" tabindex="0" data-pane-split="graph-gantt" aria-label="Redimensionar Analítica e Gantt" aria-orientation="vertical" aria-valuemin="10" aria-valuemax="80" aria-valuenow="${Math.round(prd41PaneWidths.graph)}" title="Arraste para ajustar os painéis; use as setas para ajuste fino"><span aria-hidden="true"></span></div>
-      ${pane("gantt","Gantt","Datas e dependências",renderGantt(items))}
-    </div>
-  </div>`;
+  return `<div class="prd41-workspace-viewport prd5-two-pane-viewport"><div class="prd41-workspace prd5-two-pane ${prd41FocusedPane?"is-focused":""}" data-focus="${prd41FocusedPane||"all"}">
+    ${pane("gantt","Gantt estruturado","Hierarquia, dados e prazos",renderGantt(items))}
+    <div class="prd41-splitter" role="separator" tabindex="0" data-pane-split="gantt-graph" aria-label="Redimensionar Gantt e Analítica" aria-orientation="vertical"><span aria-hidden="true"></span></div>
+    ${pane("graph","Grafo Analítico","Relações e animação",renderGraph(items))}
+  </div></div>`;
 }
 
 function prd42CaptureWorkspaceScroll() {
@@ -742,7 +748,7 @@ function renderGantt(items) {
   if(analysis.message)html+=`<div class="prd43-gantt-info" title="${escapeHtml(analysis.message)}">${escapeHtml(analysis.message)}</div>`;
   if(!rows.length)return html+emptyMarkup()+"</div>";
   html+=`<div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
-    <div class="gantt-axis"><span>Atividade</span><div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
+    <div class="gantt-axis"><span>Atividade / responsável</span><span class="prd5-axis-status">Status</span><span class="prd5-axis-progress">Avanço</span><span class="prd5-axis-dates">Início / término</span><span class="prd5-axis-actions">Editar</span><div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
   const relationMap=new Map();
   for(const rel of ties){const incoming=relationMap.get(rel.targetId)||{before:[],after:[]};incoming.before.push(rel);relationMap.set(rel.targetId,incoming);
     const outgoing=relationMap.get(rel.sourceId)||{before:[],after:[]};outgoing.after.push(rel);relationMap.set(rel.sourceId,outgoing);}
@@ -757,7 +763,8 @@ function renderGantt(items) {
     const critical=Boolean(row.critical&&analysis.valid);
     const toggle=row.children?.length?`<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${ui.showSubitems&&!ui.collapsed?.has(item.id)?"Recolher":"Expandir"} subitens">${icon(ui.showSubitems&&!ui.collapsed?.has(item.id)?"chevron-down":"chevron-right")}</button>`:'<span class="tree-spacer"></span>';
     return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" style="--depth:${Math.min(row.depth||0,8)}">
-      <div class="gantt-item-wrap">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.ownerId))} · ${Math.round(Number(item.progressPercent||0))}%${critical?" · crítico":""}</small></button></div>
+      <div class="gantt-item-wrap">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.ownerId))}${critical?" · crítico":""}</small></button></div>
+      <span class="prd5-gantt-status">${statusBadge(item)}</span><span class="prd5-gantt-progress">${progressCell(item)}</span><span class="prd5-gantt-dates">${dateCell(item.plannedStartAt)}<span>→</span>${dateCell(item.dueAt)}</span><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}" title="Editar item">${icon("pencil")}</button>
       <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(item.title+" · "+formatDate(start)+" a "+formatDate(end))}">
         <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
           ${canLink?`<button type="button" class="prd43-gantt-handle" data-gantt-handle="${escapeHtml(item.id)}" title="Arraste para criar TI a partir de ${escapeHtml(item.title)}" aria-label="Criar TI a partir de ${escapeHtml(item.title)}"></button>`:""}
@@ -781,7 +788,7 @@ function prd43DrawGanttRelations(){
   svg.setAttribute("width",width);svg.setAttribute("height",height);svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
   let lines=`<defs><marker id="prd43-ti-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#286d73"/></marker></defs>`;
   const rows=[...content.querySelectorAll("[data-gantt-row]")],ids=new Set(rows.map(row=>row.dataset.ganttRow));
-  const offset=rect=>({x:rect.left-contentBox.left,y:rect.top-contentBox.top});
+  const offset=rect=>({x:rect.left-contentBox.left+content.scrollLeft,y:rect.top-contentBox.top+content.scrollTop});
   for(const rel of state.relations.filter(r=>r.relationType==="TI"&&ids.has(r.sourceId)&&ids.has(r.targetId))){
     const source=content.querySelector('[data-gantt-bar="'+CSS.escape(rel.sourceId)+'"]');
     const target=content.querySelector('[data-gantt-bar="'+CSS.escape(rel.targetId)+'"]');
@@ -1142,7 +1149,7 @@ function itemFormFields(item, create = false) {
     </div>` : ""}
     ${!create&&!summaryGroup ? `<label>Motivo do bloqueio (opcional)<input name="blockedReason" maxlength="240" value="${escapeHtml(item.blockedReason||"")}" placeholder="Informe o impedimento, se necessário"/></label>` : ""}
     <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description||"")}</textarea></label></details>
-    ${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state||user.state,createdBy:item.createdBy||user.id})===true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Demonstração: até 256 KB por arquivo e 1 MB no total. Os arquivos ficam neste navegador.</small></label>' : ""}`;
+    <details class="form-details"><summary>Anexos (opcional)</summary>${gpoDecision(user,"add_attachment",{...item,organizationId,state:item.state||user.state,createdBy:item.createdBy||user.id})===true ? '<label class="attachment-picker">Anexos<input type="file" name="attachments" multiple/><small class="attachment-limits">Até 256 KB por arquivo e 1 MB total.</small></label>' : '<small>Sem permissão para anexar.</small>'}</details>`;
 }
 
 function prd5ParseIndentedItems(text) {
@@ -1306,7 +1313,7 @@ function renderItemPanel(item) {
     : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item);
   if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
 
-  if (ui.panelTab === "history") html += renderHistory(events,item.id);
+  if (ui.panelTab === "history") html += prd5HistoryPanel(events,item.id);
   if (ui.panelTab === "approval" && item.type === "approval") html += renderApprovalPanel(item);
   return html + '</div>';
 }
@@ -1362,6 +1369,12 @@ function renderHistory(events, rootItemId = "") {
   return `<ol class="event-timeline">${sorted.map((event) => `<li class="${event.eventType==='status_changed'?'prd43-event-status':''}" style="${event.eventType==='status_changed'?'--prd43-event-color:'+statusConfig(event.toValue).color:''}"><span class="event-dot"></span><div class="event-heading"><strong>${escapeHtml(eventLabels[event.eventType] || event.eventType)}</strong>${event.itemId !== rootItemId ? `<span class="event-origin">${escapeHtml(getItem(event.itemId)?.title || "Item arquivado")}</span>` : ""}<time>${formatDateTime(event.effectiveAt)}</time></div>${event.fromValue || event.toValue ? `<p class="event-values"><span><b>Antes:</b> ${escapeHtml(eventValue(event,event.fromValue))}</span><span>→</span><span><b>Depois:</b> ${escapeHtml(eventValue(event,event.toValue))}</span></p>` : ""}${event.comment ? `<p>${escapeHtml(event.comment)}</p>` : ""}<small>${escapeHtml(event.actorNameSnapshot || userName(event.userId))} · ${escapeHtml(event.organizationNameSnapshot || "Sem empresa")} / ${escapeHtml(event.sectorNameSnapshot || "Sem setor")} ${event.stateSnapshot ? "· " + escapeHtml(event.stateSnapshot) : ""} · Registrado ${formatDateTime(event.createdAt)}</small></li>`).join("")}</ol>`;
 }
 
+function prd5HistoryPanel(events,itemId){
+  const current=ui.prd5HistoryFilters||{user:"",organization:"",sector:""};
+  const matching=events.filter(e=>(!current.user||e.userId===current.user)&&(!current.organization||e.organizationIdSnapshot===current.organization)&&(!current.sector||e.sectorIdSnapshot===current.sector));
+  const filters='<div class="prd5-history-filters"><label>Usuário<select id="prd5HistoryUser">'+option("","Todos",!current.user)+state.users.map(u=>option(u.id,u.name,current.user===u.id)).join("")+'</select></label><label>Empresa<select id="prd5HistoryOrganization">'+option("","Todas",!current.organization)+state.organizations.map(o=>option(o.id,o.name,current.organization===o.id)).join("")+'</select></label><label>Setor<select id="prd5HistorySector">'+option("","Todos",!current.sector)+state.sectors.filter(se=>!current.organization||se.organizationId===current.organization).map(se=>option(se.id,se.name,current.sector===se.id)).join("")+'</select></label></div>';
+  return filters+(matching.length?renderHistory(matching,itemId):'<p class="secondary">Nenhuma movimentação para os filtros selecionados.</p>');
+}
 function renderApprovalPanel(item) {
   const gate = approvalGate(item);
   const user = currentUser();
@@ -1905,6 +1918,7 @@ function applyBulkEdit(form) {
 
 function bindPanel() {
   const root = document.querySelector("#panelRoot");
+  root.querySelectorAll("#prd5HistoryUser,#prd5HistoryOrganization,#prd5HistorySector").forEach(input=>input.addEventListener("change",()=>{ui.prd5HistoryFilters={user:root.querySelector("#prd5HistoryUser")?.value||"",organization:root.querySelector("#prd5HistoryOrganization")?.value||"",sector:root.querySelector("#prd5HistorySector")?.value||""};if(input.id==="prd5HistoryOrganization")ui.prd5HistoryFilters.sector="";renderPanel(false);}));
   root.querySelectorAll("[data-setting-column]").forEach(input=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= [];state.tableColumnPinned ||= [];const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked ? state.hiddenTableColumns.filter(entry=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])];state.tableColumnPinned=input.checked ? [...new Set([...state.tableColumnPinned,key])] : state.tableColumnPinned.filter(entry=>entry!==key);saveState();render(); }));
   root.onclick = (event) => {
     const button = event.target.closest("button,[data-action]"); if (!button) return;
@@ -2127,13 +2141,13 @@ function bindPanel() {
   submitHandler("organizationForm", (form) => {
     if (gpoDecision(currentUser(),"manage_organization",null) !== true) throw new Error("O GPO não permite cadastrar empresas.");
     const name = String(form.get("name")).trim(); if (!name) throw new Error("Informe o nome da empresa.");
-    const organization={id:uid("org"),name,state:String(form.get("state")).toUpperCase()}; state.organizations.push(organization); if(!currentUser().organizationId){currentUser().organizationId=organization.id; currentUser().state=organization.state;} saveState(); notify("Empresa cadastrada."); renderPanel(false);
+    const organization={id:uid("org"),name,state:String(form.get("state")).toUpperCase()}; state.organizations.push(organization); if(!currentUser().organizationId){currentUser().organizationId=organization.id; currentUser().state=organization.state;} saveState(); notify("Empresa cadastrada."); render();
   });
   submitHandler("sectorForm", (form) => {
     const organizationId = String(form.get("organizationId"));
     if (!canManageOrganization(currentUser(),organizationId)) throw new Error("O GPO não permite cadastrar setores nesta empresa.");
     const name = String(form.get("name")).trim(); if (!name) throw new Error("Informe o nome do setor.");
-    const sector={id:uid("sector"),name,organizationId}; state.sectors.push(sector); if(currentUser().organizationId===organizationId && !currentUser().sectorId) currentUser().sectorId=sector.id; saveState(); notify("Setor cadastrado."); renderPanel(false);
+    const sector={id:uid("sector"),name,organizationId}; state.sectors.push(sector); if(currentUser().organizationId===organizationId && !currentUser().sectorId) currentUser().sectorId=sector.id; saveState(); notify("Setor cadastrado."); render();
   });
   submitHandler("templateSaveForm", (form) => {
     const template = saveFlowTemplate(ui.selectedItemId,String(form.get("name") || ""));
