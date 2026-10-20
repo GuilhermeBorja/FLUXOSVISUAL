@@ -53,6 +53,14 @@ try{
   await page.waitForTimeout(250);
   const linkId=await page.evaluate(({first,second})=>
     state.relations.find(r=>r.sourceId===first&&r.targetId===second&&r.relationType==="TI")?.id||"",ids);
+  if(!linkId){
+    console.log("DEBUG TI:",JSON.stringify({coords,notice:await page.evaluate(()=>ui.notice), errors,
+      rects:await page.evaluate(ids=>({source:document.querySelector('[data-node="'+ids.first+'"] .graph-connector')?.getBoundingClientRect().toJSON(),
+      target:document.querySelector('[data-node="'+ids.second+'"] .node-circle')?.getBoundingClientRect().toJSON(),
+      view:document.querySelector("#graphCanvas")?.getBoundingClientRect().toJSON(),
+      scene:document.querySelector(".graph-scene")?.getAttribute("transform"),
+      relations:state.relations.filter(r=>r.sourceId===ids.first || r.targetId===ids.second).map(r=>[r.sourceId,r.targetId,r.relationType])}),ids)}));
+  }
   assert.ok(linkId,"dragging the connector should create a TI link");
   const rel=page.locator('[data-edge="'+linkId+'"]');
   await rel.focus();
