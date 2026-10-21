@@ -1527,13 +1527,25 @@ function renderGpo() {
   html += '</select></label><label>Escopo<select name="scope" required>';
   html += scopes.map((scope) => '<option value="' + scope.type + ':' + escapeHtml(scope.id || "*") + '">' + escapeHtml(scope.label) + '</option>').join("");
   html += '</select></label><label>Efeito<select name="effect"><option value="allow">Permitir</option><option value="deny">Negar</option></select></label><button class="button primary" type="submit">' + icon("plus") + 'Adicionar regra</button></form></section>';
-  const rules = [...(state.permissionRules || [])].sort((a,b) => userName(a.subjectId).localeCompare(userName(b.subjectId)) || a.operation.localeCompare(b.operation));
+  html += '<section class="panel-section prd5-gpo-profiles"><h3>Perfis reutilizáveis</h3><form id="permissionProfileForm" class="form-row"><label>Novo perfil<input name="name" placeholder="Nome do perfil" required maxlength="100"/></label><button class="button primary" type="submit">Criar perfil</button></form>';
+  html += '<div class="admin-list">'+(state.permissionProfiles||[]).map(profile=>'<div class="admin-entry"><span><strong>'+escapeHtml(profile.name)+(profile.inactive?" (inativo)":"")+'</strong><small>Perfil reutilizável · '+state.permissionRules.filter(rule=>rule.subjectType==="profile"&&rule.subjectId===profile.id).length+' regras</small></span><details><summary>Renomear</summary><form class="prd5-profile-rename" data-profile-id="'+escapeHtml(profile.id)+'"><input name="name" value="'+escapeHtml(profile.name)+'" required maxlength="100"/><button type="submit">Salvar</button></form></details><button type="button" class="button quiet" data-prd5-duplicate-profile="'+escapeHtml(profile.id)+'">Duplicar</button><button type="button" class="button quiet" data-prd5-toggle-profile="'+escapeHtml(profile.id)+'">'+(profile.inactive?"Ativar":"Inativar")+'</button></div>').join("")+'</div></section>';
+  const query=(ui.prd5GpoQuery||"").toLocaleLowerCase("pt-BR");
+  const effect=ui.prd5GpoEffect||"";
+  const operation=ui.prd5GpoOperation||"";
+  const rules = [...(state.permissionRules || [])].filter(rule=>{
+    const subject=rule.subjectType==="profile"?(state.permissionProfiles||[]).find(p=>p.id===rule.subjectId)?.name:userName(rule.subjectId);
+    return (!effect||rule.effect===effect)&&(!operation||rule.operation===operation)&&(!query||(String(subject||"")+" "+rule.operation+" "+rule.scopeType+" "+rule.scopeId).toLocaleLowerCase("pt-BR").includes(query));
+  }).sort((a,b) => userName(a.subjectId).localeCompare(userName(b.subjectId)) || a.operation.localeCompare(b.operation));
+  const pageSize=20;
+  const totalPages=Math.max(1,Math.ceil(rules.length/pageSize));
+  const page=Math.max(0,Math.min(totalPages-1,Number(ui.prd5GpoPage)||0));
+  html += '<div class="form-row prd5-gpo-filter"><label>Buscar regras<input id="prd5GpoSearch" value="'+escapeHtml(ui.prd5GpoQuery||"")+'" placeholder="Usuário, operação ou escopo"/></label><label>Efeito<select id="prd5GpoEffect">'+option("","Todos",!effect)+option("allow","Permitir",effect==="allow")+option("deny","Negar",effect==="deny")+'</select></label><label>Operação<select id="prd5GpoOperation">'+option("","Todas",!operation)+Object.entries(permissionOperationLabels).map(([id,label])=>option(id,label,operation===id)).join("")+'</select></label></div>';
   html += '<section class="panel-section"><h3>Regras aplicadas (' + rules.length + ')</h3>';
   if (!rules.length) html += '<p class="muted">Nenhuma regra GPO configurada. Os acessos ficam bloqueados.</p>';
-  else html += '<div class="admin-list">' + rules.map((rule) => {
+  else html += '<div class="admin-list">' + rules.slice(page*pageSize,(page+1)*pageSize).map((rule) => {
     const scope = rule.scopeId === "@user" ? "Empresa do usuário" : scopes.find((entry) => entry.type === rule.scopeType && entry.id === (rule.scopeId || ""))?.label || (rule.scopeType === "creator" ? "Itens criados pelo usuário" : "Escopo removido");
     return '<div class="admin-entry"><span><strong>' + escapeHtml(rule.subjectType === "profile" ? ((state.permissionProfiles || []).find((profile)=>profile.id===rule.subjectId)?.name || "Perfil removido") : userName(rule.subjectId)) + ' · ' + escapeHtml(permissionOperationLabels[rule.operation] || rule.operation) + '</strong><small>' + escapeHtml(scope) + (rule.createdBy === "migration" ? ' · migrada' : ' · ' + formatDateTime(rule.createdAt)) + '</small></span><span class="effect-tag">' + (rule.effect === "allow" ? "Permitido" : "Negado") + '</span><button type="button" class="icon-button delete-icon" data-remove-gpo-rule="' + escapeHtml(rule.id) + '" aria-label="Remover regra GPO">' + icon("trash-2") + '</button></div>';
-  }).join("") + '</div>';
+  }).join("") + '</div><div class="prd5-gpo-pages"><span>Página '+(page+1)+' de '+totalPages+' · '+rules.length+' regras</span><button type="button" data-prd5-gpo-page="prev" '+(page===0?'disabled':'')+'>Anterior</button><button type="button" data-prd5-gpo-page="next" '+(page===totalPages-1?'disabled':'')+'>Próxima</button></div>';
   return html + '</section>';
 }
 
