@@ -1,5 +1,5 @@
 name: Deploy FLUXOSVISUAL
-# PRD5 redeploy trigger
+# PRD5 redeploy trigger + feedback pass
 on:
   push:
     branches: [PRD5]
