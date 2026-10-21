@@ -1819,3 +1819,16 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 .gantt-bar.signal-red{background:#b42332}
 .prd43-gantt-row .prd5-cell{font-weight:400}
 @media(max-width:900px){.schedule-summary.prd42-projection-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* PRD5 feedback: status text, Gantt stacking and uniform detail groups */
+.prd43-gantt .prd5-col-status{font-weight:400;color:var(--ink)}
+.prd43-gantt .prd5-col-status .status-badge{display:inline;color:inherit;background:transparent;border:0;padding:0;border-radius:0}
+.prd43-gantt .prd5-col-status .status-symbol,.prd43-gantt .prd5-col-status .prd43-status-alert{display:none}
+.prd43-gantt-links-svg{z-index:6}
+.prd43-ti-edge{pointer-events:all}
+.prd43-gantt-settings,.prd5-gantt-more,.prd43-gantt-relation-editor{position:relative;z-index:50}
+.prd5-gantt-bulk-toolbar{position:relative;z-index:60}
+.prd5-panel-extras{margin:0 0 12px;padding:0;border:0;border-radius:0;background:transparent}
+.prd5-panel-extras summary{font-size:.875rem;color:#657b88;padding:8px 0}
+.prd5-panel-extras[open] summary{margin-bottom:12px}
+.prd5-panel-extras > *:not(summary){margin-left:0}
