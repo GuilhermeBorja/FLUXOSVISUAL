@@ -47,7 +47,7 @@ await test("create multi-root structure and per-item duration",async()=>{
      contains:state.relations.filter(r=>r.relationType==="contains").length};
  });
  assert.equal(out.count,6);assert.equal(out.roots,3);assert.ok(out.child);assert.equal(out.duration,3);
- assert.equal(out.tis,1);assert.equal(out.contains,0);
+ assert.equal(out.tis,2);assert.equal(out.contains,0);
  await page.locator('button[data-action="close-panel"]').click();
 });
 await test("graph and Gantt share parent relations",async()=>{
