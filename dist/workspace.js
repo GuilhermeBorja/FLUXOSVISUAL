@@ -386,7 +386,7 @@ function prd5ColumnValue(item,key,critical){
     case "organization":return escapeHtml(orgName(item.organizationId));
     case "sector":return escapeHtml(state.sectors.find(x=>x.id===item.sectorId)?.name||"—");
     case "state":return escapeHtml(item.state||"—");
-    case "status":return statusBadge(item,true);
+    case "status":return escapeHtml(statusDisplayLabel(item));
     case "critical":return critical?"Crítico":"—";
     case "blockers":return escapeHtml(isBlocked(item)?"Bloqueado":"—");
     case "progress":return progressCell(item);
@@ -1220,7 +1220,7 @@ function itemFormFields(item, create = false) {
     <label>Responsável<select name="ownerId" required ${canChangeOwner?"":"disabled"}>${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select>${canChangeOwner?"":'<small class="secondary">Seu perfil não permite alterar o responsável deste item.</small>'}</label>
     ${create ? `<label>Início esperado<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt||today())}" required/></label>` : `<div class="schedule-summary prd42-projection-summary">
       <label class="manual-start-date">Data de execução<input type="date" name="plannedStartAt" value="${escapeHtml((item.plannedStartAt||today()).slice(0,10))}" required/></label>
-      <span>Término projetado<strong>${dateCell(item.dueAt)}</strong></span>
+      <span data-projected-due>Término projetado<strong>${dateCell(item.dueAt)}</strong></span>
       <span>Baseline original<strong>${dateCell(item.baselineDueAt||item.dueAt)}</strong></span>
       <span>Progresso<strong>${Math.round(Number(item.progressPercent||0))}%</strong></span>
     </div>`}
@@ -2063,6 +2063,18 @@ function applyBulkEdit(form) {
 
 function bindPanel() {
   const root = document.querySelector("#panelRoot");
+  const startInput = root.querySelector("#updateItemForm input[name=\"plannedStartAt\"]");
+  const dueOutput = root.querySelector("#updateItemForm [data-projected-due] strong");
+  const durationInput = root.querySelector("#updateItemForm input[name=\"plannedDurationDays\"]");
+  const refreshProjectedDue = () => {
+    if (!startInput || !dueOutput) return;
+    const start = startInput.value;
+    const rawDuration = durationInput?.value.trim() ?? "";
+    const duration = rawDuration === "" ? null : Number(rawDuration);
+    dueOutput.textContent = start ? dateCell(duration == null ? start : inclusiveFinishDate(start, duration)) : "—";
+  };
+  startInput?.addEventListener("input", refreshProjectedDue);
+  durationInput?.addEventListener("input", refreshProjectedDue);
   if(ui.panel==="bulk")submitHandler("bulkEditForm",applyBulkEdit);
   root.querySelectorAll("#prd5HistoryUser,#prd5HistoryOrganization,#prd5HistorySector").forEach(input=>input.addEventListener("change",()=>{ui.prd5HistoryFilters={user:root.querySelector("#prd5HistoryUser")?.value||"",organization:root.querySelector("#prd5HistoryOrganization")?.value||"",sector:root.querySelector("#prd5HistorySector")?.value||""};if(input.id==="prd5HistoryOrganization")ui.prd5HistoryFilters.sector="";renderPanel(false);}));
   root.querySelectorAll("[data-setting-column]").forEach(input=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= [];state.tableColumnPinned ||= [];const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked ? state.hiddenTableColumns.filter(entry=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])];state.tableColumnPinned=input.checked ? [...new Set([...state.tableColumnPinned,key])] : state.tableColumnPinned.filter(entry=>entry!==key);saveState();render(); }));
@@ -2404,6 +2416,9 @@ function itemInput(form, existingId = "") {
   const parentId = form.has("parentId") ? String(form.get("parentId")||"") : String(existing ? (existing.parentId||"") : (ui.createParentId||""));
   const parent = getItem(parentId);
   const result = {title:String(form.get("title") || "").trim(),type:String(form.get("type") || existing?.type || "task"),status:String(form.get("status") || existing?.status || "backlog"),ownerId:ownerValue,plannedStartAt:String(form.get("plannedStartAt") ?? existing?.plannedStartAt ?? (parent?.baselineStartAt || parent?.plannedStartAt || "")),dueAt:String(form.get("dueAt") ?? existing?.dueAt ?? ""),plannedDurationDays:(form.has("plannedDurationDays") ? (String(form.get("plannedDurationDays")||"").trim()==="" ? null : Number(form.get("plannedDurationDays"))) : (existing?.plannedDurationDays??null)),replannedDueAt:String(form.get("replannedDueAt") ?? existing?.replannedDueAt ?? ""),weight:Number(form.get("weight") ?? existing?.weight ?? 1),description:String(form.get("description") ?? existing?.description ?? ""),organizationId:owner?.organizationId || parent?.organizationId || existing?.organizationId || currentUser().organizationId,sectorId:owner?.sectorId || parent?.sectorId || existing?.sectorId || currentUser().sectorId,state:owner?.state || parent?.state || existing?.state || currentUser().state,parentId};
+  if (existing && form.has("plannedStartAt") && !form.has("dueAt") && result.plannedStartAt !== existing.plannedStartAt) {
+    result.dueAt = result.plannedDurationDays == null ? result.plannedStartAt : inclusiveFinishDate(result.plannedStartAt, result.plannedDurationDays);
+  }
   if (existing) {
     if (form.has("blockedReason")) result.blockedReason = String(form.get("blockedReason") || "").trim();
     for (const [key,baselineField] of [["targetStartAt","baselineStartAt"],["targetDueAt","baselineDueAt"]]) {
