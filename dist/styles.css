@@ -1720,3 +1720,6 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 .prd5-parent-context{display:flex;align-items:center;gap:10px;min-width:0}
 .prd5-parent-context strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prd5-parent-context button{font-size:10px;min-height:28px}
+
+/* A variável do Gantt tem precedência sobre as antigas grades fixas. */
+.prd5-two-pane .prd43-gantt .gantt-axis[style],.prd5-two-pane .prd43-gantt .gantt-row[style]{grid-template-columns:var(--prd5-grid)!important;width:100%!important;min-width:0!important}
