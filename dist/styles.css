@@ -1673,3 +1673,50 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 .prd5-two-pane .prd5-bulk-check{display:flex;align-items:center;justify-content:center;width:17px;height:28px;flex:none}
 .prd5-two-pane .prd5-bulk-check input{width:15px;height:15px;margin:0}
 .prd5-two-pane .prd5-gantt-more[open] .prd5-gantt-menu{z-index:150}
+
+/* PRD5 fechamento UX: limites de camadas */
+.prd5-two-pane,.prd5-two-pane-viewport{min-width:0!important;max-width:100%!important;isolation:isolate}
+.prd5-two-pane .prd44-pane-heading{z-index:2!important;position:relative!important}
+.prd5-two-pane .prd44-pane-options[open]{z-index:4!important}
+.prd5-two-pane .prd44-options-menu{z-index:5!important}
+.panel-shade{z-index:300!important}
+#panelRoot{position:relative;z-index:310!important}
+#panelRoot .drawer{z-index:311!important}
+#noticeRoot{z-index:400!important;position:fixed!important;top:16px!important;right:50%!important;transform:translateX(50%)!important;max-width:min(420px,calc(100vw - 32px))!important}
+/* Interface sem rolagem horizontal: a área temporal se adapta ao espaço disponível. */
+.prd5-two-pane .prd43-gantt,.prd5-two-pane .gantt-scroll{width:100%;min-width:0!important;max-width:100%;overflow-x:hidden!important}
+.prd5-two-pane .prd43-gantt-content,.prd5-two-pane .prd5-adaptive-gantt .prd43-gantt-content{width:100%!important;min-width:0!important;max-width:100%!important}
+.prd5-two-pane .prd43-gantt .gantt-axis,.prd5-two-pane .prd43-gantt .gantt-row{min-width:0!important;max-width:100%!important;width:100%!important;gap:3px!important;grid-template-columns:inherit}
+.prd5-two-pane .prd43-gantt .gantt-axis[style],.prd5-two-pane .prd43-gantt .gantt-row[style]{grid-template-columns:var(--gantt-grid-override,unset)}
+.prd5-two-pane .prd43-gantt .gantt-axis[style],.prd5-two-pane .prd43-gantt .gantt-row[style]{grid-template-columns:revert-layer!important}
+.prd5-two-pane .gantt-row[style]{grid-template-columns:var(--prd5-grid,currentColor)}
+.prd5-cell{min-width:0!important;max-width:100%;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center}
+.prd5-two-pane .prd43-gantt-row .gantt-item-wrap{min-width:0}
+.prd5-two-pane .prd43-gantt .gantt-axis-track{min-width:0!important;overflow:hidden;white-space:nowrap}
+.prd5-two-pane .gantt-axis-track>span{font-size:9px}
+.prd5-two-pane .prd43-gantt-row .gantt-item strong{white-space:nowrap!important;display:block;overflow:hidden;text-overflow:ellipsis}
+.prd5-two-pane .prd44-pane-heading{flex-shrink:0}
+.prd5-two-pane .prd43-gantt-row.is-critical{border-left:3px solid #D92D20!important}
+.prd5-two-pane .prd43-gantt-row.is-critical .gantt-bar{background:#D92D20!important}
+.prd5-two-pane .prd43-gantt-row.signal-red:not(.is-critical){border-left:3px solid #7A1F3D!important}
+.prd5-two-pane .prd43-gantt-row.signal-red:not(.is-critical) .gantt-bar{background:#7A1F3D!important}
+.prd43-gantt-legend>.prd5-critical-key::before{background:#D92D20!important}
+.prd43-gantt-legend>.prd5-blocked-key::before{background:#7A1F3D!important}
+.prd5-gantt-menu button{min-height:29px}
+.prd5-gantt-row.drop-before{box-shadow:inset 0 3px 0 #158375!important}
+.prd5-gantt-row.drop-after{box-shadow:inset 0 -3px 0 #158375!important}
+.prd43-gantt-row.drop-before{border-top:3px solid #158375!important}
+.prd43-gantt-row.drop-after{border-bottom:3px solid #158375!important}
+.prd43-gantt-row.drop-inside{outline:2px solid #158375!important;background:#ddf4ec!important}
+.prd43-gantt-row.drop-target::after{content:attr(data-drop-label);position:absolute;right:6px;top:0;padding:2px 5px;background:#0c5b50;color:white;font-size:10px;z-index:6}
+.prd5-column-settings{display:grid;grid-template-columns:1fr 1fr;gap:5px 9px;max-height:320px;overflow-y:auto;border:1px solid #d7e0e4;padding:8px}
+.prd5-column-settings legend{font-size:11px;font-weight:650}
+.prd5-column-settings label{display:flex;align-items:center;gap:5px;font-size:10px}
+.prd5-column-settings input{width:14px;height:14px;flex:none}
+.prd44-gantt-settings{width:310px!important;max-width:min(310px,calc(100vw - 32px))!important}
+#panelRoot #createItemForm .prd5-step-row{grid-template-columns:25px minmax(90px,2fr) minmax(78px,.85fr) minmax(100px,1.3fr) 76px!important;min-height:39px;height:39px;max-height:39px;gap:4px!important}
+#panelRoot #createItemForm .prd5-step-row input[data-step-duration]{min-width:0;width:100%;height:28px;font-size:11px}
+#panelRoot #createItemForm .prd5-step-row input[data-step-title]{text-overflow:ellipsis;white-space:nowrap}
+.prd5-parent-context{display:flex;align-items:center;gap:10px;min-width:0}
+.prd5-parent-context strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prd5-parent-context button{font-size:10px;min-height:28px}
