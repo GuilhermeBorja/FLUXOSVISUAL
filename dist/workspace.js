@@ -394,7 +394,7 @@ function prd5ColumnValue(item,key,critical){
 }
 function prd5GanttSettings(){
   return '<fieldset class="prd5-column-settings"><legend>Colunas visíveis</legend>'+
-    prd5GanttColumns.map(([key,label])=>'<label><input type="checkbox" data-prd5-column="'+key+'" '+(prd5ColumnVisible(key)?"checked":"")+' '+(key==="name"?"disabled":"")+'/>'+escapeHtml(label)+'</label>').join("")+'</fieldset>';
+    prd5ColumnOrder().map(([key,label])=>'<label><input type="checkbox" data-prd5-column="'+key+'" '+(prd5ColumnVisible(key)?"checked":"")+' '+(key==="name"?"disabled":"")+'/>'+escapeHtml(label)+'<button type="button" data-prd5-col-up="'+key+'" aria-label="Subir '+escapeHtml(label)+'">↑</button><button type="button" data-prd5-col-down="'+key+'" aria-label="Descer '+escapeHtml(label)+'">↓</button></label>').join("")+'</fieldset>';
 }
 function prd44PaneToolbar(id,items){
   if(id==="table"){
@@ -1715,6 +1715,16 @@ function bindWorkspace() {
       prd41FocusedPane = prd41FocusedPane === button.dataset.paneFocus ? "" : button.dataset.paneFocus;
       prd41ApplyPaneLayout();
       requestAnimationFrame(prd43DrawGanttRelations);
+      return;
+    }
+    if(button.dataset.prd5ColUp||button.dataset.prd5ColDown){
+      const id=button.dataset.prd5ColUp||button.dataset.prd5ColDown;
+      const order=prd5ColumnOrder().map(([key])=>key),index=order.indexOf(id);
+      const next=index+(button.dataset.prd5ColUp?-1:1);
+      if(index>=0&&next>=0&&next<order.length){
+        [order[index],order[next]]=[order[next],order[index]];
+        state.prd5GanttColumnsOrder=order;saveState();render();
+      }
       return;
     }
     if (button.dataset.action==="toggle-subitems") {ui.showSubitems=!ui.showSubitems;ui.collapsed=new Set();render();return;}
