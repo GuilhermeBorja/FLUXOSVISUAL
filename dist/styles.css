@@ -1723,3 +1723,30 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 
 /* A variável do Gantt tem precedência sobre as antigas grades fixas. */
 .prd5-two-pane .prd43-gantt .gantt-axis[style],.prd5-two-pane .prd43-gantt .gantt-row[style]{grid-template-columns:var(--prd5-grid)!important;width:100%!important;min-width:0!important}
+
+/* Legenda interativa e distinção de criticidade */
+.prd43-gantt-legend>button{display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;border-radius:5px;padding:3px 5px;background:transparent;color:#415461;font-size:10px;cursor:pointer}
+.prd43-gantt-legend>button::before{content:"";display:inline-block;width:9px;height:9px;border-radius:2px;background:#9ba8b1}
+.prd43-gantt-legend>button.blue::before{background:#55af82}
+.prd43-gantt-legend>button.green::before{background:#115e38}
+.prd43-gantt-legend>button.yellow::before{background:#d6a337}
+.prd43-gantt-legend>button.prd5-blocked-key::before{background:#7A1F3D}
+.prd43-gantt-legend>button.prd5-critical-key::before{background:#D92D20}
+.prd43-gantt-legend>button:hover,.prd43-gantt-legend>button:focus-visible{background:#e9f3f1;border-color:#a8c7c1}
+.prd43-gantt-row.prd5-signal-dim{opacity:.28}
+.prd5-column-settings label{min-width:0;display:grid;grid-template-columns:15px minmax(0,1fr) 22px 22px;align-items:center;gap:4px}
+.prd5-column-settings label button{border:1px solid #cadbdc;border-radius:3px;background:white;min-width:22px;height:22px;cursor:pointer}
+.prd5-column-settings label button:hover{background:#e4f5ee}
+.prd5-gpo-profiles>.admin-list .admin-entry{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.prd5-gpo-profiles .admin-entry details{position:relative}
+.prd5-gpo-profiles .admin-entry summary{cursor:pointer}
+.prd5-profile-rename{display:flex;gap:4px;padding:5px}
+.prd5-gpo-filter{display:grid;grid-template-columns:minmax(130px,1.5fr) repeat(2,minmax(110px,1fr));gap:7px}
+.prd5-gpo-pages{display:flex;justify-content:flex-end;align-items:center;gap:6px;padding:8px 0}
+.prd5-gpo-pages button{border:1px solid #d2dfe0;border-radius:5px;padding:5px 8px;background:white;cursor:pointer}
+.prd5-gpo-pages button:disabled{opacity:.4;cursor:default}
+.drawer:has(#bulkEditForm) .drawer-body{overflow-y:auto}
+.drawer:has(#bulkEditForm) #bulkEditForm{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.drawer:has(#bulkEditForm) #bulkEditForm label{font-size:11px}
+.drawer:has(#bulkEditForm) #bulkEditForm>button[type=submit]{grid-column:1/-1;position:sticky;bottom:0;background:#187a6f;color:white;min-height:38px}
+@media(max-width:760px){.prd5-gpo-filter{grid-template-columns:1fr}.drawer:has(#bulkEditForm) #bulkEditForm{grid-template-columns:1fr}}
