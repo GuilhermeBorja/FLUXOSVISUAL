@@ -886,8 +886,15 @@ function prd43DrawGanttRelations(){
       ?[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${midX.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`]
       :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${(sx+18).toFixed(1)}`,`V${routeY.toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
     const d=pathParts.join(" ");
-    lines+=`<g class="prd43-ti-edge ${prd43SelectedTiId===rel.id?"selected":""}" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" role="button" tabindex="0" aria-label="TI de ${escapeHtml(getItem(rel.sourceId)?.title||"")} para ${escapeHtml(getItem(rel.targetId)?.title||"")}. Clique para editar.">
-       <path class="prd43-ti-hit" d="${d}"/><path class="prd43-ti-path" d="${d}" marker-end="url(#prd43-ti-arrow)"/></g>`;
+    const edgeLabel=`TI de ${getItem(rel.sourceId)?.title||""} para ${getItem(rel.targetId)?.title||""}. Clique para editar.`;
+    const anchorX=routeDown?midX:sx+18;
+    const anchorY=routeDown?(sy+ty)/2:(sy+routeY)/2;
+    lines+=`<g class="prd43-ti-edge ${prd43SelectedTiId===rel.id?"selected":""}" data-gantt-ti="${escapeHtml(rel.id)}">
+       <path class="prd43-ti-hit" d="${d}"/><path class="prd43-ti-path" d="${d}" marker-end="url(#prd43-ti-arrow)"/>
+       <foreignObject class="prd43-ti-control" x="${(anchorX-13).toFixed(1)}" y="${(anchorY-13).toFixed(1)}" width="26" height="26">
+         <button xmlns="http://www.w3.org/1999/xhtml" type="button" class="prd43-ti-accessible" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" aria-label="${escapeHtml(edgeLabel)}"></button>
+       </foreignObject>
+    </g>`;
   }
   svg.innerHTML=lines;
 }
