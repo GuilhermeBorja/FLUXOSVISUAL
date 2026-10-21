@@ -1552,14 +1552,16 @@ function renderGpo() {
   const query=(ui.prd5GpoQuery||"").toLocaleLowerCase("pt-BR");
   const effect=ui.prd5GpoEffect||"";
   const operation=ui.prd5GpoOperation||"";
+  const subjectFilter=ui.prd5GpoSubject||"";
+  const scopeFilter=ui.prd5GpoScope||"";
   const rules = [...(state.permissionRules || [])].filter(rule=>{
     const subject=rule.subjectType==="profile"?(state.permissionProfiles||[]).find(p=>p.id===rule.subjectId)?.name:userName(rule.subjectId);
-    return (!effect||rule.effect===effect)&&(!operation||rule.operation===operation)&&(!query||(String(subject||"")+" "+rule.operation+" "+rule.scopeType+" "+rule.scopeId).toLocaleLowerCase("pt-BR").includes(query));
+    return (!effect||rule.effect===effect)&&(!operation||rule.operation===operation)&&(!subjectFilter||rule.subjectType+":"+rule.subjectId===subjectFilter)&&(!scopeFilter||rule.scopeType===scopeFilter)&&(!query||(String(subject||"")+" "+rule.operation+" "+rule.scopeType+" "+rule.scopeId).toLocaleLowerCase("pt-BR").includes(query));
   }).sort((a,b) => userName(a.subjectId).localeCompare(userName(b.subjectId)) || a.operation.localeCompare(b.operation));
   const pageSize=20;
   const totalPages=Math.max(1,Math.ceil(rules.length/pageSize));
   const page=Math.max(0,Math.min(totalPages-1,Number(ui.prd5GpoPage)||0));
-  html += '<div class="form-row prd5-gpo-filter"><label>Buscar regras<input id="prd5GpoSearch" value="'+escapeHtml(ui.prd5GpoQuery||"")+'" placeholder="Usuário, operação ou escopo"/></label><label>Efeito<select id="prd5GpoEffect">'+option("","Todos",!effect)+option("allow","Permitir",effect==="allow")+option("deny","Negar",effect==="deny")+'</select></label><label>Operação<select id="prd5GpoOperation">'+option("","Todas",!operation)+Object.entries(permissionOperationLabels).map(([id,label])=>option(id,label,operation===id)).join("")+'</select></label></div>';
+  html += '<div class="form-row prd5-gpo-filter"><label>Buscar regras<input id="prd5GpoSearch" value="'+escapeHtml(ui.prd5GpoQuery||"")+'" placeholder="Usuário, operação ou escopo"/></label><label>Efeito<select id="prd5GpoEffect">'+option("","Todos",!effect)+option("allow","Permitir",effect==="allow")+option("deny","Negar",effect==="deny")+'</select></label><label>Operação<select id="prd5GpoOperation">'+option("","Todas",!operation)+Object.entries(permissionOperationLabels).map(([id,label])=>option(id,label,operation===id)).join("")+'</select></label><label>Sujeito<select id="prd5GpoSubject">'+option("","Todos",!subjectFilter)+state.users.map(u=>option("user:"+u.id,u.name,subjectFilter==="user:"+u.id))+(state.permissionProfiles||[]).map(pr=>option("profile:"+pr.id,"Perfil: "+pr.name,subjectFilter==="profile:"+pr.id))+'</select></label><label>Escopo<select id="prd5GpoScope">'+option("","Todos",!scopeFilter)+[...new Set((state.permissionRules||[]).map(r=>r.scopeType))].map(k=>option(k,k,scopeFilter===k))+'</select></label></div>';
   html += '<section class="panel-section"><h3>Regras aplicadas (' + rules.length + ')</h3>';
   if (!rules.length) html += '<p class="muted">Nenhuma regra GPO configurada. Os acessos ficam bloqueados.</p>';
   else html += '<div class="admin-list">' + rules.slice(page*pageSize,(page+1)*pageSize).map((rule) => {
@@ -2134,7 +2136,7 @@ function bindPanel() {
     }
   };
   root.querySelector("#prd5GpoSearch")?.addEventListener("input",e=>{ui.prd5GpoQuery=e.target.value;ui.prd5GpoPage=0;const pos=e.target.selectionStart;renderPanel(false);const field=document.querySelector("#prd5GpoSearch");field?.focus();field?.setSelectionRange(pos,pos);});
-  for(const [id,key] of [["prd5GpoEffect","prd5GpoEffect"],["prd5GpoOperation","prd5GpoOperation"]])root.querySelector("#"+id)?.addEventListener("change",e=>{ui[key]=e.target.value;ui.prd5GpoPage=0;renderPanel(false);});
+  for(const [id,key] of [["prd5GpoEffect","prd5GpoEffect"],["prd5GpoOperation","prd5GpoOperation"],["prd5GpoSubject","prd5GpoSubject"],["prd5GpoScope","prd5GpoScope"]])root.querySelector("#"+id)?.addEventListener("change",e=>{ui[key]=e.target.value;ui.prd5GpoPage=0;renderPanel(false);});
   root.querySelectorAll(".prd5-profile-rename").forEach(form=>form.addEventListener("submit",e=>{
     e.preventDefault();if(!canManageGpo(currentUser()))return;
     const profile=state.permissionProfiles.find(p=>p.id===form.dataset.profileId);
