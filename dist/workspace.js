@@ -36,10 +36,17 @@ function prd44GraphProjection(items){
     return cursor && visible.has(cursor.id)?cursor.id:"";
   }
   const relations=[];
+  // Contém é sempre calculado pela única referência parentId, nunca pelas relações persistidas.
+  shown.forEach(item=>{
+    const parent=representative(item.parentId);
+    if(parent && parent!==item.id) relations.push({
+      id:"contains-"+parent+"-"+item.id,sourceId:parent,targetId:item.id,relationType:"contains",derived:true
+    });
+  });
   for(const rel of relationsFor(items)){
     const src=representative(rel.sourceId),dst=representative(rel.targetId);
     if(!src||!dst||src===dst)continue;
-    if(rel.relationType==="contains" && (src!==rel.sourceId || dst!==rel.targetId))continue;
+    if(rel.relationType==="contains")continue;
     relations.push(src===rel.sourceId&&dst===rel.targetId?rel:{...rel,sourceId:src,targetId:dst,prd44Projected:true});
   }
   return {nodes:shown,relations};
@@ -1203,7 +1210,8 @@ function renderQuickStepRows(text) {
   const previous=[...root.querySelectorAll(".quick-step-row")].map(row=>({
     index:Number(row.dataset.stepIndex),title:row.querySelector("[data-step-title]")?.value||"",
     depth:Number(row.dataset.stepDepth||0),type:row.querySelector("[data-step-type]")?.value||"task",
-    owner:row.querySelector("[data-step-owner]")?.value||""
+    owner:row.querySelector("[data-step-owner]")?.value||"",
+    duration:row.querySelector("[data-step-duration]")?.value||""
   }));
   const used=new Set();
   const summary=document.querySelector("#prd43StepCount"),sequence=document.querySelector("#prd43Sequence");
@@ -1237,7 +1245,8 @@ function renderQuickStepRows(text) {
       <span class="prd43-step-number" title="Nível ${entry.depth+1}">${entry.depth?"↳":""}${index+1}</span>
       <label class="prd5-step-name"><span class="sr-only">Nome do subitem ${index+1}</span><input name="stepTitle_${index}" data-step-title value="${escapeHtml(entry.title)}" maxlength="240" required aria-label="Nome do subitem ${index+1}, nível ${entry.depth+1}"/></label>
       <label><span class="sr-only">Tipo</span><select name="stepType_${index}" data-step-type aria-label="Tipo do subitem ${index+1}">${itemTypes.map(type=>option(type.id,type.label,(saved?.type||"task")===type.id)).join("")}</select></label>
-      <label><span class="sr-only">Responsável</span><select name="stepOwner_${index}" data-step-owner aria-label="Responsável do subitem ${index+1}">${ownerOptions(saved?.owner||defaultOwner)}</select></label>
+      <label><span class="sr-only">Responsável</span><select name="stepOwner_${index}" data-step-owner aria-label="Responsável do item ${index+1}">${ownerOptions(saved?.owner||defaultOwner)}</select></label>
+      <label><span class="sr-only">Duração em dias corridos</span><input type="number" min="1" step="1" inputmode="numeric" name="stepDuration_${index}" data-step-duration value="${escapeHtml(saved?.duration||"")}" placeholder="A definir" aria-label="Duração em dias corridos do item ${index+1}"/></label>
     </div>`;
   }).join("");
   const leaves=rows.filter((_,index)=>!rows.some(entry=>entry.parentIndex===index)).length;
@@ -1260,12 +1269,12 @@ function renderCreatePanel(){
  const user=currentUser();
  return `${panelHeader("Criar itens","Estrutura de atividades")}
  <form id="createItemForm" class="drawer-body prd5-create-form">
-  <div class="prd5-create-top"><label>Início previsto (referência)<input name="plannedStartAt" type="date" value="${today()}"/></label></div>
+  <div class="prd5-create-top">${ui.createParentId?`<div class="prd5-parent-context"><strong>Dentro de: ${escapeHtml(getItem(ui.createParentId)?.title||"")}</strong><button type="button" data-action="prd5-parent-root">Criar no nível principal</button></div>`:""}<label>Início previsto (referência)<input name="plannedStartAt" type="date" value="${today()}"/></label></div>
   <section class="prd5-create-activities">
    <div class="prd43-activities-head"><strong>Estrutura de itens</strong><span id="prd43StepCount">Digite um item por linha; Tab cria subitens</span></div>
    <label class="prd5-source-label">Itens e hierarquia<textarea id="prd43PasteActivities" name="quickSteps" rows="14" required autofocus spellcheck="false" placeholder="ITEM 1&#10;ITEM 2&#10;    SUBITEM 2.1&#10;        SUBITEM 2.1.1&#10;ITEM 3"></textarea><small>Linhas sem recuo são independentes. Tab avança um nível; Shift+Tab retorna.</small></label>
    <div class="prd5-result-area"><strong>Prévia editável</strong><div class="prd43-steps-table" id="quickStepRows"></div></div>
-   <label class="prd43-sequence-toggle"><input id="prd43Sequence" name="autoSequence" type="checkbox" value="1" disabled/>Criar relações TI entre atividades finais (somente com duração informada posteriormente)</label>
+   <label class="prd43-sequence-toggle"><input id="prd43Sequence" name="autoSequence" type="checkbox" value="1" disabled/>Criar relações TI entre atividades finais (requer duração nas folhas)</label>
   </section>
   <div class="prd42-create-actions drawer-actions"><span class="secondary">O salvamento cria todos os níveis em uma operação.</span><button class="button primary" type="submit">Criar estrutura</button><button class="button quiet" type="button" data-action="close-panel">Cancelar</button></div>
  </form>`;
@@ -1909,6 +1918,7 @@ function bindPanel() {
     const action = button.dataset.action;
     if(prd43ConfirmInline(button))return;
     if (action === "close-panel") { closePanel(); return; }
+    if (action === "prd5-parent-root") { ui.createParentId="";renderPanel(false);return; }
     if (action === "archive-item") { try { const count=archiveItem(ui.selectedItemId); ui.selectedItemId=""; ui.panel=""; ui.scopeId="all"; saveState(); notify(count + " item(ns) arquivado(s)."); render(); } catch(error) { panelFailure(error); } return; }
     if (button.dataset.restoreItem) { try { const count=restoreArchivedItem(button.dataset.restoreItem); saveState(); notify(count + " item(ns) restaurado(s)."); renderPanel(false); } catch(error) { panelFailure(error); } return; }
     if (action === "cancel-deletion") { cancelDeletion(); return; }
@@ -2024,15 +2034,19 @@ function bindPanel() {
         const owner=state.users.find(u=>u.id===ownerId&&!u.disabled);
         if(!owner)throw new Error("Informe um responsável válido para "+entry.title);
         const type=String(form.get("stepType_"+i)||"task");
-        const parentId=entry.parentIndex<0?"":created[entry.parentIndex]?.id;
+        const parentId=entry.parentIndex<0?(ui.createParentId||""):created[entry.parentIndex]?.id;
         if(entry.parentIndex>=0&&!parentId)throw new Error("Hierarquia incompleta na linha "+(entry.lineIndex+1));
+        const durationRaw=String(form.get("stepDuration_"+i)||"").trim();
+        const duration=durationRaw===""?null:Number(durationRaw);
+        if(duration!==null && (!Number.isInteger(duration)||duration<1))throw new Error("Duração inválida na linha "+(entry.lineIndex+1)+". Informe dias corridos.");
         created.push(createItem({title:entry.title,type,status:"backlog",ownerId,
           organizationId:owner.organizationId,sectorId:owner.sectorId,state:owner.state,
-          parentId,weight:1,plannedStartAt:start,plannedDurationDays:null,dueAt:""}));
+          parentId,weight:1,plannedStartAt:start,plannedDurationDays:duration,dueAt:duration===null?"":inclusiveFinishDate(start,duration)}));
       }
       if(form.get("autoSequence")==="1"){
         const parents=new Set(steps.map(e=>e.parentIndex).filter(n=>n>=0));
         const leaves=created.filter((_,i)=>!parents.has(i));
+        for(let i=0;i<leaves.length;i++)if(!Number.isInteger(leaves[i].plannedDurationDays)||leaves[i].plannedDurationDays<1)throw new Error("A atividade final "+leaves[i].title+" (linha "+(steps[created.indexOf(leaves[i])].lineIndex+1)+") precisa de duração para criar TI.");
         for(let i=1;i<leaves.length;i++)createRelation(leaves[i-1].id,leaves[i].id,"TI");
       }
       for(const item of [...created].reverse())if(state.items.some(child=>child.parentId===item.id))syncParentSummary(item.id);
