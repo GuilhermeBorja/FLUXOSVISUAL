@@ -1332,12 +1332,14 @@ function renderQuickStepRows(text) {
       <label class="prd5-step-name"><span class="sr-only">Nome do subitem ${index+1}</span><input name="stepTitle_${index}" data-step-title value="${escapeHtml(entry.title)}" maxlength="240" required aria-label="Nome do subitem ${index+1}, nível ${entry.depth+1}"/></label>
       <label><span class="sr-only">Tipo</span><select name="stepType_${index}" data-step-type aria-label="Tipo do subitem ${index+1}">${itemTypes.map(type=>option(type.id,type.label,(saved?.type||"task")===type.id)).join("")}</select></label>
       <label><span class="sr-only">Responsável</span><select name="stepOwner_${index}" data-step-owner aria-label="Responsável do item ${index+1}">${ownerOptions(saved?.owner||defaultOwner)}</select></label>
-      <label><span class="sr-only">Duração em dias corridos</span><input type="number" min="1" step="1" inputmode="numeric" name="stepDuration_${index}" data-step-duration value="${escapeHtml(saved?.duration||"")}" placeholder="A definir" aria-label="Duração em dias corridos do item ${index+1}"/></label>
+      <label><span class="sr-only">Duração em dias corridos</span><input type="number" min="0" step="1" inputmode="numeric" name="stepDuration_${index}" data-step-duration value="${escapeHtml(saved?.duration ?? 1)}" aria-label="Duração em dias corridos do item ${index+1}"/></label>
     </div>`;
   }).join("");
+  const form=root.closest("form");
+  if(form)form.classList.toggle("prd5-has-rows",rows.length>0);
   const leaves=rows.filter((_,index)=>!rows.some(entry=>entry.parentIndex===index)).length;
   if(summary)summary.textContent=rows.length?`${rows.length} subitem(s), ${Math.max(...rows.map(row=>row.depth))+1} nível(is) · ${leaves} atividade(s) final(is)`:"Digite ou cole os subitens. Tab cria um nível; Shift+Tab retorna.";
-  if(sequence){sequence.disabled=leaves<2;if(sequence.checked){const durationMissing=rows.findIndex((item,index)=>!rows.some(child=>child.parentIndex===index) && !(Number(root.querySelector(`[name="stepDuration_${index}"]`)?.value)>=1));if(durationMissing>=0)summary.textContent+=" · Informe a duração das atividades finais para criar TI.";}}
+  if(sequence){sequence.disabled=leaves<2;if(sequence.checked){const durationMissing=rows.findIndex((item,index)=>!rows.some(child=>child.parentIndex===index) && !(Number(root.querySelector(`[name="stepDuration_${index}"]`)?.value)>=0));if(durationMissing>=0)summary.textContent+=" · Informe a duração das atividades finais para criar TI.";}}
 }
 
 function renderAttachments(item,editable) {
@@ -1355,12 +1357,13 @@ function renderCreatePanel(){
  const user=currentUser();
  return `${panelHeader("Criar itens","Estrutura de atividades")}
  <form id="createItemForm" class="drawer-body prd5-create-form">
-  <div class="prd5-create-top">${ui.createParentId?`<div class="prd5-parent-context"><strong>Dentro de: ${escapeHtml(getItem(ui.createParentId)?.title||"")}</strong><button type="button" data-action="prd5-parent-root">Criar no nível principal</button></div>`:""}<label>Início previsto (referência)<input name="plannedStartAt" type="date" value="${today()}"/></label></div>
+  <div class="prd5-create-top">${ui.createParentId?`<div class="prd5-parent-context"><strong>Dentro de: ${escapeHtml(getItem(ui.createParentId)?.title||"")}</strong><button type="button" data-action="prd5-parent-root">Criar no nível principal</button></div>`:""}</div>
   <section class="prd5-create-activities">
    <div class="prd43-activities-head"><strong>Estrutura de itens</strong><span id="prd43StepCount">Digite um item por linha; Tab cria subitens</span></div>
    <label class="prd5-source-label">Itens e hierarquia<textarea id="prd43PasteActivities" name="quickSteps" rows="14" required autofocus spellcheck="false" placeholder="ITEM 1&#10;ITEM 2&#10;    SUBITEM 2.1&#10;        SUBITEM 2.1.1&#10;ITEM 3"></textarea><small>Linhas sem recuo são independentes. Tab avança um nível; Shift+Tab retorna.</small></label>
-   <div class="prd5-result-area"><strong>Prévia editável</strong><div class="prd43-steps-table" id="quickStepRows"></div></div>
-   <label class="prd43-sequence-toggle"><input id="prd43Sequence" name="autoSequence" type="checkbox" value="1" disabled/>Criar relações TI entre atividades finais (requer duração nas folhas)</label>
+   <div class="prd5-result-area"><strong>Prévia editável</strong><div class="prd43-steps-table-head" aria-hidden="true"><span></span><span>Nome</span><span>Tipo</span><span>Responsável</span><span>Duração (dias)</span></div><div class="prd43-steps-table" id="quickStepRows"></div></div>
+   <div class="prd5-reference-date"><label>Início previsto (referência)<input name="plannedStartAt" type="date" value="${today()}"/></label></div>
+   <label class="prd43-sequence-toggle"><input id="prd43Sequence" name="autoSequence" type="checkbox" value="1" disabled/>Criar relações TI entre atividades finais</label>
   </section>
   <div class="prd42-create-actions drawer-actions"><span class="secondary">O salvamento cria todos os níveis em uma operação.</span><button class="button primary" type="submit">Criar estrutura</button><button class="button quiet" type="button" data-action="close-panel">Cancelar</button></div>
  </form>`;
@@ -2177,7 +2180,7 @@ function bindPanel() {
   }));
   document.querySelector("#editUserOrganization")?.addEventListener("change",(event)=>{ const sector=document.querySelector("#editUserSector"); if(!sector)return; sector.innerHTML=state.sectors.filter((entry)=>entry.organizationId===event.target.value).map((entry)=>option(entry.id,entry.name)).join(""); });
   root.querySelectorAll('#createItemForm [name="plannedStartAt"],#createItemForm [name="plannedDurationDays"],#createItemForm [name="sequence"]').forEach((input)=>input.addEventListener("input",updateSchedulePreview));
-  root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) { const field=event.target; const n=field.value.trim();field.setCustomValidity(n!==""&&(!Number.isInteger(Number(n))||Number(n)<1)?"Informe duração de pelo menos 1 dia.":""); } });
+  root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) { const field=event.target; const n=field.value.trim();field.setCustomValidity(n!==""&&(!Number.isInteger(Number(n))||Number(n)<0)?"Informe uma duração inteira igual ou maior que zero.":""); } });
   root.addEventListener("change",(event)=>{ const input=event.target; if(input.matches("[data-row-fill-level]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.levels[input.dataset.rowFillLevel]=input.value; saveState(); render(); } else if(input.matches("[data-row-fill-project]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.projects[input.dataset.rowFillProject]=input.value; saveState(); render(); } });
   document.querySelector("#deleteCascade")?.addEventListener("change", (event) => { ui.deletion.cascade = event.target.checked; renderPanel(false); });
   submitHandler("deleteForm", (form) => {
@@ -2216,7 +2219,7 @@ function bindPanel() {
         if(entry.parentIndex>=0&&!parentId)throw new Error("Hierarquia incompleta na linha "+(entry.lineIndex+1));
         const durationRaw=String(form.get("stepDuration_"+i)||"").trim();
         const duration=durationRaw===""?null:Number(durationRaw);
-        if(duration!==null && (!Number.isInteger(duration)||duration<1))throw new Error("Duração inválida na linha "+(entry.lineIndex+1)+". Informe dias corridos.");
+        if(duration!==null && (!Number.isInteger(duration)||duration<0))throw new Error("Duração inválida na linha "+(entry.lineIndex+1)+". Informe um número inteiro igual ou maior que zero.");
         created.push(createItem({title:entry.title,type,status:"backlog",ownerId,
           organizationId:owner.organizationId,sectorId:owner.sectorId,state:owner.state,
           parentId,weight:1,plannedStartAt:start,plannedDurationDays:duration,dueAt:duration===null?"":inclusiveFinishDate(start,duration)}));
@@ -2224,7 +2227,7 @@ function bindPanel() {
       if(form.get("autoSequence")==="1"){
         const parents=new Set(steps.map(e=>e.parentIndex).filter(n=>n>=0));
         const leaves=created.filter((_,i)=>!parents.has(i));
-        for(let i=0;i<leaves.length;i++)if(!Number.isInteger(leaves[i].plannedDurationDays)||leaves[i].plannedDurationDays<1)throw new Error("A atividade final "+leaves[i].title+" (linha "+(steps[created.indexOf(leaves[i])].lineIndex+1)+") precisa de duração para criar TI.");
+        for(let i=0;i<leaves.length;i++)if(!Number.isInteger(leaves[i].plannedDurationDays)||leaves[i].plannedDurationDays<0)throw new Error("A atividade final "+leaves[i].title+" (linha "+(steps[created.indexOf(leaves[i])].lineIndex+1)+") precisa de uma duração igual ou maior que zero para criar TI.");
         for(let i=1;i<leaves.length;i++)createRelation(leaves[i-1].id,leaves[i].id,"TI");
       }
       for(const item of [...created].reverse())if(state.items.some(child=>child.parentId===item.id))syncParentSummary(item.id);
