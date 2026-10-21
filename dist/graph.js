@@ -408,7 +408,8 @@ const FluxosGraph = (() => {
           label.textContent=String(animationState.index);
         }
       }
-      highlightTraversalPath(step.edgeIds);\n      for(const id of step.edgeIds){
+      highlightTraversalPath(step.edgeIds);
+      for(const id of step.edgeIds){
         const el=edgeElements.get(id);el?.classList.add("propagation-active");
         el?.classList.toggle("propagation-reverse",Boolean(step.reverseEdgeIds?.includes(id)));
       }
