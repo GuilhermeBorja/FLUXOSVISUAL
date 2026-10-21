@@ -1414,6 +1414,7 @@ function eventValue(event, value) {
   if (!value) return "—";
   if (["status_changed","created","approval_submitted","approval_decided","approval_revision_started","approval_reopened"].includes(event.eventType)) { const item=getItem(event.itemId); if(item?.type==="approval" && value==="under_review") return "Aguardando decisão"; if(item?.type==="approval" && value==="correction") return "Correção solicitada"; return labelOf(statusCatalog,value); }
   if (event.eventType === "owner_changed") return userName(value);
+  if(event.eventType==="blocker_sources_changed")return String(value).split(",").map(id=>id.trim()).filter(Boolean).map(id=>getItem(id)?.title||"Item arquivado").join(", ")||"—";
   // R2-10: valores guardados como ids são exibidos pelo nome atual do registro.
   if (event.eventType === "context_changed") return state.organizations.find((entry) => entry.id === value)?.name || state.sectors.find((entry) => entry.id === value)?.name || value;
   if (["parent_changed","relation_retargeted"].includes(event.eventType)) return getItem(value)?.title || value;
