@@ -811,7 +811,7 @@ function renderGantt(items) {
       <button data-create-child="${escapeHtml(item.id)}" type="button">Criar subitem/estrutura</button>
       <button data-order-up="${escapeHtml(item.id)}" type="button">Mover para cima</button><button data-order-down="${escapeHtml(item.id)}" type="button">Mover para baixo</button><button data-indent="${escapeHtml(item.id)}" type="button">Indentar</button>
       ${item.parentId?`<button data-outdent="${escapeHtml(item.id)}" type="button">Recuar</button>`:""}</div></details>`:"";
-    return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)};--prd5-grid:${gridColumns}">
+    return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${ui.graphHighlight && ui.graphHighlight!=="all" && (ui.graphHighlight==="critical"?!critical:ui.graphHighlight!==tone)?"prd5-signal-dim":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)};--prd5-grid:${gridColumns}">
       ${visibleCols.map(([key])=>{if(key==="name")return `<div class="gantt-item-wrap prd5-cell">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong></button></div>`;if(key==="edit")return `<div class="prd5-gantt-actions prd5-cell"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>${siblingActions}</div>`;if(key==="select")return `<label class="prd5-bulk-check prd5-cell"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label>`;return `<span class="prd5-cell prd5-col-${key}">${prd5ColumnValue(item,key,critical)}</span>`;}).join("")}
       <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(item.title+" · "+formatDate(start)+" a "+formatDate(end))}">
         <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""} ${item.dueAt?"":"prd5-unplanned"}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
@@ -823,8 +823,8 @@ function renderGantt(items) {
   }).join("");
   html+=`<svg class="prd43-gantt-links-svg" id="prd43GanttOverlay" aria-label="Relações TI do Gantt"></svg>
     </div></div><div class="prd43-gantt-legend" aria-label="Legenda">
-      <span class="gray">Não iniciado</span><span class="blue">Em execução</span><span class="green">Concluído</span>
-      <span class="yellow">Risco / atraso</span><span class="prd5-blocked-key">Bloqueado</span><span class="prd5-critical-key">Crítico</span>
+      <button type="button" data-highlight-signal="gray" class="gray">Não iniciado</button><button type="button" data-highlight-signal="blue" class="blue">Em execução</button><button type="button" data-highlight-signal="green" class="green">Concluído</button>
+      <button type="button" data-highlight-signal="yellow" class="yellow">Risco / atraso</button><button type="button" data-highlight-signal="red" class="prd5-blocked-key">Bloqueado</button><button type="button" data-highlight-signal="critical" class="prd5-critical-key">Crítico</button>
     </div></div>`;
   return html;
 }
@@ -844,8 +844,15 @@ function prd43DrawGanttRelations(){
     const sa=source.getBoundingClientRect(),tb=target.getBoundingClientRect();
     const start=offset(sa),end=offset(tb);
     const sx=start.x+sa.width,sy=start.y+sa.height/2,tx=end.x,ty=end.y+tb.height/2;
-    const elbow=tx>=sx+24?Math.max(sx+11,(sx+tx)/2):sx+20;
-    const d=`M${sx.toFixed(1)} ${sy.toFixed(1)} H${elbow.toFixed(1)} V${ty.toFixed(1)} H${tx.toFixed(1)}`;
+    // TI sempre termina da esquerda para a direita na sucessora.
+    // Quando as barras se cruzam horizontalmente, a rota faz desvio acima das linhas.
+    const safeTx=Math.max(0,tx-13),midX=tx>=sx+34?(sx+safeTx)/2:sx+17;
+    const lane=[...state.relations].filter(r=>r.relationType==="TI"&&ids.has(r.sourceId)&&ids.has(r.targetId)).findIndex(r=>r.id===rel.id);
+    const lift=16+(lane%4)*7;
+    const pathParts=tx>=sx+34
+      ?[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${midX.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`]
+      :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${(sx+14).toFixed(1)}`,`V${(Math.min(sy,ty)-lift).toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
+    const d=pathParts.join(" ");
     lines+=`<g class="prd43-ti-edge ${prd43SelectedTiId===rel.id?"selected":""}" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" role="button" tabindex="0" aria-label="TI de ${escapeHtml(getItem(rel.sourceId)?.title||"")} para ${escapeHtml(getItem(rel.targetId)?.title||"")}. Clique para editar.">
        <path class="prd43-ti-hit" d="${d}"/><path class="prd43-ti-path" d="${d}" marker-end="url(#prd43-ti-arrow)"/></g>`;
   }
