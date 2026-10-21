@@ -1,7 +1,7 @@
 name: PRD5 Final Review Validation
 on:
   push:
-    branches: [PRD5-REVISAO-FINAL]
+    branches: [PRD5-REVISAO-FINAL, PRD5-FRONTEND-FINAL-20261021]
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,3 +26,4 @@ jobs:
           timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
           node browser-tests/prd5-smoke.mjs
           node browser-tests/prd5-full-acceptance.mjs
+          node browser-tests/prd5-hardening.mjs
