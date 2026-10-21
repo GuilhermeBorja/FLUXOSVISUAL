@@ -883,9 +883,14 @@ function prd43DrawGanttRelations(){
     const routeY=sy+22+(lane%4)*7;
     // Para sucessoras abaixo, a linha desce diretamente até a altura do alvo e segue
     // horizontalmente; isso evita o efeito visual de "descer, subir e voltar".
+    // O ultimo trecho sempre avanca para a direita ate o centro da barra destino.
+    // Isso evita uma ponta invertida quando as barras se sobrepoem horizontalmente.
+    const routeX=routeDown
+      ?(tx>sx+18?midX:Math.max(8,tx-18))
+      :sx+18;
     const pathParts=routeDown
-      ?[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${midX.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`]
-      :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${(sx+18).toFixed(1)}`,`V${routeY.toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
+      ?[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${routeX.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`]
+      :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${routeX.toFixed(1)}`,`V${routeY.toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
     const d=pathParts.join(" ");
     const edgeLabel=`TI de ${getItem(rel.sourceId)?.title||""} para ${getItem(rel.targetId)?.title||""}. Clique para editar.`;
     const anchorX=routeDown?midX:sx+18;
