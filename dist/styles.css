@@ -1763,3 +1763,6 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 .prd5-two-pane .prd43-gantt-row .prd5-gantt-actions{position:relative!important;z-index:91!important;overflow:visible!important}
 .prd5-two-pane .prd5-gantt-more[open]{position:relative!important;z-index:100!important}
 .prd5-two-pane .prd5-gantt-more[open] .prd5-gantt-menu{position:absolute!important;z-index:101!important;top:calc(100% + 2px)!important;right:0!important;min-width:170px!important;display:grid!important;background:white!important;box-shadow:0 8px 22px #10202b44!important}
+
+/* As conexoes TI sao desenhadas, mas nao podem interceptar checks e edicao da tabela. */
+.prd5-two-pane .prd43-gantt-links-svg,.prd5-two-pane .prd43-gantt-links-svg *{pointer-events:none!important}
