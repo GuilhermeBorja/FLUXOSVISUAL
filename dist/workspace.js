@@ -346,6 +346,28 @@ const prd5GanttColumns=[
   ["variance","Variação baseline"],["edit","Edição"],["select","Seleção em lote"]
 ];
 const prd5DefaultColumns=["name","status","progress","start","due","edit","select"];
+function prd5ColumnOrder(){
+ const order=state.prd5GanttColumnsOrder||[];
+ return [...prd5GanttColumns].sort((a,b)=>{
+  const x=order.indexOf(a[0]),y=order.indexOf(b[0]);
+  return (x<0?100+prd5GanttColumns.indexOf(a):x)-(y<0?100+prd5GanttColumns.indexOf(b):y);
+ });
+}
+function prd5AdaptiveColumns(){
+ const selected=prd5ColumnOrder().filter(([key])=>prd5ColumnVisible(key));
+ const pane=document.querySelector(".prd41-pane--gantt");
+ const available=Math.max(320,pane?.getBoundingClientRect().width||window.innerWidth*.59)-20;
+ const cost=key=>key==="name"?142:key==="edit"?58:key==="select"?26:key==="status"?94:key==="owner"?84:65;
+ const current=[...selected];let total=current.reduce((sum,[key])=>sum+cost(key),130);
+ const extras=current.filter(([key])=>!prd5DefaultColumns.includes(key)).map(([key])=>key);
+ const candidates=["critical","blockers","state","organization","sector","baseline","variance","weight","type","duration","owner","status","due","start","progress"];
+ for(const key of [...candidates.filter(k=>!extras.includes(k)),...candidates.filter(k=>extras.includes(k))]){
+  if(total<=available)break;
+  const index=current.findIndex(([id])=>id===key);
+  if(index>=0){current.splice(index,1);total-=cost(key);}
+ }
+ return current;
+}
 function prd5ColumnVisible(name) {
   return (state.prd5GanttColumns||prd5DefaultColumns).includes(name);
 }
@@ -784,7 +806,7 @@ function renderGantt(items) {
     return {item,startOffset:offset,duration:hasPlannedDuration(item)||item.dueAt?itemDurationDays(item):0,slack:null,critical:false,structural:true,depth,children};
   });
   const maxDay=Math.max(1,...rows.map(row=>row.startOffset+Number(row.duration||0)+(row.slack||0)));
-  const visibleCols=prd5GanttColumns.filter(([key])=>prd5ColumnVisible(key));
+  const visibleCols=prd5AdaptiveColumns();
   const gridColumns=visibleCols.map(([key])=>key==="name"?"minmax(118px,1.8fr)":key==="edit"?"58px":key==="select"?"25px":"minmax(48px,.9fr)").join(" ")+" minmax(110px,2.6fr)";
   const visible=new Set(rows.map(row=>row.item.id));
   const ties=relationsFor(items).filter(rel=>rel.relationType==="TI"&&visible.has(rel.sourceId)&&visible.has(rel.targetId));
