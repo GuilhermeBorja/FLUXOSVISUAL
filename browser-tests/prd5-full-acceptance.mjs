@@ -48,7 +48,7 @@ await test("create multi-root structure and per-item duration",async()=>{
  });
  assert.equal(out.count,6);assert.equal(out.roots,3);assert.ok(out.child);assert.equal(out.duration,3);
  assert.equal(out.tis,2);assert.equal(out.contains,0);
- await page.locator('button[data-action="close-panel"]').click();
+ await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 });
 await test("graph and Gantt share parent relations",async()=>{
  const data=await page.evaluate(()=>{
@@ -85,7 +85,7 @@ await test("Gantt contextual creation records the origin",async()=>{
  const item=await page.evaluate(()=>state.items.find(x=>x.title==="QA CHILD B2"));
  const parent=await page.evaluate(()=>state.items.find(x=>x.title==="QA ROOT B"));
  assert.equal(item.parentId,parent.id);
- await page.locator('button[data-action="close-panel"]').click();
+ await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 });
 await test("bulk selection opens drawer and updates two items",async()=>{
  const before=page.locator(".prd43-gantt-row [data-bulk-item]");
@@ -107,7 +107,7 @@ await test("layers keep drawer above headers",async()=>{
   return {drawer:z("#panelRoot"),head:z(".prd5-two-pane .prd44-pane-heading")};
  });
  assert.ok(d.drawer>d.head,JSON.stringify(d));
- await page.locator('button[data-action="close-panel"]').click();
+ await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 });
 await test("Gantt legend includes distinct critical and blocked colors",async()=>{
  assert.equal(await page.locator(".prd43-gantt-legend [data-highlight-signal='critical']").count(),1);
@@ -123,13 +123,13 @@ await test("Global history has all filters",async()=>{
  await page.locator("[data-action='admin']").first().click();
  await page.locator('[data-admin-tab="history"]').click();
  for(const id of ["historyUserFilter","historyOrganizationFilter","historySectorFilter","historyEventFilter","historyItemFilter","historySinceFilter","historyUntilFilter"])assert.equal(await page.locator("#"+id).count(),1,id);
- await page.locator('button[data-action="close-panel"]').click();
+ await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 });
 await test("GPO filters and profile creation are present",async()=>{
  await page.locator("[data-action='admin']").first().click();
  await page.locator('[data-admin-tab="gpo"]').click();
  for(const id of ["gpoRuleForm","permissionProfileForm","prd5GpoSearch","prd5GpoEffect","prd5GpoOperation"])assert.equal(await page.locator("#"+id).count(),1,id);
- await page.locator('button[data-action="close-panel"]').click();
+ await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();
 });
 await test("no missing icons or JavaScript exceptions",async()=>{
  assert.equal(errors.length,0,errors.join("\n"));
