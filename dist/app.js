@@ -1321,7 +1321,11 @@ function syncParentSummary(parentId, effectiveAt = nowIso()) {
 function validateItemInput(input, existing = null) {
   if (!input.title?.trim()) throw new Error("Informe o nome do item.");
   if (!input.ownerId) throw new Error("Selecione um responsável.");
-  // O motivo do impedimento e opcional na PRD4.
+  // PRD5: bloqueio manual exige justificativa; herança conserva a origem.
+  if(input.status==="blocked"&&!existing?.blockedByPropagation
+    &&!String(input.blockedReason??existing?.blockedReason??"").trim())
+    throw new Error("Informe o motivo do bloqueio manual.");
+
   if (!itemTypes.some((type) => type.id === input.type)) throw new Error("Tipo de item inválido.");
   if (input.status !== undefined && !statusCatalog.some((status) => status.id === input.status)) throw new Error("Status inválido.");
   if (!state.organizations.some((org) => org.id === input.organizationId)) throw new Error("Selecione uma empresa.");
@@ -1352,6 +1356,11 @@ function updateItem(id, input, effectiveAt = nowIso(), comment = "") {
   const rollbackItems = state.items.map((entry) => ({...entry}));
   const rollbackEventCount = state.events.length;
   input = normalizeLegacyBlocked(input, item.status);
+  if(item.status==="blocked" && input.status!==undefined && input.status!=="blocked"){
+    if((item.inheritedBlockedFrom||[]).length)throw new Error("Resolva as fontes do bloqueio herdado antes de liberar esta atividade.");
+    if(!String(comment||"").trim())throw new Error("Informe no comentário o motivo do desbloqueio.");
+  }
+
   // R2-26: empresa, setor e UF pertencem ao responsável. Quando o responsável muda,
   // o contexto é rederivado dele, para que nenhum chamador (formulário, edição em lote)
   // deixe o item com o contexto do responsável anterior.
