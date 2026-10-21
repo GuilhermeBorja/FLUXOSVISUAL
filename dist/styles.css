@@ -1294,6 +1294,8 @@ body.prd41-resizing,body.prd41-resizing * {cursor:col-resize!important;user-sele
 .prd43-gantt-links{font-size:10px;white-space:nowrap;color:#286d73;font-weight:700;min-width:0}
 .prd43-gantt-links-svg{position:absolute;top:0;left:0;z-index:5;overflow:visible;pointer-events:none}
 .prd43-ti-edge{cursor:pointer;pointer-events:all}
+.prd43-ti-accessible{display:block;width:26px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;opacity:0}
+.prd43-ti-accessible:focus-visible{opacity:1;outline:2px solid #065a50;background:rgba(255,255,255,.8)}
 .prd43-ti-hit{stroke:transparent;stroke-width:18px;fill:none;pointer-events:stroke;cursor:pointer}
 .prd43-ti-path{stroke:#286d73;stroke-width:2.5px;fill:none;pointer-events:none;stroke-linecap:round;stroke-linejoin:round}
 .prd43-ti-edge.selected .prd43-ti-path,.prd43-ti-edge:hover .prd43-ti-path{stroke:#064856;stroke-width:4px;filter:drop-shadow(0 0 2px rgba(6,72,86,.35))}
