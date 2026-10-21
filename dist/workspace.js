@@ -247,7 +247,7 @@ function prd41SavePaneWidths() {
 function prd41ApplyPaneLayout() {
   const container = document.querySelector(".prd41-workspace");
   if (!container || !prd41PaneWidths) return;
-  if(container.classList.contains("prd5-two-pane")){container.classList.toggle("is-focused",!!prd41FocusedPane);container.dataset.focus=prd41FocusedPane||"all";container.querySelectorAll(".prd41-pane").forEach(el=>el.classList.toggle("is-focus-target",el.dataset.pane===prd41FocusedPane));container.querySelectorAll("[data-pane-focus]").forEach(el=>{const selected=el.dataset.paneFocus===prd41FocusedPane;el.setAttribute("aria-pressed",String(selected));el.setAttribute("title",selected?"Restaurar painéis":"Maximizar painel");el.setAttribute("aria-label",selected?"Restaurar painéis":"Maximizar "+el.dataset.paneFocus);el.innerHTML=icon(selected?"minimize-2":"maximize-2");});mountIcons();requestAnimationFrame(prd43DrawGanttRelations);return;}
+  if(container.classList.contains("prd5-two-pane")){container.style.setProperty("--prd5-gantt-width",prd5GanttWidth+"%");container.classList.toggle("is-focused",!!prd41FocusedPane);container.dataset.focus=prd41FocusedPane||"all";container.querySelectorAll(".prd41-pane").forEach(el=>el.classList.toggle("is-focus-target",el.dataset.pane===prd41FocusedPane));container.querySelectorAll("[data-pane-focus]").forEach(el=>{const selected=el.dataset.paneFocus===prd41FocusedPane;el.setAttribute("aria-pressed",String(selected));el.setAttribute("title",selected?"Restaurar painéis":"Maximizar painel");el.setAttribute("aria-label",selected?"Restaurar painéis":"Maximizar "+el.dataset.paneFocus);el.innerHTML=icon(selected?"minimize-2":"maximize-2");});mountIcons();requestAnimationFrame(prd43DrawGanttRelations);return;}
   const values = prd41PaneWidths;
   container.style.setProperty("--pane-table", values.table + "fr");
   container.style.setProperty("--pane-graph", values.graph + "fr");
@@ -289,11 +289,13 @@ function prd41UpdateWidths(split,deltaPx) {
   return true;
 }
 let prd5GanttWidth=62;
+function prd5RestorePaneWidth(){try{const width=Number(localStorage.getItem("fluxosVisual.panes.prd5."+currentUser().id));if(Number.isFinite(width)&&width>=35&&width<=80)prd5GanttWidth=width;}catch{}}
 function prd5ResizePanes(delta){
   const el=document.querySelector(".prd5-two-pane");if(!el||prd41FocusedPane)return false;
   const width=el.getBoundingClientRect().width;if(width<200)return false;
   prd5GanttWidth=Math.max(35,Math.min(80,prd5GanttWidth+delta/width*100));
   el.style.setProperty("--prd5-gantt-width",prd5GanttWidth+"%");
+  try{localStorage.setItem("fluxosVisual.panes.prd5."+currentUser().id,String(prd5GanttWidth));}catch{}
   return true;
 }
 function prd41BindSplitters() {
@@ -305,12 +307,14 @@ function prd41BindSplitters() {
       if (!container) return;
       const start = event.clientX;
       const initial = {...prd41PaneWidths};
+      const initialGanttWidth = prd5GanttWidth;
       separator.setPointerCapture(event.pointerId);
       separator.classList.add("is-dragging");
       document.body.classList.add("prd41-resizing");
       const move = e => {
         if (e.pointerId !== event.pointerId) return;
         prd41PaneWidths = {...initial};
+        if(separator.dataset.paneSplit==="gantt-graph")prd5GanttWidth=initialGanttWidth;
         prd41UpdateWidths(separator.dataset.paneSplit, e.clientX - start);
       };
       const end = e => {
@@ -477,7 +481,7 @@ function render() {
     return;
   }
   const user = currentUser();
-  if (prd41PaneUser !== user.id) { prd41PaneWidths = prd41LoadPaneWidths(); prd41PaneUser = user.id; prd41FocusedPane = ""; }
+  if (prd41PaneUser !== user.id) { prd41PaneWidths = prd41LoadPaneWidths(); prd41PaneUser = user.id; prd41FocusedPane = ""; prd5RestorePaneWidth(); }
   const items = scopedItems();
   if (ui.selectedItemId && !canViewItem(user, getItem(ui.selectedItemId))) { ui.selectedItemId = ""; ui.panel = ""; }
   app.innerHTML = `
@@ -2418,9 +2422,10 @@ function itemInput(form, existingId = "") {
 }
 
 function exportVisible() {
-  const items = accessibleItems(); const ids = new Set(items.map((item) => item.id));
+  // A exportação operacional usa exatamente o mesmo recorte de itens do Gantt e do Grafo.
+  const items = scopedItems(); const ids = new Set(items.map((item) => item.id));
   const content = {version:state.version,calendarVersion:1,exportedAt:nowIso(),items,relations:relationsFor(items),events:state.events.filter((event) => ids.has(event.itemId)),approvalDecisions:(state.approvalDecisions || []).filter((entry) => ids.has(entry.itemId)),attachments:(state.attachments || []).filter((entry) => ids.has(entry.itemId))};
-  if (canManageAnyUsers(currentUser()) || canManageGpo(currentUser())) Object.assign(content,{organizations:state.organizations,sectors:state.sectors,users:state.users,permissionRules:state.permissionRules || [],templates:state.templates || [],events:state.events,approvalDecisions:state.approvalDecisions || [],archivedItems:state.archivedItems || [],archivedRelations:state.archivedRelations || [],archivedAttachments:state.archivedAttachments || [],archivedUsers:state.archivedUsers || [],archivedOrganizations:state.archivedOrganizations || [],archivedSectors:state.archivedSectors || [],registryEvents:state.registryEvents || []});
+  // Exportar dados visíveis não significa exportar todos os cadastros e eventos da empresa.
   const url = URL.createObjectURL(new Blob([JSON.stringify(content,null,2)],{type:"application/json"}));
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = `fluxos-${today()}.json`; anchor.click(); URL.revokeObjectURL(url);
   notify("Dados visíveis exportados.");
