@@ -784,13 +784,15 @@ function renderGantt(items) {
     return {item,startOffset:offset,duration:hasPlannedDuration(item)||item.dueAt?itemDurationDays(item):0,slack:null,critical:false,structural:true,depth,children};
   });
   const maxDay=Math.max(1,...rows.map(row=>row.startOffset+Number(row.duration||0)+(row.slack||0)));
+  const visibleCols=prd5GanttColumns.filter(([key])=>prd5ColumnVisible(key));
+  const gridColumns=visibleCols.map(([key])=>key==="name"?"minmax(118px,1.8fr)":key==="edit"?"58px":key==="select"?"25px":"minmax(48px,.9fr)").join(" ")+" minmax(110px,2.6fr)";
   const visible=new Set(rows.map(row=>row.item.id));
   const ties=relationsFor(items).filter(rel=>rel.relationType==="TI"&&visible.has(rel.sourceId)&&visible.has(rel.targetId));
   let html=`<div class="gantt-card prd43-gantt">
     <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
   if(!rows.length)return html+emptyMarkup()+"</div>";
   html+=`<div class="prd5-gantt-bulk-toolbar"><button class="button quiet" data-action="toggle-bulk" type="button">Editar selecionados (${ui.bulkSelected?.size||0})</button>${ui.bulkOpen&&ui.bulkSelected?.size?renderBulkEditor():""}</div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
-    <div class="gantt-axis"><span>Atividade / responsável</span><span class="prd5-axis-status">Status</span><span class="prd5-axis-progress">Avanço</span><span class="prd5-axis-dates">Início / término</span><span class="prd5-axis-actions">Editar</span><div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
+    <div class="gantt-axis" style="grid-template-columns:${gridColumns}">${visibleCols.map(([key,label])=>`<span class="prd5-cell" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join("")}<div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
   const relationMap=new Map();
   for(const rel of ties){const incoming=relationMap.get(rel.targetId)||{before:[],after:[]};incoming.before.push(rel);relationMap.set(rel.targetId,incoming);
     const outgoing=relationMap.get(rel.sourceId)||{before:[],after:[]};outgoing.after.push(rel);relationMap.set(rel.sourceId,outgoing);}
@@ -809,9 +811,8 @@ function renderGantt(items) {
       <button data-create-child="${escapeHtml(item.id)}" type="button">Criar subitem/estrutura</button>
       <button data-order-up="${escapeHtml(item.id)}" type="button">Mover para cima</button><button data-order-down="${escapeHtml(item.id)}" type="button">Mover para baixo</button><button data-indent="${escapeHtml(item.id)}" type="button">Indentar</button>
       ${item.parentId?`<button data-outdent="${escapeHtml(item.id)}" type="button">Recuar</button>`:""}</div></details>`:"";
-    return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)}">
-      <div class="gantt-item-wrap">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.ownerId))}${critical?" · crítico":""}</small></button></div>
-      <span class="prd5-gantt-status">${statusBadge(item)}</span><span class="prd5-gantt-progress">${progressCell(item)}</span><span class="prd5-gantt-dates">${dateCell(item.plannedStartAt)}<span>→</span>${dateCell(item.dueAt)}</span><div class="prd5-gantt-actions"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}" title="Editar item">${icon("pencil")}</button>${siblingActions}<label class="prd5-bulk-check" title="Selecionar para edição em lote"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label></div>
+    return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)};grid-template-columns:${gridColumns}">
+      ${visibleCols.map(([key])=>{if(key==="name")return `<div class="gantt-item-wrap prd5-cell">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong></button></div>`;if(key==="edit")return `<div class="prd5-gantt-actions prd5-cell"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>${siblingActions}</div>`;if(key==="select")return `<label class="prd5-bulk-check prd5-cell"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label>`;return `<span class="prd5-cell prd5-col-${key}">${prd5ColumnValue(item,key,critical)}</span>`;}).join("")}
       <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(item.title+" · "+formatDate(start)+" a "+formatDate(end))}">
         <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""} ${item.dueAt?"":"prd5-unplanned"}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
           ${canLink?`<button type="button" class="prd43-gantt-handle" data-gantt-handle="${escapeHtml(item.id)}" title="Arraste para criar TI a partir de ${escapeHtml(item.title)}" aria-label="Criar TI a partir de ${escapeHtml(item.title)}"></button>`:""}
@@ -823,7 +824,7 @@ function renderGantt(items) {
   html+=`<svg class="prd43-gantt-links-svg" id="prd43GanttOverlay" aria-label="Relações TI do Gantt"></svg>
     </div></div><div class="prd43-gantt-legend" aria-label="Legenda">
       <span class="gray">Não iniciado</span><span class="blue">Em execução</span><span class="green">Concluído</span>
-      <span class="yellow">Risco / atraso</span><span class="red">Bloqueado</span><span class="prd43-critical-key">◆ Crítico</span>
+      <span class="yellow">Risco / atraso</span><span class="prd5-blocked-key">Bloqueado</span><span class="prd5-critical-key">Crítico</span>
     </div></div>`;
   return html;
 }
