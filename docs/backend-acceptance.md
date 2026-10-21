@@ -2,13 +2,26 @@
 
 Este registro acompanha a implementação PRD6, que integra o backend ao frontend originado na PRD5. A referência funcional é [PRD5 — contrato de dados](PRD5-BACKEND-CONTRATO.md); os comandos de instalação e operação estão em [BACKEND-OPERACAO.md](BACKEND-OPERACAO.md).
 
+## Evidência remota da PRD6
+
+Em **21/10/2026**, o [run de pull request 39661502630](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39661502630), vinculado ao [PR #5 — PRD6 sobre PRD5](https://github.com/GuilhermeBorja/FLUXOSVISUAL/pull/5), concluiu os dois jobs com **sucesso**.
+
+O código validado é o commit [2fff88c2486a04cd462f03ea82d2f9126cd67050](https://github.com/GuilhermeBorja/FLUXOSVISUAL/commit/2fff88c2486a04cd462f03ea82d2f9126cd67050), com árvore fonte `8615c81ddf686f869bbca33d2d1cbff18f3c325f`. O checkout do CI registra a integração desse commit com a base PRD5 `501e5c6610245f1b284a1dc00f31fe768dab6f6e`. Os resultados abaixo se referem a essa revisão de código, anterior à atualização documental deste relatório.
+
+| Job e evidência | Resultado confirmado |
+| --- | --- |
+| [acceptance — job 119435391713](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39661502630/job/119435391713) | Build e sintaxe; **7/7** verificações de contrato PRD5; **54/54** testes de backend; **3/3** fluxos Chromium; gate de desempenho aprovado |
+| [container — job 119435391282](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39661502630/job/119435391282) | Imagem construída, setup, healthcheck, login, gravação de item/anexo, reinício e recuperação dos dados/download aprovados |
+
+Os três fluxos de navegador concluíram com sucesso. O fluxo compartilhado confirmou as dimensões de 1366 × 768 e 1920 × 1080; administração registrou nove verificações e modelos/datas/comentários registrou cinco, ambos com `browserErrors: []`. As fases do contêiner e as medições completas deste run estão registradas nas seções seguintes.
+
 ## Escopo da verificação
 
 Os testes usam Node.js 24, bancos SQLite temporários e requisições HTTP reais. A autenticação passa pelo endpoint de login; cookies e tokens CSRF são enviados como em uma sessão normal. As contas adicionais são provisionadas pela API de sincronização, com senha derivada no servidor. Cada cenário cria e remove sua própria instalação.
 
 O navegador executa a página servida pelo backend em Chromium, com sessões independentes. Não há injeção de uma base demonstrativa no `localStorage` para fazer os cenários compartilhados passarem.
 
-A execução final local de 21/10/2026 passou nos 54 casos abaixo, nos três fluxos Chromium e no gate de desempenho. As sete verificações de contrato do frontend PRD5 também passaram. Foram exercitados os seguintes conjuntos:
+A execução final local de 21/10/2026 passou nos 54 casos abaixo, nos três fluxos Chromium e no gate de desempenho. A execução remota identificada acima confirmou os mesmos 54 casos, com zero falhas, além das sete verificações de contrato do frontend PRD5. Foram exercitados os seguintes conjuntos:
 
 | Arquivo | Casos | Evidência principal |
 | --- | ---: | --- |
@@ -89,9 +102,24 @@ Arquivo alterado, caminho inseguro ou entrada de anexo ausente no manifesto inte
 
 `browser-tests/backend-template-e2e.mjs` cobre modelos com pais criados depois dos filhos, duração explícita ou nula, nova aprovação sem decisões anteriores, datas TI recalculadas sem edição manual do dependente, limpeza da duração e comentários isolados na auditoria. Os três scripts verificam erros de página; os fluxos compartilhado e de administração também verificam avisos relacionados a ícones.
 
-## Medição local com 500 itens e 1.000 TI
+## Desempenho com 500 itens e 1.000 TI
 
 O benchmark usa 10 projetos, 490 folhas, 1.000 TI e 490 relações `Contém` derivadas. Todos os 1.500 comandos de criação são enviados em uma transação HTTP. São descartadas duas leituras de aquecimento, seguidas de 20 leituras medidas e 20 edições medidas.
+
+### Medição remota do código validado
+
+O [job acceptance do run 39661502630](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39661502630/job/119435391713) registrou o benchmark às **19:26:55 UTC de 21/10/2026**, com Node.js **24.21.0**, Linux x64 e **AMD EPYC 9V74 80-Core Processor**. O transporte foi HTTP loopback, em processo único no runner.
+
+A criação atômica dos 500 itens e 1.000 TI levou **1.394,2 ms**. As operações seguintes tiveram estes resultados:
+
+| Operação | Amostras | Mediana — p50 | p75 | p95 | Máximo | Gate |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Projeção | 20 | 203,0 ms | **210,1 ms** | 232,6 ms | **243,9 ms** | p75 < 2.500 ms — aprovado |
+| Edição | 20 | 489,5 ms | 496,9 ms | **503,9 ms** | **511,5 ms** | p95 < 1.000 ms — aprovado |
+
+Nesta execução, inclusive os máximos ficaram abaixo dos respectivos limites de 2.500 ms e 1.000 ms. Não houve amostra acima desses limites entre as 20 leituras e 20 edições medidas. O conjunto é uma medição controlada no CI; os percentis e máximos apresentados não garantem a mesma latência sob carga ou rede diferentes.
+
+### Registro da execução local
 
 Medição final local registrada em 21/10/2026, após as integrações de segurança e modelos, em Node.js 24.19.0, Linux x64, AMD EPYC 9V74, HTTP loopback, processo único:
 
@@ -104,7 +132,7 @@ Medição final local registrada em 21/10/2026, após as integrações de segura
 | Edição p50 | 635,5 ms | Informativa |
 | Edição p95 | **668,0 ms** | < 1.000 ms |
 
-A medição inclui autenticação, GPO, SQLite, auditoria, serialização e transferência HTTP local da projeção. A meta em rede corporativa também depende do servidor escolhido, da latência e da renderização no computador do usuário; este resultado permite repetir a comparação local sem afirmar a homologação desse ambiente externo.
+As medições incluem autenticação, GPO, SQLite, auditoria, serialização e transferência HTTP local da projeção. A meta em rede corporativa também depende do servidor escolhido, da latência e da renderização no computador do usuário; os resultados permitem repetir a comparação sem afirmar a homologação desse ambiente externo.
 
 ## Reproduzir
 
@@ -136,10 +164,26 @@ Os testes HTTP precisam que o ambiente permita abrir uma porta em `127.0.0.1`. N
 
 O workflow `.github/workflows/backend.yml` executa build, sintaxe, contratos do frontend, testes de backend, os três fluxos Chromium e o benchmark. Um job independente roda `tests/backend-container-smoke.mjs`.
 
-O smoke Docker usa projeto e volume próprios, gera uma senha aleatória sem imprimi-la, faz o setup por stdin, espera o healthcheck, autentica, grava item/anexo, reinicia o serviço e verifica a persistência. Ao terminar, remove apenas o projeto de teste. Pode ser executado com Docker Compose disponível:
+O smoke Docker usa projeto e volume próprios, gera uma senha aleatória sem imprimi-la, faz o setup por stdin, espera o healthcheck, autentica, grava item/anexo, reinicia o serviço e verifica a persistência. Ao terminar, remove apenas o projeto de teste.
+
+O [job container do run 39661502630](https://github.com/GuilhermeBorja/FLUXOSVISUAL/actions/runs/39661502630/job/119435391282) executou esse fluxo com sucesso. As fases registradas em **21/10/2026**, em UTC, foram:
+
+| Horário | Fase iniciada e verificada |
+| --- | --- |
+| 19:25:33 | Build da imagem |
+| 19:25:45 | Setup privado com a senha fornecida por stdin |
+| 19:25:46 | Inicialização e espera do healthcheck |
+| 19:25:51 | Login e persistência inicial de item/anexo |
+| 19:25:52 | Reinício do serviço e nova espera de saúde |
+| 19:25:57 | Novo login, dados preservados e download do anexo |
+| 19:25:58 | Confirmação de sucesso, seguida da limpeza do projeto de teste |
+
+O teste comparou o item, a identidade da conta, o SHA-256 do anexo e seus bytes após o reinício. As requisições do smoke usam conexões HTTP novas para atravessar o reinício sem reaproveitar um socket encerrado; os logs de diagnóstico identificam fase, método e caminho, sem senhas, cookies ou assinaturas da URL de download.
+
+Para reproduzir em um host com Docker Compose:
 
 ```sh
 node tests/backend-container-smoke.mjs
 ```
 
-**Limite da execução local:** a CLI Docker não está disponível no ambiente usado nesta implementação. O script e o workflow foram preparados; o build e a execução do contêiner devem ser confirmados pelo job de CI ou em um host com Docker. A publicação e a configuração do domínio/HTTPS pertencem à implantação escolhida pelo operador, conforme o manual de operação.
+**Ambiente verificado:** a CLI Docker não estava disponível no ambiente de desenvolvimento local; o build e a execução do contêiner foram confirmados remotamente pelo job acima. Essa evidência usa um servidor temporário no runner do GitHub Actions. A configuração do ambiente operacional, do host, do domínio e de HTTPS segue o [manual de operação](BACKEND-OPERACAO.md).
