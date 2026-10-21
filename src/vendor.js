@@ -55,6 +55,8 @@ import {
   ListTodo,
   Ban,
   ListCollapse,
+  LoaderCircle,
+  Ellipsis,
 } from "lucide";
 
 const icons = {
@@ -64,6 +66,7 @@ const icons = {
   FolderKanban, Layers2, ListTree, SquareCheck, Stamp, CircleAlert, PackageCheck,
   Flag, FileText, Pencil, ArrowUp, ArrowDown, CornerDownRight, CornerUpLeft, Paperclip,
   Play, Pause, Maximize2, Minimize2, Archive, ListTodo, Ban, ListCollapse,
+  LoaderCircle, Ellipsis,
 };
 
 export function mountIcons() {
