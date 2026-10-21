@@ -1794,8 +1794,8 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 /* PRD5 feedback pass: hierarchy, dates and compact controls */
 #panelRoot #createItemForm .prd43-steps-table{align-content:start;grid-auto-rows:max-content}
 #panelRoot #createItemForm .prd5-step-row{margin:0}
-#panelRoot #createItemForm .prd5-reference-date{grid-column:1;grid-row:3}
-#panelRoot #createItemForm .prd43-sequence-toggle{grid-column:1;grid-row:4}
+#panelRoot #createItemForm .prd5-reference-date{grid-column:1;grid-row:4}
+#panelRoot #createItemForm .prd43-sequence-toggle{grid-column:2;grid-row:4}
 #panelRoot #createItemForm .prd42-create-actions{grid-row:5;justify-content:flex-start!important}
 #panelRoot #createItemForm .prd42-create-actions>.secondary{display:none}
 .schedule-summary.prd42-projection-summary{grid-template-columns:repeat(4,minmax(0,1fr));align-items:start}
