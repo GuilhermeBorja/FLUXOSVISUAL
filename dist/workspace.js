@@ -865,6 +865,7 @@ function prd43DrawGanttRelations(){
   const width=content.scrollWidth,height=content.scrollHeight;
   svg.setAttribute("width",width);svg.setAttribute("height",height);svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
   let lines=`<defs><marker id="prd43-ti-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#286d73"/></marker></defs>`;
+  let hitButtons="";
   const rows=[...content.querySelectorAll("[data-gantt-row]")],ids=new Set(rows.map(row=>row.dataset.ganttRow));
   const offset=rect=>({x:rect.left-contentBox.left,y:rect.top-contentBox.top});
   for(const rel of state.relations.filter(r=>r.relationType==="TI"&&ids.has(r.sourceId)&&ids.has(r.targetId))){
@@ -895,8 +896,16 @@ function prd43DrawGanttRelations(){
          <button xmlns="http://www.w3.org/1999/xhtml" type="button" class="prd43-ti-accessible" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" aria-label="${escapeHtml(edgeLabel)}"></button>
        </foreignObject>
     </g>`;
+    hitButtons+=`<button type="button" class="prd43-ti-html-hit" data-gantt-ti="${escapeHtml(rel.id)}" aria-label="${escapeHtml(edgeLabel)}" style="left:${(anchorX-18).toFixed(1)}px;top:${(anchorY-18).toFixed(1)}px"></button>`;
   }
   svg.innerHTML=lines;
+  content.querySelectorAll(".prd43-ti-html-hit").forEach(button=>button.remove());
+  if(hitButtons){
+    content.insertAdjacentHTML("beforeend",hitButtons);
+    content.querySelectorAll(".prd43-ti-html-hit").forEach(button=>button.addEventListener("click",event=>{
+      event.preventDefault();event.stopPropagation();prd43ShowGanttRelation(button.dataset.ganttTi);
+    }));
+  }
 }
 function prd44BeginGanttLink(sourceId){
   const source=getItem(sourceId),editor=document.querySelector("#prd43GanttRelationEditor");
