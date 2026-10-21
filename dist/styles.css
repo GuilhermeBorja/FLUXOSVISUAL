@@ -1293,10 +1293,10 @@ body.prd41-resizing,body.prd41-resizing * {cursor:col-resize!important;user-sele
 .prd43-gantt-handle:hover,.prd43-gantt-handle:focus-visible{background:#0b5850;box-shadow:0 0 0 3px #acd9c9}
 .prd43-gantt-links{font-size:10px;white-space:nowrap;color:#286d73;font-weight:700;min-width:0}
 .prd43-gantt-links-svg{position:absolute;top:0;left:0;z-index:5;overflow:visible;pointer-events:none}
-.prd43-ti-edge{cursor:pointer}
-.prd43-ti-hit{stroke:transparent;stroke-width:15px;fill:none;pointer-events:stroke}
-.prd43-ti-path{stroke:#286d73;stroke-width:2.25px;fill:none;pointer-events:none;stroke-linecap:round;stroke-linejoin:round}
-.prd43-ti-edge.selected .prd43-ti-path,.prd43-ti-edge:hover .prd43-ti-path{stroke:#064856;stroke-width:3.4px;filter:drop-shadow(0 0 1px white)}
+.prd43-ti-edge{cursor:pointer;pointer-events:all}
+.prd43-ti-hit{stroke:transparent;stroke-width:18px;fill:none;pointer-events:stroke;cursor:pointer}
+.prd43-ti-path{stroke:#286d73;stroke-width:2.5px;fill:none;pointer-events:none;stroke-linecap:round;stroke-linejoin:round}
+.prd43-ti-edge.selected .prd43-ti-path,.prd43-ti-edge:hover .prd43-ti-path{stroke:#064856;stroke-width:4px;filter:drop-shadow(0 0 2px rgba(6,72,86,.35))}
 .prd43-ti-edge:focus-visible .prd43-ti-path{stroke:#065a50;stroke-width:4px;outline:none}
 .prd43-ti-preview{stroke:#0b7d6a;stroke-width:2.5px;stroke-dasharray:6 5;fill:none;pointer-events:none}
 .prd43-gantt-relation-editor:not([hidden]){display:flex;align-items:end;flex-wrap:wrap;gap:5px;padding:8px;background:#f0f7f8;border:1px solid #b9d9dc;border-radius:7px;margin:4px 0}
