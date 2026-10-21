@@ -409,6 +409,7 @@ const FluxosGraph = (() => {
       }
       if(animationState.stopAtBlocked && step.nodeIds.some(hasFlowBlocker)){
         animationState.paused=true;
+        options.onStopAtBlocker?.(step.nodeIds.filter(hasFlowBlocker));
         return;
       }
       propagationTimers.push(setTimeout(animateNext,550));
