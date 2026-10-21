@@ -1023,6 +1023,7 @@ function renderGraph(items){
   const legend=[{signal:"red",label:"Bloqueado"},{signal:"yellow",label:"Atraso / risco"},{signal:"blue",label:"Em execução"},{signal:"green",label:"Concluído"},{signal:"gray",label:"Não iniciado"}];
   return `<div class="graph-layout prd44-graph-layout"><div class="graph-shell">
     <div id="graphCanvas" class="graph-canvas">${items.length?"":emptyMarkup()}</div>
+    <div id="prd5AnimationBlocker" class="prd5-animation-blocker" hidden></div>
     <details class="prd42-graph-legend prd44-graph-legend"><summary>Legenda e destaques</summary>
       <div class="graph-legend" aria-label="Legenda dos status">${legend.map(entry=>`<button type="button" class="${entry.signal}${ui.graphHighlight===entry.signal?" active":""}" data-highlight-signal="${entry.signal}" aria-pressed="${ui.graphHighlight===entry.signal}"><b></b>${entry.label}</button>`).join("")}${ui.graphHighlight?'<button class="button quiet" data-highlight-signal="all">Limpar destaque</button>':""}</div>
     </details>
@@ -1056,6 +1057,16 @@ function mountGraph(items) {
       },
       blockers: (item) => (item.inheritedBlockedFrom || []).map(id=>getItem(id)?.title||id).join(", ") || (item.status==="blocked" ? "Bloqueio próprio" : "Nenhum"),
       dependencies: (item) => state.relations.filter((relation) => relation.targetId === item.id && relation.relationType === "TI").map((relation) => getItem(relation.sourceId)?.title).filter(Boolean).join(", ") || "Nenhuma",
+    },
+    onStopAtBlocker:(ids)=>{
+      const node=ids.map(id=>getItem(id)).find(Boolean),panel=document.querySelector("#prd5AnimationBlocker");
+      if(!node||!panel)return;
+      const sources=(node.inheritedBlockedFrom||[]).map(id=>getItem(id)).filter(Boolean);
+      const origin=sources[0]||node;
+      const reason=origin.blockedReason||node.blockedReason||"Bloqueio sem justificativa registrada";
+      const visited=new Set(),queue=[node.id];
+      while(queue.length){const id=queue.shift();if(visited.has(id))continue;visited.add(id);for(const child of state.items)if(child.parentId===id&&!child.archivedAt)queue.push(child.id);}
+      panel.hidden=false;panel.innerHTML="<strong>Fluxo interrompido: "+escapeHtml(node.title)+"</strong><span>Origem: "+escapeHtml(origin.title)+"</span><span>Motivo: "+escapeHtml(reason)+"</span><span>Descendentes afetados: "+Math.max(0,visited.size-1)+"</span><button class=\"button quiet\" data-select=\""+escapeHtml(node.id)+"\">Abrir item</button>";
     },
     onSelect: (id) => openItem(id),
     onToggleCollapse: (id)=>prd44ToggleHierarchy(id),
@@ -1869,7 +1880,7 @@ function bindWorkspace() {
     else if (action === "toggle-bulk") { if(!(ui.bulkSelected?.size)){notify("Selecione uma ou mais atividades na coluna Lote.");return;}ui.panel="bulk";renderPanel(); }
     else if (action === "zoom-in") graphInstance?.zoom(1.2);
     else if (action === "zoom-out") graphInstance?.zoom(1/1.2);
-    else if (action === "propagate") { const id=ui.selectedItemId || scopedItems().find(item=>!item.parentId)?.id || scopedItems()[0]?.id; if(!id||!graphInstance?.propagate(id,document.querySelector("#animationLayout")?.value||"sequential",document.querySelector("#animationMode")?.value==="blocker"))notify("Nenhum item disponível para animar.","error"); }
+    else if (action === "propagate") { const panel=document.querySelector("#prd5AnimationBlocker");if(panel)panel.hidden=true; const id=ui.selectedItemId || scopedItems().find(item=>!item.parentId)?.id || scopedItems()[0]?.id; if(!id||!graphInstance?.propagate(id,document.querySelector("#animationLayout")?.value||"sequential",document.querySelector("#animationMode")?.value==="blocker"))notify("Nenhum item disponível para animar.","error"); }
     else if(action==="undo-relation"){
       try{
         const old=ui.lastDeletedRelation;
@@ -1879,7 +1890,7 @@ function bindWorkspace() {
       }catch(error){notify(error.message,"error");}
     }
     else if(action==="pause-animation")graphInstance?.pause();
-    else if(action==="restart-animation")graphInstance?.restart();
+    else if(action==="restart-animation"){const panel=document.querySelector("#prd5AnimationBlocker");if(panel)panel.hidden=true;graphInstance?.restart();}
     else if (action === "fit-graph") graphInstance?.fit();
     else if (action === "reset-layout") { delete ui.positions[layoutKey()]; state.graphPositions = ui.positions; ui.graphTransform = null; saveState(); render(); }
   };
