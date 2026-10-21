@@ -1789,3 +1789,33 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
   #panelRoot #createItemForm .prd5-result-area{grid-column:1;grid-row:auto}
   .prd43-steps-table-head{grid-template-columns:26px minmax(110px,1fr) 78px 110px 72px}
 }
+
+
+/* PRD5 feedback pass: hierarchy, dates and compact controls */
+#panelRoot #createItemForm .prd43-steps-table{align-content:start;grid-auto-rows:max-content}
+#panelRoot #createItemForm .prd5-step-row{margin:0}
+#panelRoot #createItemForm .prd5-reference-date{grid-column:1;grid-row:3}
+#panelRoot #createItemForm .prd43-sequence-toggle{grid-column:1;grid-row:4}
+#panelRoot #createItemForm .prd42-create-actions{grid-row:5;justify-content:flex-start!important}
+#panelRoot #createItemForm .prd42-create-actions>.secondary{display:none}
+.schedule-summary.prd42-projection-summary{grid-template-columns:repeat(4,minmax(0,1fr));align-items:start}
+.manual-start-date{display:grid;gap:4px;font-size:11px;color:var(--muted,#62717a)}
+.manual-start-date input{height:32px}
+.gantt-item-title{font-size:12px;font-weight:400}
+.gantt-item-wrap{padding-left:calc(var(--depth,0) * 14px)}
+.prd5-gantt-bulk-toolbar{margin:0!important;min-height:0!important;justify-content:flex-end!important}
+.prd5-bulk-edit-button{font-size:11px!important;padding:5px 8px!important;min-height:26px!important}
+.prd43-ti-edge{cursor:pointer}
+.prd43-ti-edge:hover .prd43-ti-path,.prd43-ti-edge:focus .prd43-ti-path{stroke:#115e38;stroke-width:4}
+.prd43-ti-hit{stroke:transparent;stroke-width:20;fill:none;pointer-events:stroke}
+.prd43-ti-path{pointer-events:none}
+.prd43-ti-edge.selected .prd43-ti-path{stroke:#b42332;stroke-width:4}
+.propagation-path{stroke:#115e38!important;stroke-width:5!important;filter:drop-shadow(0 0 3px #5fbf86)}
+.graph-edge.propagation-active .edge-path{stroke:#115e38!important;stroke-width:5!important;filter:drop-shadow(0 0 3px #5fbf86)}
+.gantt-bar.signal-gray{background:#aeb8bf}
+.gantt-bar.signal-blue{background:#5fbf86}
+.gantt-bar.signal-green{background:#115e38}
+.gantt-bar.signal-yellow{background:#d8aa32}
+.gantt-bar.signal-red{background:#b42332}
+.prd43-gantt-row .prd5-cell{font-weight:400}
+@media(max-width:900px){.schedule-summary.prd42-projection-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
