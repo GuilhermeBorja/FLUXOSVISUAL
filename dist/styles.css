@@ -1766,3 +1766,26 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 
 /* As conexoes TI sao desenhadas, mas nao podem interceptar checks e edicao da tabela. */
 .prd5-two-pane .prd43-gantt-links-svg,.prd5-two-pane .prd43-gantt-links-svg *{pointer-events:none!important}
+
+/* PRD5 feedback: criação de estrutura */
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-top{grid-template-columns:minmax(0,1fr);grid-row:1;min-height:0}
+#panelRoot #createItemForm.prd5-create-form>.prd5-create-activities{grid-row:2}
+#panelRoot #createItemForm .prd5-result-area{grid-column:2;grid-row:2/4}
+#panelRoot #createItemForm .prd5-reference-date{grid-column:1;grid-row:3;display:flex;align-items:end}
+#panelRoot #createItemForm .prd5-reference-date label{font-size:11px;display:grid;gap:4px;max-width:220px}
+#panelRoot #createItemForm .prd5-sequence-toggle,#panelRoot #createItemForm .prd43-sequence-toggle{grid-column:1;grid-row:4}
+#panelRoot #createItemForm.prd5-create-form>.prd42-create-actions{grid-row:5}
+.prd43-steps-table-head{display:grid;grid-template-columns:26px minmax(90px,1.8fr) minmax(74px,.8fr) minmax(93px,1.1fr) 80px;gap:4px;padding:0 5px;color:var(--muted);font-size:10px;font-weight:650}
+#panelRoot #createItemForm .prd5-step-row{grid-template-columns:26px minmax(90px,1.8fr) minmax(74px,.8fr) minmax(93px,1.1fr);gap:4px;padding:3px 5px}
+#panelRoot #createItemForm .prd5-step-row :is(input,select){height:30px!important}
+#panelRoot #createItemForm .prd43-step-number{padding:0}
+#panelRoot #createItemForm:not(.prd5-has-rows)>.prd5-create-activities{grid-template-columns:1fr;grid-template-rows:auto minmax(240px,1fr) auto}
+#panelRoot #createItemForm:not(.prd5-has-rows) .prd5-source-label{grid-column:1!important;grid-row:2}
+#panelRoot #createItemForm:not(.prd5-has-rows) .prd5-result-area{display:none}
+#panelRoot #createItemForm:not(.prd5-has-rows) .prd5-reference-date{grid-column:1;grid-row:3}
+#panelRoot #createItemForm:not(.prd5-has-rows) .prd43-sequence-toggle{grid-row:4}
+@media (max-width:900px){
+  #panelRoot #createItemForm.prd5-create-form>.prd5-create-activities{grid-template-columns:1fr}
+  #panelRoot #createItemForm .prd5-result-area{grid-column:1;grid-row:auto}
+  .prd43-steps-table-head{grid-template-columns:26px minmax(110px,1fr) 78px 110px 72px}
+}
