@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 
 const browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:1366,height:768}});
+page.setDefaultTimeout(5000);
 const problems=[],passed=[],errors=[];
 page.on("pageerror",e=>errors.push(e.message));
 page.on("console",m=>{if(m.type()==="warning"&&/icon/i.test(m.text()))errors.push(m.text())});
