@@ -35,7 +35,7 @@ await test("create multi-root structure and per-item duration",async()=>{
  assert.equal(await f.locator('[name="parentId"],[name="title"]').count(),0);
  await f.locator("#prd43PasteActivities").fill("QA ROOT A\n\tQA LEAF A1\n\t\tQA NEST A1.1\nQA ROOT B\n\tQA LEAF B1\nQA ROOT C");
  assert.equal(await f.locator(".prd5-step-row").count(),6);
- for(const index of [2,4])await f.locator('[name="stepDuration_'+index+'"]').fill(index===2?"3":"4");
+ for(const index of [2,4,5])await f.locator('[name="stepDuration_'+index+'"]').fill(index===2?"3":"4");
  await f.locator("#prd43Sequence").check();
  await f.locator('button[type="submit"]').click();
  await page.locator("#updateItemForm").waitFor();
