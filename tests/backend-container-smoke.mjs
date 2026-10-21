@@ -23,17 +23,28 @@ function compose(args, input) {
 }
 
 async function request(path, method = 'GET', body) {
-  const response = await fetch(new URL(path, baseUrl), {
-    method, redirect: 'manual',
-    headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  const url = new URL(path, baseUrl);
+  let response, bytes;
+  try {
+    response = await fetch(url, {
+      method, redirect: 'manual',
+      // spawnSync pauses the event loop while Docker restarts. A fresh socket
+      // avoids reusing a pooled connection closed by the previous container.
+      headers: { Connection: 'close', ...(cookie ? { Cookie: cookie } : {}), ...(body ? { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    bytes = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    const code = error?.cause?.code || error?.code || error?.name || 'NETWORK_ERROR';
+    // URLs for downloads include signatures. Log only the pathname and code;
+    // never print the query, request body, cookie or original error object.
+    throw new Error(`${method} ${url.pathname}: falha no transporte (${code}).`);
+  }
   const setCookie = response.headers.getSetCookie();
   if (setCookie.length) cookie = setCookie.map(value => value.split(';')[0]).join('; ');
-  const bytes = Buffer.from(await response.arrayBuffer());
   let data;
   try { data = JSON.parse(bytes.toString('utf8')); } catch { data = bytes; }
-  assert.ok(response.ok, `${method} ${path}: ${response.status} ${JSON.stringify(data)}`);
+  assert.ok(response.ok, `${method} ${url.pathname}: HTTP ${response.status}`);
   return { data, bytes, headers: response.headers };
 }
 
@@ -45,11 +56,16 @@ async function login() {
   return data;
 }
 
+let primaryError;
 try {
+  console.log('Docker Compose: build');
   compose(['build']);
+  console.log('Docker Compose: setup');
   compose(['run', '--rm', '-T', 'fluxosvisual', 'node', 'scripts/setup.mjs', '--email', email, '--password-stdin', '--name', 'Administrador CI', '--organization', 'Empresa CI', '--workspace', 'Persistência CI', '--state', 'PE'], `${password}\n`);
+  console.log('Docker Compose: start e healthcheck');
   compose(['up', '-d', '--wait', '--wait-timeout', '120']);
   assert.ok((await request('/api/health')).data);
+  console.log('Docker Compose: persistência inicial');
   const auth = await login();
   const path = `/api/workspaces/${auth.workspaceId}`;
   const { data: initial } = await request(`${path}/projection`);
@@ -64,8 +80,10 @@ try {
   const attachment = uploaded.state.attachments.find(value => value.itemId === item.id);
   assert.equal(attachment.sha256, createHash('sha256').update(fileBytes).digest('hex'));
 
+  console.log('Docker Compose: restart');
   compose(['restart', 'fluxosvisual']);
   compose(['up', '-d', '--wait', '--wait-timeout', '120']);
+  console.log('Docker Compose: dados restaurados e download');
   const afterLogin = await login();
   assert.equal(afterLogin.workspaceId, auth.workspaceId); assert.equal(afterLogin.user.id, auth.user.id);
   const { data: persisted } = await request(`${path}/projection`);
@@ -76,6 +94,13 @@ try {
   const download = await request(signed.url);
   assert.deepEqual(download.bytes, fileBytes);
   console.log('Docker Compose: build, setup privado, health, login, item/anexo, reinício e persistência passaram.');
+} catch (error) {
+  primaryError = error;
+  throw error;
 } finally {
-  compose(['down', '--volumes', '--remove-orphans']);
+  try { compose(['down', '--volumes', '--remove-orphans']); }
+  catch (cleanupError) {
+    if (!primaryError) throw cleanupError;
+    console.error('Docker Compose: a limpeza do projeto de teste falhou; o erro original foi preservado.');
+  }
 }
