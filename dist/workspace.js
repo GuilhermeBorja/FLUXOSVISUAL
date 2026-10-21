@@ -1776,6 +1776,7 @@ function bindWorkspace() {
         if(undo.type==="create-ti") removeRelation(undo.relationId);
         else if(undo.type==="delete-ti")createRelation(undo.relation.sourceId,undo.relation.targetId,"TI",undo.relation.lagDays||0,undo.relation.description||"");
         else if(undo.type==="restore-item")restoreArchivedItem(undo.itemId);
+        else if(undo.type==="hierarchy"){const restored=JSON.parse(undo.snapshot);for(const key of Object.keys(state))delete state[key];Object.assign(state,restored);}
         saveState();notify("Alteração desfeita.");render();
       }catch(error){notify(error.message,"error");}return;
     }
@@ -1914,7 +1915,7 @@ function bindWorkspace() {
         if(source.parentId!==target.parentId)moveItemHierarchy(sourceId,target.parentId||"");
         reorderItem(sourceId,targetId,zone==="after");
       }
-      saveState();ui.prd5UndoMove={backup,sourceId};notify(zone==="inside"?"Item movido para dentro do destino.":"Ordem atualizada.");render();
+      saveState();ui.prd43Undo={type:"hierarchy",snapshot:backup};notify(zone==="inside"?"Item movido para dentro do destino.":"Ordem atualizada.");render();
     }catch(error){
       const old=JSON.parse(backup);Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,old);
       notify(error.message,"error");render();
