@@ -1,0 +1,16 @@
+.git
+node_modules
+data
+backups
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+artifacts
+test-results
+playwright-report

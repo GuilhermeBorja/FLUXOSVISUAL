@@ -34,7 +34,7 @@ const itemTypes = [
   { id: "document", label: "Documento", icon: "file-text", color: "#687780" },
 ];
 
-const availableItemIcons = ["folder-kanban","workflow","layers-2","list-tree","square-check","stamp","circle-alert","package-check","flag","file-text","network","table-2","plus","link-2","users","building-2","circle-help","pencil","paperclip"];
+const availableItemIcons = ["folder-kanban","workflow","layers-2","list-tree","square-check","stamp","circle-alert","package-check","flag","file-text","network","table-2","plus","link-2","users","building-2","circle-help","pencil","paperclip","list-todo","loader-circle","clock-3","ban","check-circle-2"];
 
 const relationTypes = [
   { id: "contains", label: "Contém" },
@@ -63,7 +63,9 @@ const permissionOperationLabels = {
 };
 
 const app = document.querySelector("#app");
-let state = loadState();
+// A aplicação servida pela API começa vazia: nenhuma base demonstrativa é
+// carregada antes da autenticação. A versão estática mantém seu comportamento.
+let state = typeof window !== "undefined" && window.FLUXOS_BACKEND ? emptyState() : loadState();
 let ui = {
   selectedItemId: "",
   overviewMode: "table",
@@ -1465,8 +1467,24 @@ function saveFlowTemplate(rootId, name) {
   const user = currentUser();
   if (!root || !canEditItem(user,root)) throw new Error("Sua regra GPO não permite salvar este fluxo como modelo.");
   const ids = itemTreeIds(new Set([rootId]));
-  const sourceItems = state.items.filter((item) => ids.has(item.id) && canViewItem(user,item));
-  if (sourceItems.length !== ids.size || sourceItems.some((item) => !canEditItem(user,item))) throw new Error("Edite todos os itens do fluxo antes de criar um modelo.");
+  const eligibleItems = state.items.filter((item) => ids.has(item.id) && canViewItem(user,item));
+  if (eligibleItems.length !== ids.size || eligibleItems.some((item) => !canEditItem(user,item))) throw new Error("Edite todos os itens do fluxo antes de criar um modelo.");
+  // A ordem de criação dos registros pode diferir da árvore após revinculações.
+  // Modelos percorrem o pai antes dos filhos e preservam a ordem dos irmãos.
+  const children = new Map();
+  for (const item of eligibleItems) {
+    if (!children.has(item.parentId)) children.set(item.parentId, []);
+    children.get(item.parentId).push(item);
+  }
+  for (const siblings of children.values()) siblings.sort((left,right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0));
+  const sourceItems = [], visited = new Set(), pending = [root];
+  while (pending.length) {
+    const item = pending.pop();
+    if (visited.has(item.id)) throw new Error("A estrutura do modelo contém um ciclo.");
+    visited.add(item.id); sourceItems.push(item);
+    pending.push(...[...(children.get(item.id) || [])].reverse());
+  }
+  if (sourceItems.length !== eligibleItems.length) throw new Error("A estrutura do modelo contém um item sem pai válido.");
   const baseDate = root.plannedStartAt || today();
   const items = sourceItems.map((item) => ({
     key:item.id,
@@ -1476,9 +1494,10 @@ function saveFlowTemplate(rootId, name) {
     status:item.status,
     ownerId:item.ownerId || "",
     description:item.description || "",
+    plannedDurationDays:item.plannedDurationDays == null || item.plannedDurationDays === "" ? null : Number(item.plannedDurationDays),
     startOffset:Math.round((new Date((item.plannedStartAt || baseDate) + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000),
     dueOffset:item.dueAt ? Math.round((new Date(item.dueAt + "T12:00:00") - new Date(baseDate + "T12:00:00")) / 86400000) : null,
-    weight:Number(item.weight || 1),
+    weight:Number(item.weight ?? 1),
   }));
   const relations = state.relations.filter((relation) => ids.has(relation.sourceId) && ids.has(relation.targetId) && relation.relationType !== "contains").map((relation) => ({sourceKey:relation.sourceId,targetKey:relation.targetId,relationType:relation.relationType,lagDays:relation.lagDays || 0}));
   state.templates ||= [];
@@ -1506,20 +1525,28 @@ function applyFlowTemplate(templateId, input) {
       const eligibleOwners = state.users.filter((entry) => !entry.disabled && entry.organizationId === input.organizationId);
       const requestedOwner = input.ownerSelections?.[source.key] || source.ownerId;
       const ownerId = eligibleOwners.some((entry) => entry.id === requestedOwner) ? requestedOwner : eligibleOwners.some((entry) => entry.id === user.id) ? user.id : eligibleOwners[0]?.id || "";
-      const status = input.statusSelections?.[source.key] || source.status || "backlog";
+      const owner = eligibleOwners.find((entry) => entry.id === ownerId);
+      if (!owner) throw new Error("O modelo precisa de um responsável ativo na empresa de destino.");
+      // Uma nova instância precisa de sua própria solicitação e decisão.
+      const status = source.type === "approval" ? "backlog" : input.statusSelections?.[source.key] || source.status || "backlog";
+      const plannedStartAt = shiftedDate(input.startDate || today(),source.startOffset);
+      const plannedDurationDays = Object.hasOwn(source,"plannedDurationDays")
+        ? (source.plannedDurationDays == null || source.plannedDurationDays === "" ? null : Number(source.plannedDurationDays))
+        : (source.dueOffset == null ? null : inclusiveDurationDays(plannedStartAt,shiftedDate(input.startDate || today(),source.dueOffset)));
       const item = createItem({
         title:source.key === template.items[0].key ? input.title.trim() : source.title,
         type:source.type,
         status,
         ownerId,
-        organizationId:input.organizationId,
-        sectorId:input.sectorId,
-        state:input.state,
+        organizationId:owner.organizationId,
+        sectorId:owner.sectorId,
+        state:owner.state,
         parentId,
         description:source.description,
-        plannedStartAt:shiftedDate(input.startDate || today(),source.startOffset),
-        dueAt:source.dueOffset === null ? "" : shiftedDate(input.startDate || today(),source.dueOffset),
-        weight:source.weight || 1,
+        plannedStartAt,
+        plannedDurationDays,
+        dueAt:plannedDurationDays === null ? "" : inclusiveFinishDate(plannedStartAt,plannedDurationDays),
+        weight:source.weight ?? 1,
         progressPercent:completeStatus(status) ? 100 : 0,
         templateInstance:true,
       });

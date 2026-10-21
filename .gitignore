@@ -1,2 +1,14 @@
 node_modules/
 dist/version.js
+data/
+backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+.env
+.env.*
+!.env.example
+test-results/
+playwright-report/
+reports-private/

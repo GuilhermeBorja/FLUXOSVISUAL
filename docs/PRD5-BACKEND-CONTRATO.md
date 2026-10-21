@@ -1,15 +1,15 @@
 # PRD5 — Contrato de dados e preparação do backend
 
-Estado: **contrato de implantação** para o frontend PRD5. Este arquivo não implementa um backend. A aplicação publicada permanece um protótipo local até a implantação de persistência e autorização no servidor.
+Estado: **implementado na versão 0.7.0-prd6**, branch `PRD6`. Este documento preserva o contrato funcional que orientou a implementação. Consulte [API HTTP](BACKEND-API.md), [instalação e operação](BACKEND-OPERACAO.md) e [aceite](backend-acceptance.md) para os caminhos, decisões de armazenamento e verificações executadas. A demonstração no GitHub Pages continua estática; a API é executada pelo servidor Node/Docker.
 
-## Decisões adotadas no protótipo e propostas para ratificação
+## Decisões adotadas na primeira implementação
 
-1. Durações são contabilizadas em **dias corridos**, com mínimo de 1 dia para cada folha que participar de TI automática. Duração opcional sem TI é \`null\` (não atribuir 0 nem 1 por padrão).
+1. Durações são contabilizadas em **dias corridos**, com mínimo de 1 dia para cada folha que participar de TI automática. Duração opcional sem TI é `null` (não atribuir 0 nem 1 por padrão).
 2. **Caminho crítico** é derivado de cálculo de rede válido e completo; bloqueio e risco são indicadores independentes. Nenhuma atividade pode ser considerada crítica por previsão incompleta.
 3. A primeira implementação da aprovação mantém decisão de um aprovador por rodada, preservando histórico imutável. Aprovação paralela/sequencial demanda extensão explícita do modelo.
-4. Edição em lote é **atômica** no protótipo e deverá manter transação no backend, retornando validações por item antes do commit.
+4. Edição em lote é **atômica** no backend, retornando resultados por item e cancelando toda a transação em caso de falha.
 5. Colunas iniciais: atividade/responsável, status, avanço, início e término projetados, edição e seleção. O usuário pode mostrar/ocultar/reordenar as demais; em viewports compactos, colunas secundárias são temporariamente reduzidas.
-6. Limites atuais de anexos no protótipo: 256 KiB por arquivo e 1 MiB no total no navegador. Antes do backend, definir quota por empresa, varredura de malware e política de retenção.
+6. Anexos no backend: padrão de **10 MiB por arquivo e 1 GiB por workspace**, incluindo exclusões lógicas. Limites e scanner são configuráveis; a inspeção antimalware não vem conectada a um serviço externo. Retenção e destino externo de backups dependem da operação da empresa. A demonstração estática conserva seus limites locais anteriores.
 
 ## Modelo canônico
 
@@ -34,9 +34,9 @@ Estado: **contrato de implantação** para o frontend PRD5. Este arquivo não im
 
 - FK Item.parent_item_id referencia Item.id ou NULL. CHECK parent_item_id != id.
 - Um item tem no máximo um pai. Ciclos são rejeitados por verificação recursiva antes de MOVE e CREATE.
-- UNIQUE(organization_id, lower(email)) para usuários no escopo definido; UNIQUE para relação ativa source_item_id/target_item_id/type.
+- A implementação usa **e-mail único por instalação** para a identidade de login, com vínculos explícitos aos workspaces. Essa escolha evita login ambíguo entre empresas. Relação TI ativa é única por workspace/source_item_id/target_item_id/type.
 - Relations só contêm TI. FKs validam dois itens distintos, ambos folhas ativas, dentro do workspace autorizado.
-- UNIQUE(affected_item_id, source_item_id, active=true) nos bloqueios para evitar fontes duplicadas.
+- A propagação mantém uma referência ativa por par origem/destino. Impedimentos manuais têm ID próprio, permitindo múltiplas causas na mesma atividade; resolver uma causa não remove as demais.
 - UNIQUE(item_id, round) nos pedidos de aprovação; decisões são **append-only**. Nenhuma atualização apaga decisão anterior.
 - Auditoria é append-only, com before/after, ator, instante efetivo, instante de gravação e correlation_id.
 - Item.version incrementado a cada escrita; exigência de If-Match/version no PATCH para concorrência otimista.
@@ -44,7 +44,7 @@ Estado: **contrato de implantação** para o frontend PRD5. Este arquivo não im
 - O backend avalia GPO em toda leitura e escrita: escopo mais específico prevalece; em empate, Negar prevalece; sem regra, negar. Registrar regra vencedora e sujeito.
 - Arquivamento lógico de itens/usuários/anexos preserva histórico e permite restauração de subárvore coerente.
 
-## Comandos API sugeridos
+## Comandos funcionais (mapeamento HTTP detalhado em BACKEND-API.md)
 
 | Método / recurso | Comando | Resultado |
 | --- | --- | --- |
@@ -65,9 +65,11 @@ Estado: **contrato de implantação** para o frontend PRD5. Este arquivo não im
 
 ## Migração de dados atuais
 
+O setup da primeira instalação cria um workspace vazio. Não ocorre importação automática dos dados de demonstração do navegador. Para migrar dados reais, preservar a origem e executar a reconciliação abaixo com o arquivo e o mapeamento de contas aprovados.
+
 1. Congelar snapshot local antes de migrar; manter cópia recuperável.
 2. Normalizar IDs e detectar órfãos, ciclos, duplicidades TI e nomes repetidos (não assumir que títulos são chaves).
-3. Preservar \`parentId\` como \`parent_item_id\`. Descartar relações \`contains\` legadas (inclusive ancestralidade indireta). Gerar arestas Contém só na consulta.
+3. Preservar `parentId` como `parent_item_id`. Descartar relações `contains` legadas (inclusive ancestralidade indireta). Gerar arestas Contém só na consulta.
 4. Preservar duração não definida como NULL. Não converter null em zero.
 5. Recalcular resumos e projeção em transação, registrar diferenças e casos rejeitados para revisão.
 6. Auditar os resultados comparando Gantt e grafo antes de disponibilizar contas reais.
@@ -81,4 +83,4 @@ Estado: **contrato de implantação** para o frontend PRD5. Este arquivo não im
 - Teste de segregação multiempresa e armazenamento privado de anexos; autorização server-side.
 - Backups, restauração, logs estruturados e correlação de comandos/eventos.
 
-**Nota:** a criação de código backend, armazenamento remoto e sincronização entre dispositivos são fases posteriores ao fechamento do protótipo PRD5 e não são disponibilizadas pela hospedagem estática GitHub Pages.
+**Implantação:** código, persistência e integração entre sessões estão nesta versão. A execução usa uma instância Node.js 24 com SQLite e anexos em volume persistente. Hospedagem pública, domínio/HTTPS, destino externo dos backups e eventual migração de dados reais exigem os dados da instalação escolhida; GitHub Pages hospeda somente o frontend estático.
