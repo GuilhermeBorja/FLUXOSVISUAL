@@ -1333,7 +1333,7 @@ function renderQuickStepRows(text) {
   }).join("");
   const leaves=rows.filter((_,index)=>!rows.some(entry=>entry.parentIndex===index)).length;
   if(summary)summary.textContent=rows.length?`${rows.length} subitem(s), ${Math.max(...rows.map(row=>row.depth))+1} nível(is) · ${leaves} atividade(s) final(is)`:"Digite ou cole os subitens. Tab cria um nível; Shift+Tab retorna.";
-  if(sequence)sequence.disabled=leaves<2;
+  if(sequence){sequence.disabled=leaves<2;if(sequence.checked){const durationMissing=rows.findIndex((item,index)=>!rows.some(child=>child.parentIndex===index) && !(Number(root.querySelector(`[name="stepDuration_${index}"]`)?.value)>=1));if(durationMissing>=0)summary.textContent+=" · Informe a duração das atividades finais para criar TI.";}}
 }
 
 function renderAttachments(item,editable) {
@@ -1598,7 +1598,18 @@ function renderAdmin() {
 function renderRegistryTimeline(){
  const ids=new Set(accessibleItems().map(item=>item.id)), userId=ui.historyUserId||"",orgId=ui.historyOrganizationId||"", sectorId=ui.historySectorId||"",eventType=ui.historyEventType||"",itemId=ui.historyItemId||"",since=ui.historySince||"",until=ui.historyUntil||"";
  const items=(state.events||[]).filter(e=>ids.has(e.itemId)&&(!userId||e.userId===userId)&&(!orgId||e.organizationIdSnapshot===orgId)&&(!sectorId||e.sectorIdSnapshot===sectorId)&&(!eventType||e.eventType===eventType)&&(!itemId||e.itemId===itemId)&&(!since||(e.effectiveAt||e.createdAt)>=since)&&(!until||(e.effectiveAt||e.createdAt).slice(0,10)<=until));
- const records=(state.registryEvents||[]).filter(e=>(!userId||e.userId===userId)&&(!orgId||e.entityId===orgId||state.users.find(u=>u.id===e.entityId)?.organizationId===orgId));
+ const records=(state.registryEvents||[]).filter(e=>{
+  if(userId&&e.userId!==userId)return false;
+  if(eventType&&e.eventType!==eventType)return false;
+  if(itemId&&e.entityId!==itemId)return false;
+  if(since&&(e.createdAt||"")<since)return false;
+  if(until&&(e.createdAt||"").slice(0,10)>until)return false;
+  const associatedUser=state.users.find(u=>u.id===e.entityId);
+  const associatedSector=state.sectors.find(se=>se.id===e.entityId);
+  const scopedOrganization=associatedUser?.organizationId||associatedSector?.organizationId||(e.entityType==="organization"?e.entityId:"");
+  const scopedSector=associatedUser?.sectorId||(e.entityType==="sector"?e.entityId:"");
+  return (!orgId||scopedOrganization===orgId)&&(!sectorId||scopedSector===sectorId);
+ });
  const entries=[...items.map(e=>({date:e.effectiveAt||e.createdAt,name:eventLabels[e.eventType]||e.eventType,target:getItem(e.itemId)?.title||"Item arquivado",actor:e.actorNameSnapshot||userName(e.userId),before:eventValue(e,e.fromValue),after:eventValue(e,e.toValue),note:e.comment||""})),...records.map(e=>({date:e.createdAt,name:"Cadastro: "+e.entityType+" / "+e.eventType,target:e.name,actor:userName(e.userId),before:"",after:"",note:e.comment||""}))].sort((a,b)=>new Date(b.date)-new Date(a.date));
  return '<section class="panel-section"><h3>Histórico de movimentações</h3><div class="form-row"><label>Usuário<select id="historyUserFilter">'+option("","Todos",!userId)+state.users.map(u=>option(u.id,u.name,userId===u.id)).join("")+'</select></label><label>Empresa<select id="historyOrganizationFilter">'+option("","Todas",!orgId)+state.organizations.map(o=>option(o.id,o.name,orgId===o.id)).join("")+'</select></label><label>Setor<select id="historySectorFilter">'+option("","Todos",!sectorId)+state.sectors.map(x=>option(x.id,x.name,sectorId===x.id)).join("")+'</select></label><label>Evento<select id="historyEventFilter">'+option("","Todos",!eventType)+[...new Set(state.events.map(x=>x.eventType))].map(k=>option(k,eventLabels[k]||k,eventType===k)).join("")+'</select></label><label>Item<select id="historyItemFilter">'+option("","Todos",!itemId)+accessibleItems().map(i=>option(i.id,i.title,itemId===i.id)).join("")+'</select></label><label>De<input type="date" id="historySinceFilter" value="'+escapeHtml(since)+'"/></label><label>Até<input type="date" id="historyUntilFilter" value="'+escapeHtml(until)+'"/></label></div><ol class="event-timeline">'+entries.map(e=>'<li><strong>'+escapeHtml(e.name)+'</strong><span class="event-origin">'+escapeHtml(e.target)+'</span><time>'+formatDateTime(e.date)+'</time>'+(e.before!=="—"||e.after!=="—"?'<p class="event-values"><b>Antes:</b> '+escapeHtml(e.before)+' <b>Depois:</b> '+escapeHtml(e.after)+'</p>':'')+(e.note?'<p>'+escapeHtml(e.note)+'</p>':'')+'<small>Por '+escapeHtml(e.actor)+'</small></li>').join("")+'</ol>'+(entries.length?'':'<p class="secondary">Nenhum registro encontrado.</p>')+'</section>';
 }
@@ -2160,7 +2171,7 @@ function bindPanel() {
   }));
   document.querySelector("#editUserOrganization")?.addEventListener("change",(event)=>{ const sector=document.querySelector("#editUserSector"); if(!sector)return; sector.innerHTML=state.sectors.filter((entry)=>entry.organizationId===event.target.value).map((entry)=>option(entry.id,entry.name)).join(""); });
   root.querySelectorAll('#createItemForm [name="plannedStartAt"],#createItemForm [name="plannedDurationDays"],#createItemForm [name="sequence"]').forEach((input)=>input.addEventListener("input",updateSchedulePreview));
-  root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) updateSchedulePreview(); });
+  root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) { const field=event.target; const n=field.value.trim();field.setCustomValidity(n!==""&&(!Number.isInteger(Number(n))||Number(n)<1)?"Informe duração de pelo menos 1 dia.":""); } });
   root.addEventListener("change",(event)=>{ const input=event.target; if(input.matches("[data-row-fill-level]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.levels[input.dataset.rowFillLevel]=input.value; saveState(); render(); } else if(input.matches("[data-row-fill-project]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.projects[input.dataset.rowFillProject]=input.value; saveState(); render(); } });
   document.querySelector("#deleteCascade")?.addEventListener("change", (event) => { ui.deletion.cascade = event.target.checked; renderPanel(false); });
   submitHandler("deleteForm", (form) => {
@@ -2232,7 +2243,7 @@ function bindPanel() {
       Object.assign(state,restored);
       throw error;
     }
-    saveState(); notify(changed ? "Atualização registrada." : "Nenhuma alteração para salvar."); render();
+    if(changed){saveState();notify("Atualização registrada.");render();}else{const error=document.querySelector("#panelError");if(error){error.textContent="Nenhuma informação foi modificada.";error.hidden=false;}}
   });
   submitHandler("relationForm", (form) => {
     const otherId = String(form.get("otherId")); const incoming = form.get("direction") === "in";
