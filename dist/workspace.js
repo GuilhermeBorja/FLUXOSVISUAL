@@ -700,7 +700,7 @@ function renderTable(items) {
 }
 
 function renderBulkEditor() {
-  return `<form id="bulkEditForm" class="bulk-edit form-row"><label>Novo status<select name="status">${option("", "Manter status")}${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status)).join("")}</select></label><label>Novo responsável<select name="ownerId">${option("", "Manter responsável")}${state.users.filter((user) => !user.disabled).map((user) => option(user.id, user.name)).join("")}</select></label><label>Duração (dias)<input type="number" name="durationDays" min="0" step="1" placeholder="Manter duração"/></label><label>Peso<input type="number" name="weight" min="0.1" step="0.1" placeholder="Manter peso"/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" placeholder="Manter percentual"/></label><label>Comentário<input name="comment" placeholder="Motivo da atualização"/></label><button class="button primary" type="submit">Aplicar aos selecionados</button></form>`;
+  return `<form id="bulkEditForm" class="bulk-edit form-row"><label>Novo status<select name="status">${option("", "Manter status")}${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status)).join("")}</select></label><label>Novo responsável<select name="ownerId">${option("", "Manter responsável")}${state.users.filter((user) => !user.disabled).map((user) => option(user.id, user.name)).join("")}</select></label><label>Duração (dias)<input type="number" name="durationDays" min="0" step="1" placeholder="Manter duração"/></label><label>Peso<input type="number" name="weight" min="0.1" step="0.1" placeholder="Manter peso"/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" placeholder="Manter percentual"/></label><label>Empresa (se permitido)<select name="organizationId">${option("","Manter empresa")}${state.organizations.map(o=>option(o.id,o.name)).join("")}</select></label><label>Setor (se permitido)<select name="sectorId">${option("","Manter setor")}${state.sectors.map(se=>option(se.id,orgName(se.organizationId)+" / "+se.name)).join("")}</select></label><label><input type="checkbox" name="archive" value="1"/> Arquivar selecionados</label><label>Comentário<input name="comment" placeholder="Motivo da atualização"/></label><button class="button primary" type="submit">Aplicar aos selecionados</button></form>`;
 }
 
 function emptyMarkup() {
@@ -1941,10 +1941,14 @@ function applyBulkEdit(form) {
   const durationRaw = String(form.get("durationDays") || "").trim();
   const weightRaw = String(form.get("weight") || "").trim();
   const progressRaw = String(form.get("progressPercent") || "").trim();
+  const organizationId=String(form.get("organizationId")||""),sectorId=String(form.get("sectorId")||""),archive=form.get("archive")==="1";
+  const report=[];
   try {
     for (const item of selected) {
       const input = { ...item, status: status || item.status };
       if (ownerId) input.ownerId = ownerId;
+      if (organizationId) input.organizationId=organizationId;
+      if (sectorId) input.sectorId=sectorId;
       if (weightRaw) input.weight = Number(weightRaw);
       if (progressRaw) input.progressPercent = Number(progressRaw);
       if (durationRaw) {
@@ -1955,7 +1959,9 @@ function applyBulkEdit(form) {
         input.plannedDurationDays = days;
         input.dueAt = inclusiveFinishDate(start, days);
       }
+      if(archive){archiveItem(item.id);report.push(item.title+" — arquivado");continue;}
       updateItem(item.id, input, nowIso(),String(form.get("comment")||""));
+      report.push(item.title+" — atualizado");
     }
   } catch (error) {
     const restored = JSON.parse(snapshot);
@@ -1964,7 +1970,7 @@ function applyBulkEdit(form) {
     throw error;
   }
   ui.bulkOpen = false;ui.panel="";
-  saveState(); notify(`Atualização em lote aplicada a ${selected.length} itens. Seleção preservada.`); render();
+  saveState(); notify(`Lote concluído: ${report.length} item(ns) validados. Seleção preservada.`);render();
 }
 
 function bindPanel() {
