@@ -876,12 +876,15 @@ function prd43DrawGanttRelations(){
     const sx=start.x+sa.width,sy=start.y+sa.height/2,tx=end.x,ty=end.y+tb.height/2;
     // TI sempre termina da esquerda para a direita na sucessora.
     // Quando as barras se cruzam horizontalmente, a rota faz desvio acima das linhas.
-    const safeTx=Math.max(0,tx-13),midX=tx>=sx+34?(sx+safeTx)/2:sx+17;
+    const safeTx=Math.max(0,tx-13),midX=Math.max(sx+18,(sx+safeTx)/2);
     const lane=[...state.relations].filter(r=>r.relationType==="TI"&&ids.has(r.sourceId)&&ids.has(r.targetId)).findIndex(r=>r.id===rel.id);
-    const lift=16+(lane%4)*7;
-    const pathParts=tx>=sx+34
+    const routeDown=ty>=sy;
+    const routeY=sy+22+(lane%4)*7;
+    // Para sucessoras abaixo, a linha desce diretamente até a altura do alvo e segue
+    // horizontalmente; isso evita o efeito visual de "descer, subir e voltar".
+    const pathParts=routeDown
       ?[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${midX.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`]
-      :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${(sx+14).toFixed(1)}`,`V${(Math.max(sy,ty)+lift).toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
+      :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${(sx+18).toFixed(1)}`,`V${routeY.toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
     const d=pathParts.join(" ");
     lines+=`<g class="prd43-ti-edge ${prd43SelectedTiId===rel.id?"selected":""}" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" role="button" tabindex="0" aria-label="TI de ${escapeHtml(getItem(rel.sourceId)?.title||"")} para ${escapeHtml(getItem(rel.targetId)?.title||"")}. Clique para editar.">
        <path class="prd43-ti-hit" d="${d}"/><path class="prd43-ti-path" d="${d}" marker-end="url(#prd43-ti-arrow)"/></g>`;
@@ -927,6 +930,20 @@ function prd43GanttDropTarget(clientX,clientY){
 }
 function prd43BindGantt(){
   const content=document.querySelector("#prd43GanttContent");if(!content)return;
+  const relationSvg=content.querySelector("#prd43GanttOverlay");
+  if(relationSvg&&!relationSvg.dataset.bound){
+    const openRelation=event=>{
+      const edge=event.target.closest?.("[data-gantt-ti]");
+      if(!edge)return;
+      event.preventDefault();event.stopPropagation();
+      prd43ShowGanttRelation(edge.dataset.ganttTi);
+    };
+    relationSvg.addEventListener("click",openRelation);
+    relationSvg.addEventListener("keydown",event=>{
+      if(event.key==="Enter"||event.key===" "){openRelation(event);}
+    });
+    relationSvg.dataset.bound="true";
+  }
   if(prd43GanttObserver){prd43GanttObserver.disconnect();prd43GanttObserver=null;}
   requestAnimationFrame(prd43DrawGanttRelations);
   if(typeof ResizeObserver!=="undefined"){
