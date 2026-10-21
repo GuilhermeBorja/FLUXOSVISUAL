@@ -627,7 +627,14 @@ const FluxosGraph = (() => {
       }
     };
     document.addEventListener("keydown",onDeleteKey);
-    const observer = new ResizeObserver(() => draw());
+    let lastViewportSize={w:Math.round(container.getBoundingClientRect().width),h:Math.round(container.getBoundingClientRect().height)};
+    const observer = new ResizeObserver(() => {
+      const bounds=container.getBoundingClientRect(),w=Math.round(bounds.width),h=Math.round(bounds.height);
+      const resized=Math.abs(w-lastViewportSize.w)>8||Math.abs(h-lastViewportSize.h)>8;
+      lastViewportSize={w,h};
+      if(resized && model.nodes.length && !animationState)fit();
+      else draw();
+    });
     observer.observe(container);
     if (options.initialTransform) { transform = { ...options.initialTransform }; draw(); }
     else fit(true);
