@@ -791,7 +791,7 @@ function renderGantt(items) {
   let html=`<div class="gantt-card prd43-gantt">
     <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
   if(!rows.length)return html+emptyMarkup()+"</div>";
-  html+=`<div class="prd5-gantt-bulk-toolbar"><button class="button quiet" data-action="toggle-bulk" type="button">Editar selecionados (${ui.bulkSelected?.size||0})</button>${ui.bulkOpen&&ui.bulkSelected?.size?renderBulkEditor():""}</div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
+  html+=`<div class="prd5-gantt-bulk-toolbar"><button class="button quiet" data-action="toggle-bulk" type="button">Editar selecionados (${ui.bulkSelected?.size||0})</button>${""}</div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
     <div class="gantt-axis" style="--prd5-grid:${gridColumns}">${visibleCols.map(([key,label])=>`<span class="prd5-cell" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join("")}<div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
   const relationMap=new Map();
   for(const rel of ties){const incoming=relationMap.get(rel.targetId)||{before:[],after:[]};incoming.before.push(rel);relationMap.set(rel.targetId,incoming);
@@ -1127,6 +1127,7 @@ function renderPanel(focus = true) {
   if (!ui.panel) { root.innerHTML = ""; document.body.classList.remove("panel-open"); return; }
   let content = "";
   if (ui.panel === "settings") content = renderViewSettingsPanel();
+  if (ui.panel === "bulk") content = panelHeader("Edição em lote",ui.bulkSelected.size+" itens selecionados")+'<div class="drawer-body"><p class="secondary">As alterações serão validadas e aplicadas de forma transacional.</p>'+renderBulkEditor()+'</div>';
   if (ui.panel === "create") content = renderCreatePanel();
   else if (ui.panel === "templates") content = renderTemplatesPanel();
   else if (ui.panel === "admin") content = renderAdmin();
@@ -1809,7 +1810,7 @@ function bindWorkspace() {
     else if (action === "logout") { closePanel(); state.currentUserId = ""; saveState(); render(); }
     else if (action === "export") exportVisible();
     else if (action === "dismiss-notice") { ui.notice = "";ui.prd43Undo=null; document.querySelector("#noticeRoot").innerHTML = ""; }
-    else if (action === "toggle-bulk") { ui.bulkOpen = !ui.bulkOpen; render(); }
+    else if (action === "toggle-bulk") { if(!(ui.bulkSelected?.size)){notify("Selecione uma ou mais atividades na coluna Lote.");return;}ui.panel="bulk";renderPanel(); }
     else if (action === "zoom-in") graphInstance?.zoom(1.2);
     else if (action === "zoom-out") graphInstance?.zoom(1/1.2);
     else if (action === "propagate") { const id=ui.selectedItemId || scopedItems().find(item=>!item.parentId)?.id || scopedItems()[0]?.id; if(!id||!graphInstance?.propagate(id,document.querySelector("#animationLayout")?.value||"sequential",document.querySelector("#animationMode")?.value==="blocker"))notify("Nenhum item disponível para animar.","error"); }
@@ -1962,12 +1963,13 @@ function applyBulkEdit(form) {
     Object.assign(state, restored);
     throw error;
   }
-  ui.bulkOpen = false;
+  ui.bulkOpen = false;ui.panel="";
   saveState(); notify(`Atualização em lote aplicada a ${selected.length} itens. Seleção preservada.`); render();
 }
 
 function bindPanel() {
   const root = document.querySelector("#panelRoot");
+  if(ui.panel==="bulk")submitHandler("bulkEditForm",applyBulkEdit);
   root.querySelectorAll("#prd5HistoryUser,#prd5HistoryOrganization,#prd5HistorySector").forEach(input=>input.addEventListener("change",()=>{ui.prd5HistoryFilters={user:root.querySelector("#prd5HistoryUser")?.value||"",organization:root.querySelector("#prd5HistoryOrganization")?.value||"",sector:root.querySelector("#prd5HistorySector")?.value||""};if(input.id==="prd5HistoryOrganization")ui.prd5HistoryFilters.sector="";renderPanel(false);}));
   root.querySelectorAll("[data-setting-column]").forEach(input=>input.addEventListener("change",()=>{ state.hiddenTableColumns ||= [];state.tableColumnPinned ||= [];const key=input.dataset.settingColumn; state.hiddenTableColumns=input.checked ? state.hiddenTableColumns.filter(entry=>entry!==key) : [...new Set([...state.hiddenTableColumns,key])];state.tableColumnPinned=input.checked ? [...new Set([...state.tableColumnPinned,key])] : state.tableColumnPinned.filter(entry=>entry!==key);saveState();render(); }));
   root.onclick = (event) => {
