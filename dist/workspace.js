@@ -346,8 +346,11 @@ const prd5GanttColumns=[
   ["variance","Variação baseline"],["edit","Edição"],["select","Seleção em lote"]
 ];
 const prd5DefaultColumns=["name","status","progress","start","due","edit","select"];
+function prd5WorkspaceKey(){return currentUser().id+":"+(ui.scopeId||"all");}
+function prd5SavedView(){return state.prd5GanttColumnViews?.[prd5WorkspaceKey()]||{};}
+function prd5SaveView(changes){state.prd5GanttColumnViews||={};state.prd5GanttColumnViews[prd5WorkspaceKey()]={...prd5SavedView(),...changes};saveState();}
 function prd5ColumnOrder(){
- const order=state.prd5GanttColumnsOrder||[];
+ const order=prd5SavedView().order||state.prd5GanttColumnsOrder||[];
  return [...prd5GanttColumns].sort((a,b)=>{
   const x=order.indexOf(a[0]),y=order.indexOf(b[0]);
   return (x<0?100+prd5GanttColumns.indexOf(a):x)-(y<0?100+prd5GanttColumns.indexOf(b):y);
@@ -369,7 +372,7 @@ function prd5AdaptiveColumns(){
  return current;
 }
 function prd5ColumnVisible(name) {
-  return (state.prd5GanttColumns||prd5DefaultColumns).includes(name);
+  return (prd5SavedView().visible||state.prd5GanttColumns||prd5DefaultColumns).includes(name);
 }
 function prd5ColumnValue(item,key,critical){
   switch(key){
@@ -1025,7 +1028,7 @@ function renderGraph(items){
     </details>
   </div></div>`;
 }
-function layoutKey() { return `${currentUser().id}:${ui.grouping}`; }
+function layoutKey() { return `${currentUser().id}:${ui.scopeId||"all"}:${ui.grouping}`; }
 
 function mountGraph(items) {
   const projection=prd44GraphProjection(items);
@@ -1735,7 +1738,7 @@ function bindWorkspace() {
       const next=index+(button.dataset.prd5ColUp?-1:1);
       if(index>=0&&next>=0&&next<order.length){
         [order[index],order[next]]=[order[next],order[index]];
-        state.prd5GanttColumnsOrder=order;saveState();render();
+        prd5SaveView({order});render();
       }
       return;
     }
@@ -1935,10 +1938,9 @@ function bindWorkspace() {
   document.querySelectorAll("[data-filter]").forEach((select) => select.addEventListener("change", (event) => { state.filters[event.target.dataset.filter] = event.target.value; saveState(); render(); }));
 
   document.querySelectorAll("[data-prd5-column]").forEach(input=>input.addEventListener("change",()=>{
-    const cols=new Set(state.prd5GanttColumns||prd5DefaultColumns);
+    const cols=new Set(prd5SavedView().visible||state.prd5GanttColumns||prd5DefaultColumns);
     input.checked?cols.add(input.dataset.prd5Column):cols.delete(input.dataset.prd5Column);
-    cols.add("name");state.prd5GanttColumns=prd5GanttColumns.map(([key])=>key).filter(key=>cols.has(key));
-    saveState();render();
+    cols.add("name");prd5SaveView({visible:prd5GanttColumns.map(([key])=>key).filter(key=>cols.has(key))});render();
   }));
   document.querySelector("#riskThresholdDays")?.addEventListener("change", (event) => {
     const value = Number(event.target.value);
