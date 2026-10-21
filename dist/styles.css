@@ -1295,6 +1295,8 @@ body.prd41-resizing,body.prd41-resizing * {cursor:col-resize!important;user-sele
 .prd43-gantt-links-svg{position:absolute;top:0;left:0;z-index:20;overflow:visible;pointer-events:none}
 .prd43-ti-edge{cursor:pointer;pointer-events:visiblePainted}
 .prd43-ti-control{pointer-events:auto;overflow:visible}
+.prd43-ti-html-hit{position:absolute;z-index:25;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;opacity:0;pointer-events:auto}
+.prd43-ti-html-hit:hover,.prd43-ti-html-hit:focus-visible{opacity:.18;background:#286d73;outline:2px solid #065a50}
 .prd43-ti-accessible{display:block;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer;opacity:0;pointer-events:auto}
 .prd43-ti-accessible:focus-visible{opacity:1;outline:2px solid #065a50;background:rgba(255,255,255,.8)}
 .prd43-ti-hit{stroke:#286d73;stroke-opacity:.001;stroke-width:22px;fill:none;pointer-events:visibleStroke;cursor:pointer}
