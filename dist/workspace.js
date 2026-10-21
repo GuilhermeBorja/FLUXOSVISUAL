@@ -664,7 +664,7 @@ function renderTable(items) {
 }
 
 function renderBulkEditor() {
-  return `<form id="bulkEditForm" class="bulk-edit form-row"><label>Novo status<select name="status">${option("", "Manter status")}${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status)).join("")}</select></label><label>Novo responsável<select name="ownerId">${option("", "Manter responsável")}${state.users.filter((user) => !user.disabled).map((user) => option(user.id, user.name)).join("")}</select></label><label>Duração (dias)<input type="number" name="durationDays" min="0" step="1" placeholder="Manter duração"/></label><label>Peso<input type="number" name="weight" min="0.1" step="0.1" placeholder="Manter peso"/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" placeholder="Manter percentual"/></label><button class="button primary" type="submit">Aplicar aos selecionados</button></form>`;
+  return `<form id="bulkEditForm" class="bulk-edit form-row"><label>Novo status<select name="status">${option("", "Manter status")}${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status)).join("")}</select></label><label>Novo responsável<select name="ownerId">${option("", "Manter responsável")}${state.users.filter((user) => !user.disabled).map((user) => option(user.id, user.name)).join("")}</select></label><label>Duração (dias)<input type="number" name="durationDays" min="0" step="1" placeholder="Manter duração"/></label><label>Peso<input type="number" name="weight" min="0.1" step="0.1" placeholder="Manter peso"/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" placeholder="Manter percentual"/></label><label>Comentário<input name="comment" placeholder="Motivo da atualização"/></label><button class="button primary" type="submit">Aplicar aos selecionados</button></form>`;
 }
 
 function emptyMarkup() {
@@ -1841,9 +1841,10 @@ function bindWorkspace() {
     visibleIds.forEach((id) => event.target.checked ? ui.bulkSelected.add(id) : ui.bulkSelected.delete(id));
     render();
   });
-  document.querySelectorAll("[data-bulk-item]").forEach((input) => input.addEventListener("change", () => {
-    input.checked ? ui.bulkSelected.add(input.dataset.bulkItem) : ui.bulkSelected.delete(input.dataset.bulkItem);
-    render();
+  document.querySelectorAll("[data-bulk-item]").forEach(input=>input.addEventListener("change",()=>{
+    input.checked?ui.bulkSelected.add(input.dataset.bulkItem):ui.bulkSelected.delete(input.dataset.bulkItem);
+    const btn=document.querySelector('.prd5-gantt-bulk-toolbar [data-action="toggle-bulk"]');
+    if(btn)btn.textContent="Editar selecionados ("+ui.bulkSelected.size+")";
   }));
   document.querySelectorAll("[data-graph-select-item]").forEach((input) => input.addEventListener("change", () => {
     ui.graphTreeSelectedIds ||= new Set();
@@ -1896,7 +1897,7 @@ function applyBulkEdit(form) {
         input.plannedDurationDays = days;
         input.dueAt = inclusiveFinishDate(start, days);
       }
-      updateItem(item.id, input, nowIso());
+      updateItem(item.id, input, nowIso(),String(form.get("comment")||""));
     }
   } catch (error) {
     const restored = JSON.parse(snapshot);
@@ -1904,8 +1905,8 @@ function applyBulkEdit(form) {
     Object.assign(state, restored);
     throw error;
   }
-  ui.bulkSelected.clear(); ui.bulkOpen = false;
-  saveState(); notify(`Atualização em lote aplicada a ${selected.length} itens.`); render();
+  ui.bulkOpen = false;
+  saveState(); notify(`Atualização em lote aplicada a ${selected.length} itens. Seleção preservada.`); render();
 }
 
 function bindPanel() {
