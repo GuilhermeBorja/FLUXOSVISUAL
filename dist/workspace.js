@@ -802,6 +802,7 @@ let prd43SelectedTiId="";
 let prd43GanttObserver=null;
 let prd44LinkSource="";
 function renderGantt(items) {
+  ui.bulkSelected ||= new Set();
   const analysis=scheduleAnalysis(items), computed=new Map(analysis.rows.map(row=>[row.item.id,row]));
   const rows=tableRows(items).map(({item,depth,children})=>{
     if(computed.has(item.id))return {...computed.get(item.id),depth,children};
@@ -1965,6 +1966,7 @@ function bindWorkspace() {
     visibleIds.forEach((id) => event.target.checked ? ui.bulkSelected.add(id) : ui.bulkSelected.delete(id));
     render();
   });
+  ui.bulkSelected ||= new Set();
   document.querySelectorAll("[data-bulk-item]").forEach(input=>input.addEventListener("change",()=>{
     input.checked?ui.bulkSelected.add(input.dataset.bulkItem):ui.bulkSelected.delete(input.dataset.bulkItem);
     const btn=document.querySelector('.prd5-gantt-bulk-toolbar [data-action="toggle-bulk"]');
