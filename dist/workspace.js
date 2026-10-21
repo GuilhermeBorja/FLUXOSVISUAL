@@ -338,6 +338,42 @@ function prd41BindSplitters() {
     });
   });
 }
+const prd5GanttColumns=[
+  ["name","Atividade"],["type","Tipo"],["owner","Responsável"],["organization","Empresa"],
+  ["sector","Setor"],["state","Estado"],["status","Status"],["critical","Criticidade"],
+  ["blockers","Bloqueios"],["progress","Avanço"],["weight","Peso"],["start","Início projetado"],
+  ["due","Término projetado"],["duration","Duração"],["baseline","Baseline"],
+  ["variance","Variação baseline"],["edit","Edição"],["select","Seleção em lote"]
+];
+const prd5DefaultColumns=["name","status","progress","start","due","edit","select"];
+function prd5ColumnVisible(name) {
+  return (state.prd5GanttColumns||prd5DefaultColumns).includes(name);
+}
+function prd5ColumnValue(item,key,critical){
+  switch(key){
+    case "name":return '<span class="gantt-item-data">'+escapeHtml(item.title)+'</span>';
+    case "type":return escapeHtml(itemTypeConfig(item.type,item.organizationId).label);
+    case "owner":return escapeHtml(userName(item.ownerId));
+    case "organization":return escapeHtml(orgName(item.organizationId));
+    case "sector":return escapeHtml(state.sectors.find(x=>x.id===item.sectorId)?.name||"—");
+    case "state":return escapeHtml(item.state||"—");
+    case "status":return statusBadge(item);
+    case "critical":return critical?"Crítico":"—";
+    case "blockers":return escapeHtml(isBlocked(item)?"Bloqueado":"—");
+    case "progress":return progressCell(item);
+    case "weight":return String(item.weight??1);
+    case "start":return dateCell(item.plannedStartAt);
+    case "due":return dateCell(item.dueAt);
+    case "duration":return item.plannedDurationDays==null?"A definir":String(item.plannedDurationDays)+" d";
+    case "baseline":return escapeHtml(formatDate(item.baselineDueAt));
+    case "variance":return item.baselineDueAt&&item.dueAt?String(Math.round((new Date(item.dueAt)-new Date(item.baselineDueAt))/86400000))+" d":"—";
+    default:return "";
+  }
+}
+function prd5GanttSettings(){
+  return '<fieldset class="prd5-column-settings"><legend>Colunas visíveis</legend>'+
+    prd5GanttColumns.map(([key,label])=>'<label><input type="checkbox" data-prd5-column="'+key+'" '+(prd5ColumnVisible(key)?"checked":"")+' '+(key==="name"?"disabled":"")+'/>'+escapeHtml(label)+'</label>').join("")+'</fieldset>';
+}
 function prd44PaneToolbar(id,items){
   if(id==="table"){
     const rows=tableRows(items),selected=rows.filter(row=>ui.bulkSelected?.has(row.item.id)).length;
@@ -367,7 +403,7 @@ function prd44PaneToolbar(id,items){
   return `<details class="prd44-pane-options"><summary aria-label="Configurações do Gantt" title="Configurações do Gantt">${icon("settings-2")}</summary>
     <div class="prd44-options-menu prd44-gantt-settings">
       ${canManageGpo(currentUser())?`<label>Limite de risco (dias)<input id="riskThresholdDays" type="number" min="1" max="60" step="1" value="${Math.max(1,Math.min(60,Number(state.riskThresholdDays)||3))}"/></label>`:""}
-      <p>Arraste a extremidade de uma barra para criar TI; ou clique no círculo e escolha o destino.</p>
+      ${prd5GanttSettings()}<p>Arraste a extremidade da barra para criar TI.</p>
     </div>
   </details>`;
 }
@@ -1844,6 +1880,12 @@ function bindWorkspace() {
   document.querySelector("#scopeSelect").addEventListener("change", (event) => { ui.scopeId = event.target.value; ui.graphTransform = null; render(); });
   document.querySelectorAll("[data-filter]").forEach((select) => select.addEventListener("change", (event) => { state.filters[event.target.dataset.filter] = event.target.value; saveState(); render(); }));
 
+  document.querySelectorAll("[data-prd5-column]").forEach(input=>input.addEventListener("change",()=>{
+    const cols=new Set(state.prd5GanttColumns||prd5DefaultColumns);
+    input.checked?cols.add(input.dataset.prd5Column):cols.delete(input.dataset.prd5Column);
+    cols.add("name");state.prd5GanttColumns=prd5GanttColumns.map(([key])=>key).filter(key=>cols.has(key));
+    saveState();render();
+  }));
   document.querySelector("#riskThresholdDays")?.addEventListener("change", (event) => {
     const value = Number(event.target.value);
     if (!Number.isInteger(value) || value < 1 || value > 60) { notify("Defina o limite de risco entre 1 e 60 dias.","error"); render(); return; }
