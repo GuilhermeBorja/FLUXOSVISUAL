@@ -656,7 +656,7 @@ function renderTable(items) {
         <td><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" aria-label="Selecionar ${escapeHtml(item.title)}" ${ui.bulkSelected.has(item.id) ? "checked" : ""}/></td><td class="id-cell">${shortId(item)}</td><td class="title-cell"><div class="tree-cell" style="--depth:${Math.min(depth, 8)}">${children.length ? `<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${!ui.showSubitems || ui.collapsed?.has(item.id) ? "Expandir" : "Recolher"} subitens" aria-expanded="${ui.showSubitems && !ui.collapsed?.has(item.id)}">${icon(ui.showSubitems && !ui.collapsed?.has(item.id) ? "chevron-down" : "chevron-right")}</button>` : '<span class="tree-spacer"></span>'}<button class="item-title" data-select="${escapeHtml(item.id)}">${escapeHtml(item.title)}<span>${icon(itemTypeConfig(item.type,item.organizationId).icon)}${escapeHtml(itemTypeConfig(item.type,item.organizationId).label)}${children.length ? ` · ${children.length} subitens` : ""}</span></button><span class="prd44-row-facts" title="Status, responsável e término projetado"><span class="prd44-fact-status ${signalOf(item)}">${escapeHtml(statusDisplayLabel(item))}</span><span class="prd44-fact-owner">${escapeHtml(userName(item.ownerId))}</span><time class="prd44-fact-due">${dateCell(item.dueAt)}</time></span>${canEditItem(currentUser(),item) && canCreateItem(currentUser(),{...item,createdBy:currentUser().id}) && gpoDecision(currentUser(),"create_relation",item)===true ?
           `<button class="prd42-add-child" type="button" data-create-child="${escapeHtml(item.id)}" title="Criar subitem de ${escapeHtml(item.title)}" aria-label="Adicionar subitem de ${escapeHtml(item.title)}">${icon("plus")}</button>` : ""}</div></td>
         <td>${progressCell(item)}</td><td>${escapeHtml(userName(item.ownerId))}</td><td class="date-cell">${dateCell(item.createdAt, true)}</td><td class="date-cell">${dateCell(item.plannedStartAt)}</td><td class="date-cell">${dateCell(item.actualStartAt, true)}</td><td class="date-cell">${dateCell(activityStartAt(item), true)}</td><td class="date-cell ${isOverdue(item) ? "overdue" : ""}">${dateCell(item.dueAt)}</td><td class="date-cell">${dateCell(item.completedAt, true)}</td><td class="duration-cell">${elapsedLabel(item)}</td><td class="duration-cell">${activityDurationLabel(item)}</td><td class="weight-cell">${Number(item.weight ?? 1)}</td><td>${statusBadge(item)}</td><td><div class="row-actions prd42-row-actions"><button class="icon-button" data-select="${escapeHtml(item.id)}" title="Editar item" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>
-        <details class="prd42-row-more"><summary aria-label="Mais ações para ${escapeHtml(item.title)}" title="Mais ações">${icon("ellipsis")}</summary>
+        <details class="prd42-row-more"><summary aria-label="Mais ações para ${escapeHtml(item.title)}" title="Mais ações">${icon("more-horizontal")}</summary>
         <div class="prd42-row-extra">${canChangeHierarchy(currentUser(),item) ? `<button class="icon-button compact" data-order-up="${escapeHtml(item.id)}" title="Mover para cima" aria-label="Mover ${escapeHtml(item.title)} para cima">${icon("arrow-up")}</button><button class="icon-button compact" data-order-down="${escapeHtml(item.id)}" title="Mover para baixo" aria-label="Mover ${escapeHtml(item.title)} para baixo">${icon("arrow-down")}</button><button class="icon-button compact" data-indent="${escapeHtml(item.id)}" title="Indentar sob item anterior" aria-label="Indentar ${escapeHtml(item.title)}">${icon("corner-down-right")}</button>${item.parentId ? `<button class="icon-button compact" data-outdent="${escapeHtml(item.id)}" title="Remover do nível atual" aria-label="Recuar ${escapeHtml(item.title)}">${icon("corner-up-left")}</button>` : ""}` : ""}${canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""}</div></details></div></td>
       </tr>`).join("")}
     </tbody></table></div>`}
@@ -766,11 +766,11 @@ function renderGantt(items) {
     const successor=tiesFor.after.map(rel=>getItem(rel.targetId)?.title).filter(Boolean);
     const isLeaf=!state.items.some(child=>child.parentId===item.id&&!child.archivedAt);
     const canLink=isLeaf&&canEditItem(currentUser(),item)&&gpoDecision(currentUser(),"create_relation",item)===true;
-    const critical=Boolean(row.critical&&analysis.valid);
+    const critical=Boolean(row.critical&&analysis.valid&&analysis.reliable);
     const toggle=row.children?.length?`<button class="tree-toggle" data-expand="${escapeHtml(item.id)}" aria-label="${ui.showSubitems&&!ui.collapsed?.has(item.id)?"Recolher":"Expandir"} subitens">${icon(ui.showSubitems&&!ui.collapsed?.has(item.id)?"chevron-down":"chevron-right")}</button>`:'<span class="tree-spacer"></span>';
     const mayMove=canChangeHierarchy(currentUser(),item);
     const siblingActions=mayMove?`<details class="prd5-gantt-more"><summary title="Organizar ou criar" aria-label="Ações de ${escapeHtml(item.title)}">${icon("ellipsis")}</summary><div class="prd5-gantt-menu">
-      <button data-action="create" type="button">Criar estrutura</button>
+      <button data-create-child="${escapeHtml(item.id)}" type="button">Criar subitem/estrutura</button>
       <button data-order-up="${escapeHtml(item.id)}" type="button">Mover para cima</button><button data-order-down="${escapeHtml(item.id)}" type="button">Mover para baixo</button><button data-indent="${escapeHtml(item.id)}" type="button">Indentar</button>
       ${item.parentId?`<button data-outdent="${escapeHtml(item.id)}" type="button">Recuar</button>`:""}</div></details>`:"";
     return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)}">
@@ -1798,24 +1798,38 @@ function bindWorkspace() {
     event.dataTransfer.setData("text/plain",dragSourceId);
     row.classList.add("drag-source");
   };
-  app.ondragover = (event) => {
-    const row = event.target.closest("[data-row]");
-    if (!dragSourceId || !row || row.dataset.row === dragSourceId) return;
-    event.preventDefault();
-    app.querySelectorAll(".drop-target").forEach((entry) => entry.classList.remove("drop-target"));
-    row.classList.add("drop-target");
+  const dropZone=(event,row)=>{
+    const box=row.getBoundingClientRect(),fraction=(event.clientY-box.top)/box.height;
+    return fraction<.25?"before":fraction>.75?"after":"inside";
   };
-  app.ondrop = (event) => {
-    const row = event.target.closest("[data-row]");
-    const sourceId = event.dataTransfer?.getData("text/plain") || dragSourceId;
-    if (!sourceId || !row || sourceId === row.dataset.row) return;
+  app.ondragover=event=>{
+    const row=event.target.closest("[data-row]");
+    if(!dragSourceId||!row||row.dataset.row===dragSourceId)return;
+    event.preventDefault();event.dataTransfer.dropEffect="move";
+    const zone=dropZone(event,row);
+    app.querySelectorAll(".drop-target").forEach(el=>{el.classList.remove("drop-target","drop-before","drop-after","drop-inside");el.removeAttribute("data-drop-label");});
+    row.classList.add("drop-target","drop-"+zone);
+    row.dataset.dropLabel=zone==="inside"?"Criar subitem":zone==="before"?"Mover antes":"Mover depois";
+  };
+  app.ondrop=event=>{
+    const row=event.target.closest("[data-row]");
+    const sourceId=event.dataTransfer?.getData("text/plain")||dragSourceId;
+    if(!sourceId||!row||sourceId===row.dataset.row)return;
     event.preventDefault();
-    try {
-      const bounds = row.getBoundingClientRect();
-      const after = event.clientY > bounds.top + bounds.height / 2;
-      reorderItem(sourceId,row.dataset.row,after);
-      saveState(); render();
-    } catch (error) { notify(error.message,"error"); }
+    const backup=JSON.stringify(state);
+    try{
+      const targetId=row.dataset.row,zone=dropZone(event,row);
+      const source=getItem(sourceId),target=getItem(targetId);
+      if(zone==="inside")moveItemHierarchy(sourceId,targetId);
+      else {
+        if(source.parentId!==target.parentId)moveItemHierarchy(sourceId,target.parentId||"");
+        reorderItem(sourceId,targetId,zone==="after");
+      }
+      saveState();ui.prd5UndoMove={backup,sourceId};notify(zone==="inside"?"Item movido para dentro do destino.":"Ordem atualizada.");render();
+    }catch(error){
+      const old=JSON.parse(backup);Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,old);
+      notify(error.message,"error");render();
+    }
   };
   app.ondragend = () => {
     dragSourceId = "";
