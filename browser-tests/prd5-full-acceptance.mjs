@@ -9,7 +9,7 @@ page.on("pageerror",e=>errors.push(e.message));
 page.on("console",m=>{if(m.type()==="warning"&&/icon/i.test(m.text()))errors.push(m.text())});
 const test=async(name,fn)=>{
  try{await fn();passed.push(name);console.log("PASS "+name);}
- catch(e){problems.push({name,message:String(e?.message||e).slice(0,950)});console.error("FAIL "+name+" "+e?.message);}
+ catch(e){problems.push({name,message:String(e?.message||e).slice(0,950)});console.error("FAIL "+name+" "+e?.message);await page.evaluate(()=>{try{closePanel()}catch{}});}
 };
 await page.goto("http://127.0.0.1:8080/",{waitUntil:"networkidle"});
 await page.evaluate(()=>{
