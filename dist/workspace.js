@@ -168,7 +168,7 @@ function statusChoices(currentStatus) { return statusCatalog.filter((status) => 
 function statusOption(status, selected = false) { return `<option value="${escapeHtml(status.id)}" style="color:${escapeHtml(statusConfig(status.id).color)}" ${selected ? "selected" : ""}>${escapeHtml(status.label)}</option>`; }
 
 function statusBadge(item, compact = false){
-  const signal=signalOf(item),config=statusConfig(item.status),delta=dueDeltaDays(item);
+  const signal=signalOf(item),config=statusConfig(item.status,item.organizationId),delta=dueDeltaDays(item);
   const alerts=prd43DescendantAlerts(item),flags=[];
   if(alerts.blocked)flags.push(alerts.blocked+" bloqueado"+(alerts.blocked===1?"":"s"));
   if(alerts.late)flags.push(alerts.late+" atrasado"+(alerts.late===1?"":"s"));
@@ -1551,10 +1551,10 @@ function renderTemplatesPanel() {
     const organizationId = organizations.some((entry) => entry.id === user.organizationId) ? user.organizationId : organizations[0]?.id || "";
     const sectors = state.sectors.filter((entry) => entry.organizationId === organizationId);
     const itemRows = selected.items.map((entry) => {
-      const initialStatus = entry.status === "rejected" ? "correction" : entry.status || "backlog";
+      const initialStatus = entry.type === "approval" ? "backlog" : entry.status === "rejected" ? "correction" : entry.status || "backlog";
       const owners = state.users.filter((candidate) => !candidate.disabled);
       const selectedOwner = owners.some((candidate) => candidate.id === entry.ownerId && candidate.organizationId === organizationId) ? entry.ownerId : user.id;
-      return '<div class="template-review-row"><strong>' + escapeHtml(entry.title) + '<small>' + escapeHtml(labelOf(itemTypes,entry.type)) + '</small></strong><label>Status<select name="status_' + escapeHtml(entry.key) + '">' + statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status,status.id === initialStatus)).join("") + '</select></label><label>Responsável<select name="owner_' + escapeHtml(entry.key) + '">' + owners.map((candidate) => option(candidate.id,candidate.name + ' · ' + orgName(candidate.organizationId),candidate.id === selectedOwner)).join("") + '</select></label></div>';
+      return '<div class="template-review-row"><strong>' + escapeHtml(entry.title) + '<small>' + escapeHtml(labelOf(itemTypes,entry.type)) + '</small></strong><label>Status<select name="status_' + escapeHtml(entry.key) + '">' + statusCatalog.filter((status)=>entry.type === "approval" ? status.id === "backlog" : !["under_review","correction"].includes(status.id)).map((status) => statusOption(status,status.id === initialStatus)).join("") + '</select></label><label>Responsável<select name="owner_' + escapeHtml(entry.key) + '">' + owners.map((candidate) => option(candidate.id,candidate.name + ' · ' + orgName(candidate.organizationId),candidate.id === selectedOwner)).join("") + '</select></label></div>';
     }).join("");
     html += '<section class="panel-section"><h3>Revisar aplicação</h3><p>O fluxo cria novas identidades e relações. Datas e dados organizacionais são ajustados para o workspace de destino.</p><form id="templateApplyForm" class="form-stack"><label>Nome do fluxo<input name="title" value="' + escapeHtml(selected.rootTitle) + '" required maxlength="240"/></label><div class="form-row"><label>Empresa<select name="organizationId" id="templateOrganization">' + organizations.map((entry) => option(entry.id,entry.name,entry.id === organizationId)).join("") + '</select></label><label>Setor<select name="sectorId" id="templateSector">' + sectors.map((entry) => option(entry.id,entry.name,entry.id === user.sectorId)).join("") + '</select></label></div><div class="form-row"><label>Estado (UF)<input name="state" value="' + escapeHtml(user.state) + '" maxlength="2" required/></label><label>Data inicial<input type="date" name="startDate" value="' + today() + '" required/></label></div><details class="form-details" open><summary>Itens, status e responsáveis (' + selected.items.length + ')</summary><div class="template-review-list">' + itemRows + '</div></details><button class="button primary" type="submit">' + icon("plus") + 'Criar fluxo a partir do modelo</button></form></section>';
   }
@@ -2256,6 +2256,13 @@ function bindPanel() {
     const raw=String(form.get("quickSteps")||"");
     const steps=prd5ParseIndentedItems(raw);
     if(!steps.length)throw new Error("Digite pelo menos um item.");
+    if(window.FluxosBackend?.enabled && form.get("autoSequence")==="1"){
+      const parentIndices=new Set(steps.map(step=>step.parentIndex).filter(index=>index>=0));
+      for(let index=0;index<steps.length;index++)if(!parentIndices.has(index)){
+        const duration=Number(form.get("stepDuration_"+index));
+        if(!Number.isInteger(duration)||duration<1)throw new Error("A linha "+(steps[index].lineIndex+1)+" precisa de duração de pelo menos 1 dia para criar a sequência TI.");
+      }
+    }
     const start=String(form.get("plannedStartAt")||"")||today();
     const snapshot=JSON.stringify(state);
     try{
@@ -2289,6 +2296,7 @@ function bindPanel() {
     }
   });
   submitHandler("updateItemForm", async (form) => {
+    if (window.FluxosBackend?.enabled) return window.FluxosBackend.updateItemForm(form, ui.selectedItemId);
     const effective = new Date(form.get("effectiveAt"));
     if (!Number.isFinite(effective.getTime())) throw new Error("Informe a data e hora da mudança.");
     const snapshot = JSON.stringify(state);
@@ -2489,4 +2497,5 @@ function exportVisible() {
   notify("Dados visíveis exportados.");
 }
 
-render();
+if (window.FluxosBackend?.enabled) window.FluxosBackend.start();
+else render();

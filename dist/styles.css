@@ -1837,3 +1837,25 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 .prd5-panel-extras summary{font-size:.875rem;color:#657b88;padding:8px 0}
 .prd5-panel-extras[open] summary{margin-bottom:12px}
 .prd5-panel-extras > *:not(summary){margin-left:0}
+/* Autenticação e sincronização do workspace servido pela API. */
+.backend-workspace{display:flex;align-items:center;min-width:0;margin:0}
+.backend-workspace select{max-width:170px;min-height:34px;font-size:12px}
+#backendStatus{font-size:11px;color:#436058;margin-left:auto;white-space:nowrap}
+#backendStatus[data-state="offline"]{color:#8a4811}
+.backend-form-error{padding:10px 12px;border:1px solid #f0b4b4;border-radius:8px;background:#fff3f3;color:#962626;font-size:13px;line-height:1.5}
+.backend-form-error[hidden]{display:none}
+.backend-busy{position:fixed;inset:0;z-index:89000;cursor:progress;background:rgba(255,255,255,.18)}
+.backend-busy>div{position:absolute;right:20px;top:18px;display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid #cbd9de;border-radius:10px;box-shadow:0 8px 28px #142b3520;background:#fff;color:#193d49;font-size:13px;font-weight:600}
+.backend-spinner{display:inline-block;width:17px;height:17px;border:2px solid #cbd9de;border-top-color:#256b76;border-radius:50%;animation:backend-spin .8s linear infinite}
+@keyframes backend-spin{to{transform:rotate(360deg)}}
+.backend-modal{position:fixed;inset:0;z-index:90000;display:flex;align-items:center;justify-content:center;padding:24px;background:#102b426b}
+.backend-modal>section{width:min(560px,100%);max-height:calc(100dvh - 48px);overflow:auto;padding:26px;background:#fff;border-radius:16px;box-shadow:0 24px 70px #102b4238;outline:none;color:#233845}
+.backend-modal h2{margin:0 0 16px;font-size:20px;line-height:1.35}
+.backend-modal p{font-size:14px;line-height:1.55}
+.backend-modal-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:20px}
+.backend-modal .form-stack{display:grid;gap:14px}
+.backend-modal label{display:grid;gap:6px;font-size:13px;font-weight:600}
+.backend-modal input{width:100%;min-height:40px;padding:9px 11px;border:1px solid #cbd9de;border-radius:8px}
+.attachment-list [data-backend-download]{text-align:left;justify-content:flex-start;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:700px){.backend-workspace select{max-width:125px}.backend-modal{padding:12px}.backend-modal>section{padding:20px}.backend-modal-actions{flex-direction:column}.backend-modal-actions .button{width:100%}#backendStatus{white-space:normal;text-align:right;max-width:48%}}
+@media(prefers-reduced-motion:reduce){.backend-spinner{animation:none}}
