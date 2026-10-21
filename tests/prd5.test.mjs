@@ -15,15 +15,18 @@ test("PRD5: aceita quatro espacos e rejeita saltos",()=>{
  assert.throws(()=>run("A\n\t\tB"),/pulou um nível/);
  assert.throws(()=>run("\tA"),/primeiro subitem/);
 });
-test("PRD5: formulario remove cadastro repetido e duracao visivel",()=>{
- assert.doesNotMatch(workspace,/Mais nomes, um por linha|Outros itens independentes no mesmo nível|data-step-duration/);
+test("PRD5: criacao sem nome pai separado e com duracao por linha",()=>{
+ assert.doesNotMatch(workspace,/Mais nomes, um por linha|Outros itens independentes no mesmo nível/);
  assert.doesNotMatch(workspace.slice(workspace.indexOf("function renderCreatePanel()"),workspace.indexOf("function historyEventsFor(")),/name="parentId"|name="title"|name="plannedDurationDays"/);
  assert.match(workspace,/id="prd43PasteActivities"/);
  assert.match(workspace,/data-step-depth/);
+ assert.match(workspace,/data-step-duration/);
+ assert.match(workspace,/stepDuration_/);
+ assert.match(workspace,/prd5GanttColumns/);
  assert.match(workspace,/function prd5IndentKeydown/);
 });
 test("PRD5: gantt inclui campos sinteticos e grafico, preserva TI",()=>{
- for(const token of ["Gantt estruturado","Grafo Analítico","prd5-gantt-status","prd5-gantt-progress","prd5-gantt-dates","prd5-gantt-edit","prd43DrawGanttRelations","prd5ResizePanes"])assert.ok(workspace.includes(token),token);
+ for(const token of ["Gantt estruturado","Grafo Analítico","prd5ColumnValue","prd5GanttColumns","prd5-gantt-edit","prd43DrawGanttRelations","prd5ResizePanes"])assert.ok(workspace.includes(token),token);
  assert.match(workspace,/createRelation\(originId,targetId,"TI"\)/);
 });
 test("PRD5: historico e refresh organizacional",()=>{
@@ -35,4 +38,8 @@ test("PRD5: core conserva somente contains e TI",()=>{
  const ctx=vm.createContext({console,document:{querySelector:()=>({})},localStorage:{getItem:()=>null,setItem:()=>{}}});
  vm.runInContext(app,ctx);
  assert.equal(vm.runInContext("relationTypes.map(x=>x.id).join(',')",ctx),"contains,TI");
+});
+test("PRD5: vinculo Contem é derivado do parentId",()=>{
+ assert.match(workspace,/id:"contains-"/);
+ assert.match(app,/canonicalHierarchyVersion/);
 });
