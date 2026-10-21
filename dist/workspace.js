@@ -1750,7 +1750,7 @@ function bindWorkspace() {
       const next=index+(button.dataset.prd5ColUp?-1:1);
       if(index>=0&&next>=0&&next<order.length){
         [order[index],order[next]]=[order[next],order[index]];
-        prd5SaveView({order});render();
+        prd5SaveView({order});render();const menu=document.querySelector(".prd41-pane--gantt .prd44-pane-options");if(menu)menu.open=true;
       }
       return;
     }
@@ -1952,7 +1952,7 @@ function bindWorkspace() {
   document.querySelectorAll("[data-prd5-column]").forEach(input=>input.addEventListener("change",()=>{
     const cols=new Set(prd5SavedView().visible||state.prd5GanttColumns||prd5DefaultColumns);
     input.checked?cols.add(input.dataset.prd5Column):cols.delete(input.dataset.prd5Column);
-    cols.add("name");prd5SaveView({visible:prd5GanttColumns.map(([key])=>key).filter(key=>cols.has(key))});render();
+    cols.add("name");prd5SaveView({visible:prd5GanttColumns.map(([key])=>key).filter(key=>cols.has(key))});render();const menu=document.querySelector(".prd41-pane--gantt .prd44-pane-options");if(menu)menu.open=true;
   }));
   document.querySelector("#riskThresholdDays")?.addEventListener("change", (event) => {
     const value = Number(event.target.value);
