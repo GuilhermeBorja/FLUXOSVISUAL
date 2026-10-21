@@ -1776,7 +1776,7 @@ function recalculatePlannedDates() {
   if (order.length !== items.length) return {valid:false,message:"Há um ciclo nas dependências temporais. As datas não foram recalculadas."};
   // PRD4: dependencia TI altera exclusivamente previsoes; status nao e liberado automaticamente.
   const durations = new Map(items.map((item) => [item.id,hasPlannedDuration(item) ? itemDurationDays(item) : item.plannedStartAt && item.dueAt ? inclusiveDurationDays(item.plannedStartAt,item.dueAt) : null]));
-  const starts = new Map(items.map((item) => [item.id,item.baselineStartAt || item.plannedStartAt || today()]));
+  const starts = new Map(items.map((item) => [item.id,item.plannedStartAt || item.baselineStartAt || today()]));
   for (const id of order) {
     const duration = durations.get(id), candidates = [];
     for (const r of incoming.get(id)) {
