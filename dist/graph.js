@@ -2,7 +2,7 @@ const FluxosGraph = (() => {
   const colors = {
     red: { fill: "#ffe7e9", stroke: "#b42332" },
     green: { fill: "#cce8d5", stroke: "#115e38" },
-    blue: { fill: "#c4edd8", stroke: "#238254" },
+    blue: { fill: "#d8f0df", stroke: "#238254" },
     yellow: { fill: "#fff0b8", stroke: "#9f6a00" },
     gray: { fill: "#ebeff2", stroke: "#596872" },
   };
@@ -379,6 +379,11 @@ const FluxosGraph = (() => {
       return steps;
     }
 
+    function highlightTraversalPath(edgeIds) {
+      const active = new Set(edgeIds || []);
+      edgeElements.forEach((el,id) => el.classList.toggle("propagation-path", active.has(id)));
+    }
+
     function animateNext() {
       if(!animationState || animationState.paused)return;
       if(animationState.index>=animationState.steps.length){
@@ -403,7 +408,7 @@ const FluxosGraph = (() => {
           label.textContent=String(animationState.index);
         }
       }
-      for(const id of step.edgeIds){
+      highlightTraversalPath(step.edgeIds);\n      for(const id of step.edgeIds){
         const el=edgeElements.get(id);el?.classList.add("propagation-active");
         el?.classList.toggle("propagation-reverse",Boolean(step.reverseEdgeIds?.includes(id)));
       }
