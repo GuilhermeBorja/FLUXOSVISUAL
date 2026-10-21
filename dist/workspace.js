@@ -167,7 +167,7 @@ function statusConfig(id){
 function statusChoices(currentStatus) { return statusCatalog.filter((status) => !["under_review","correction"].includes(status.id) || status.id === currentStatus); }
 function statusOption(status, selected = false) { return `<option value="${escapeHtml(status.id)}" style="color:${escapeHtml(statusConfig(status.id).color)}" ${selected ? "selected" : ""}>${escapeHtml(status.label)}</option>`; }
 
-function statusBadge(item){
+function statusBadge(item, compact = false){
   const signal=signalOf(item),config=statusConfig(item.status),delta=dueDeltaDays(item);
   const alerts=prd43DescendantAlerts(item),flags=[];
   if(alerts.blocked)flags.push(alerts.blocked+" bloqueado"+(alerts.blocked===1?"":"s"));
@@ -176,7 +176,7 @@ function statusBadge(item){
   if(!flags.length&&item.inheritedBlockedFrom?.length)flags.push("impedimento herdado");
   if(!flags.length&&isOverdue(item))flags.push(Math.abs(delta)+"d de atraso");
   if(!flags.length&&isAtRisk(item))flags.push("risco");
-  const detail=flags.length?`<span class="prd43-status-alert" title="${escapeHtml(alerts.source||flags.join(" · "))}">${escapeHtml(flags.join(" · "))}</span>`:"";
+  const detail=!compact&&flags.length?`<span class="prd43-status-alert" title="${escapeHtml(alerts.source||flags.join(" · "))}">${escapeHtml(flags.join(" · "))}</span>`:"";
   return `<span class="status-badge ${signal}" style="--status-color:${escapeHtml(prd43Colors[signal])}" title="${escapeHtml(signalLabel(item))}"><span class="status-symbol">${icon(config.icon)}</span><span class="prd43-status-name">${escapeHtml(statusDisplayLabel(item))}</span>${detail}</span>`;
 }
 function dateCell(value, withTime = false) {
@@ -349,7 +349,7 @@ const prd5GanttColumns=[
   ["due","Término projetado"],["duration","Duração"],["baseline","Baseline"],
   ["variance","Variação baseline"],["edit","Edição"],["select","Seleção em lote"]
 ];
-const prd5DefaultColumns=["name","status","progress","start","due","edit","select"];
+const prd5DefaultColumns=["select","name","status","progress","start","due","edit"];
 function prd5WorkspaceKey(){return currentUser().id+":"+(ui.scopeId||"all");}
 function prd5SavedView(){return state.prd5GanttColumnViews?.[prd5WorkspaceKey()]||{};}
 function prd5SaveView(changes){state.prd5GanttColumnViews||={};state.prd5GanttColumnViews[prd5WorkspaceKey()]={...prd5SavedView(),...changes};saveState();}
@@ -386,7 +386,7 @@ function prd5ColumnValue(item,key,critical){
     case "organization":return escapeHtml(orgName(item.organizationId));
     case "sector":return escapeHtml(state.sectors.find(x=>x.id===item.sectorId)?.name||"—");
     case "state":return escapeHtml(item.state||"—");
-    case "status":return statusBadge(item);
+    case "status":return statusBadge(item,true);
     case "critical":return critical?"Crítico":"—";
     case "blockers":return escapeHtml(isBlocked(item)?"Bloqueado":"—");
     case "progress":return progressCell(item);
@@ -821,7 +821,7 @@ function renderGantt(items) {
   let html=`<div class="gantt-card prd43-gantt">
     <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
   if(!rows.length)return html+emptyMarkup()+"</div>";
-  html+=`<div class="prd5-gantt-bulk-toolbar"><button class="button quiet" data-action="toggle-bulk" type="button">Editar selecionados (${ui.bulkSelected?.size||0})</button>${""}</div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
+  html+=`<div class="prd5-gantt-bulk-toolbar"><button class="prd44-small-control prd5-bulk-edit-button" data-action="toggle-bulk" type="button" title="Editar itens selecionados">Editar selecionados (${ui.bulkSelected?.size||0})</button></div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
     <div class="gantt-axis" style="--prd5-grid:${gridColumns}">${visibleCols.map(([key,label])=>`<span class="prd5-cell" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join("")}<div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
   const relationMap=new Map();
   for(const rel of ties){const incoming=relationMap.get(rel.targetId)||{before:[],after:[]};incoming.before.push(rel);relationMap.set(rel.targetId,incoming);
@@ -842,7 +842,7 @@ function renderGantt(items) {
       <button data-order-up="${escapeHtml(item.id)}" type="button">Mover para cima</button><button data-order-down="${escapeHtml(item.id)}" type="button">Mover para baixo</button><button data-indent="${escapeHtml(item.id)}" type="button">Indentar</button>
       ${item.parentId?`<button data-outdent="${escapeHtml(item.id)}" type="button">Recuar</button>`:""}</div></details>`:"";
     return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${ui.graphHighlight && ui.graphHighlight!=="all" && (ui.graphHighlight==="critical"?!critical:ui.graphHighlight!==tone)?"prd5-signal-dim":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)};--prd5-grid:${gridColumns}">
-      ${visibleCols.map(([key])=>{if(key==="name")return `<div class="gantt-item-wrap prd5-cell">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.ownerId))}</small></button></div>`;if(key==="edit")return `<div class="prd5-gantt-actions prd5-cell"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>${siblingActions}</div>`;if(key==="select")return `<label class="prd5-bulk-check prd5-cell"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label>`;return `<span class="prd5-cell prd5-col-${key}">${prd5ColumnValue(item,key,critical)}</span>`;}).join("")}
+      ${visibleCols.map(([key])=>{if(key==="name")return `<div class="gantt-item-wrap prd5-cell">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><span class="gantt-item-title">${escapeHtml(item.title)}</span><small>${escapeHtml(userName(item.ownerId))}</small></button></div>`;if(key==="edit")return `<div class="prd5-gantt-actions prd5-cell"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>${siblingActions}</div>`;if(key==="select")return `<label class="prd5-bulk-check prd5-cell"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label>`;return `<span class="prd5-cell prd5-col-${key}">${prd5ColumnValue(item,key,critical)}</span>`;}).join("")}
       <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(item.title+" · "+formatDate(start)+" a "+formatDate(end))}">
         <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""} ${item.dueAt?"":"prd5-unplanned"}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
           ${canLink?`<button type="button" class="prd43-gantt-handle" data-gantt-handle="${escapeHtml(item.id)}" title="Arraste para criar TI a partir de ${escapeHtml(item.title)}" aria-label="Criar TI a partir de ${escapeHtml(item.title)}"></button>`:""}
@@ -881,7 +881,7 @@ function prd43DrawGanttRelations(){
     const lift=16+(lane%4)*7;
     const pathParts=tx>=sx+34
       ?[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${midX.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`]
-      :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${(sx+14).toFixed(1)}`,`V${(Math.min(sy,ty)-lift).toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
+      :[`M${sx.toFixed(1)} ${sy.toFixed(1)}`,`H${(sx+14).toFixed(1)}`,`V${(Math.max(sy,ty)+lift).toFixed(1)}`,`H${safeTx.toFixed(1)}`,`V${ty.toFixed(1)}`,`H${tx.toFixed(1)}`];
     const d=pathParts.join(" ");
     lines+=`<g class="prd43-ti-edge ${prd43SelectedTiId===rel.id?"selected":""}" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" role="button" tabindex="0" aria-label="TI de ${escapeHtml(getItem(rel.sourceId)?.title||"")} para ${escapeHtml(getItem(rel.targetId)?.title||"")}. Clique para editar.">
        <path class="prd43-ti-hit" d="${d}"/><path class="prd43-ti-path" d="${d}" marker-end="url(#prd43-ti-arrow)"/></g>`;
@@ -1219,7 +1219,7 @@ function itemFormFields(item, create = false) {
     </div>
     <label>Responsável<select name="ownerId" required ${canChangeOwner?"":"disabled"}>${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select>${canChangeOwner?"":'<small class="secondary">Seu perfil não permite alterar o responsável deste item.</small>'}</label>
     ${create ? `<label>Início esperado<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt||today())}" required/></label>` : `<div class="schedule-summary prd42-projection-summary">
-      <span>Início projetado<strong>${dateCell(item.plannedStartAt)}</strong></span>
+      <label class="manual-start-date">Data de execução<input type="date" name="plannedStartAt" value="${escapeHtml((item.plannedStartAt||today()).slice(0,10))}" required/></label>
       <span>Término projetado<strong>${dateCell(item.dueAt)}</strong></span>
       <span>Baseline original<strong>${dateCell(item.baselineDueAt||item.dueAt)}</strong></span>
       <span>Progresso<strong>${Math.round(Number(item.progressPercent||0))}%</strong></span>
@@ -1391,7 +1391,7 @@ function renderItemPanel(item) {
   html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + '</span>' + (prd43ProgressBasis(item)?'<small class="prd43-progress-basis">'+escapeHtml(prd43ProgressBasis(item))+' · '+Math.round(Number(item.progressPercent||0))+'% consolidado</small>':"") + '</div>';
   html += '<div class="panel-tabs" role="tablist" aria-label="Detalhes do item">' + tabs.map((tab) => '<button role="tab" aria-selected="' + (ui.panelTab === tab.id) + '" class="' + (ui.panelTab === tab.id ? "active" : "") + '" data-panel-tab="' + tab.id + '">' + tab.label + '</button>').join("") + '</div><div class="drawer-body">';
   if (ui.panelTab === "details") html += editable
-    ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualização · data e comentário</summary><div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Comentário da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button></div></form>' + '<details class="form-details prd5-panel-extras"><summary>Anexos e subitens</summary>' + renderAttachments(item,true) + renderChildren(item) + '</details>'
+    ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualização · data e comentário</summary><div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Comentário da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button></div></form>' + '<details class="form-details prd5-panel-extras"><summary>Anexos</summary>' + renderAttachments(item,true) + '</details><details class="form-details prd5-panel-extras"><summary>Subitens</summary>' + renderChildren(item) + '</details>'
     : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item);
   if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
 
