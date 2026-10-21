@@ -256,12 +256,18 @@ function loadState() {
           }
           parsed.gpoVersion = 1;
         }
+        if (!parsed.canonicalHierarchyVersion) {
+          try { if (!localStorage.getItem(STORAGE_KEY+".beforeCanonicalHierarchy"))
+            localStorage.setItem(STORAGE_KEY+".beforeCanonicalHierarchy",saved); } catch {}
+          parsed.relations = (parsed.relations||[]).filter(rel=>rel.relationType!=="contains");
+          parsed.canonicalHierarchyVersion=1;
+        }
         for (const item of parsed.items || []) {
           if (item.type === "approval") item.approvalRound ||= 1;
           item.weight ??= 1;
-          item.plannedDurationDays = itemDurationDays(item);
+          item.plannedDurationDays = item.plannedDurationDays === null || item.plannedDurationDays === "" ? null : itemDurationDays(item);
           item.baselineStartAt ||= item.plannedStartAt || "";
-          item.baselineDueAt ||= item.dueAt || inclusiveFinishDate(item.baselineStartAt || item.plannedStartAt || today(), item.plannedDurationDays || 0);
+          item.baselineDueAt ||= item.dueAt || (item.plannedDurationDays === null ? "" : inclusiveFinishDate(item.baselineStartAt || item.plannedStartAt || today(), item.plannedDurationDays || 0));
           item.replannedDueAt ??= "";
           // PRD4.2: meta vigente separada da baseline e da projeção calculada.
           item.targetStartAt ??= "";
@@ -511,6 +517,7 @@ function createSeedItem(base, input) {
 }
 
 function createSeedRelation(base, sourceId, targetId, type, lagDays = 0) {
+  if (type === "contains") return null;
   base.relations.push({
     id: uid("rel"),
     sourceId,
@@ -968,8 +975,7 @@ function createItem(input) {
   state.items.push(item);
   createEvent(item.id, "created", "", item.status, "Item criado.", item.createdAt);
   if (item.status==="blocked") createEvent(item.id,"status_changed","", "blocked","Bloqueio registrado na criação.",item.createdAt);
-  if (item.parentId) createRelation(item.parentId, item.id, "contains", 0);
-  if (item.parentId) syncContainsRelations(item.id);
+  // parentId é a única fonte da hierarquia; o Grafo gera a aresta Contém na leitura.
   const schedule = recalculatePlannedDates();
   if (!schedule.valid) throw new Error(schedule.message);
   if (item.parentId) syncParentSummary(item.parentId);
@@ -983,6 +989,11 @@ function createItem(input) {
   }
 }
 function createRelation(sourceId, targetId, relationType, lagDays = 0, description = "") {
+  if (relationType === "contains") {
+    // Compatibilidade com modelos anteriores; nunca persistir segunda relação hierárquica.
+    const changed = moveItemHierarchy(targetId, sourceId);
+    return {id:"derived-contains-"+sourceId+"-"+targetId,sourceId,targetId,relationType,derived:true,changed};
+  }
   const source = getItem(sourceId);
   const target = getItem(targetId);
   if (!source || !target || sourceId === targetId) throw new Error("Escolha dois itens diferentes.");
@@ -1038,16 +1049,8 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
 }
 
 function syncContainsRelations(itemId) {
-  const item=getItem(itemId); if (!item) return;
-  const desired=[], seen=new Set(); let cursor=getItem(item.parentId);
-  while (cursor && !seen.has(cursor.id)) { seen.add(cursor.id); desired.push(cursor.id); cursor=getItem(cursor.parentId); }
-  const desiredSet=new Set(desired);
-  const stale=state.relations.filter((relation)=>relation.relationType==="contains" && relation.targetId===itemId && !desiredSet.has(relation.sourceId));
-  for (const relation of stale) { archiveRecord("archivedRelations",relation); state.relations=state.relations.filter((entry)=>entry.id!==relation.id); }
-  for (const sourceId of desired) {
-    if (state.relations.some((relation)=>relation.relationType==="contains" && relation.sourceId===sourceId && relation.targetId===itemId)) continue;
-    state.relations.push({id:uid("rel"),sourceId,targetId:itemId,relationType:"contains",lagDays:0,description:"Vínculo de ancestralidade",createdBy:currentUser()?.id || "system",createdAt:nowIso()});
-  }
+  // Migração não destrutiva das arestas hierárquicas legadas, agora derivadas de parentId.
+  state.relations=state.relations.filter(rel=>!(rel.relationType==="contains" && rel.targetId===itemId));
 }
 
 function canChangeHierarchy(user, item) {
@@ -1081,17 +1084,9 @@ function moveItemHierarchy(id, nextParentId = "") {
   };
   try {
     const previousParentId = item.parentId || "";
-    const relation = state.relations.find((entry) => entry.relationType === "contains" && entry.targetId === item.id && entry.sourceId === previousParentId);
-    if (nextParent) {
-      if (relation) {
-        relation.previousSourceId = relation.sourceId; relation.previousTargetId = relation.targetId;
-        relation.sourceId = nextParent.id; relation.updatedAt = nowIso(); relation.updatedBy = currentUser().id;
-      } else state.relations.push({id:uid("rel"),sourceId:nextParent.id,targetId:item.id,relationType:"contains",lagDays:0,createdBy:currentUser().id,createdAt:nowIso(),description:"Hierarquia visual"});
-      item.parentId = nextParent.id;
-    } else {
-      if (relation) { archiveRecord("archivedRelations",relation); state.relations = state.relations.filter((entry) => entry.id !== relation.id); }
-      item.parentId = "";
-    }
+    item.parentId = nextParent?.id || "";
+    // Há somente um pai. Relações hierárquicas legadas são eliminadas.
+    syncContainsRelations(item.id);
     const newSiblings = state.items.filter((entry) => entry.id !== item.id && entry.parentId === item.parentId);
     item.sortOrder = newSiblings.length ? Math.max(...newSiblings.map((entry) => Number(entry.sortOrder ?? state.items.indexOf(entry)))) + 100 : 0;
     createEvent(item.id,"parent_changed",previousParentId,nextParentId,"Hierarquia visual alterada.");
