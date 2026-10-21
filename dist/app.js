@@ -547,7 +547,7 @@ function gpoDecision(user, operation, item = null) {
   const ranks = { global: 1, state: 2, organization: 2, sector: 3, project: 4, item: 5, creator: 5 };
   const matches = (state.permissionRules || []).filter((rule) => {
     const subjectMatches = (rule.subjectType === "user" && rule.subjectId === user.id)
-      || (rule.subjectType === "profile" && !!user.profileId && rule.subjectId === user.profileId);
+      || (rule.subjectType === "profile" && !!user.profileId && rule.subjectId === user.profileId && !(state.permissionProfiles||[]).find(p=>p.id===user.profileId)?.inactive);
     if (!subjectMatches || rule.operation !== operation) return false;
     if (rule.scopeType === "global") return true;
     if (!item) return false;
