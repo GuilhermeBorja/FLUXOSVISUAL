@@ -891,7 +891,7 @@ function prd43DrawGanttRelations(){
     const anchorY=routeDown?(sy+ty)/2:(sy+routeY)/2;
     lines+=`<g class="prd43-ti-edge ${prd43SelectedTiId===rel.id?"selected":""}" data-gantt-ti="${escapeHtml(rel.id)}">
        <path class="prd43-ti-hit" d="${d}"/><path class="prd43-ti-path" d="${d}" marker-end="url(#prd43-ti-arrow)"/>
-       <foreignObject class="prd43-ti-control" x="${(anchorX-13).toFixed(1)}" y="${(anchorY-13).toFixed(1)}" width="26" height="26">
+       <foreignObject class="prd43-ti-control" x="${(anchorX-18).toFixed(1)}" y="${(anchorY-18).toFixed(1)}" width="36" height="36">
          <button xmlns="http://www.w3.org/1999/xhtml" type="button" class="prd43-ti-accessible" data-action="select-gantt-ti" data-gantt-ti="${escapeHtml(rel.id)}" aria-label="${escapeHtml(edgeLabel)}"></button>
        </foreignObject>
     </g>`;
