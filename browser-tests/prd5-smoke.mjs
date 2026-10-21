@@ -27,8 +27,8 @@ try{
  assert.equal(result.delta.parentId,result.gamma.id);
  assert.equal(result.epsilon.parentId,"");
  assert.equal(result.gamma.ownerId,"u_enrique");
- assert.equal(result.delta.plannedDurationDays,null,"sem duração inventada");
- assert.equal(result.delta.dueAt,"","sem término inventado");
+ assert.equal(result.delta.plannedDurationDays,1,"duração padrão de um dia");
+ assert.equal(result.delta.dueAt,result.delta.plannedStartAt,"término calculado para a duração padrão");
  await page.locator('[data-panel-tab="history"]').click();
  assert.equal(await page.locator("#prd5HistoryUser").count(),1);
  await page.locator('button[data-action="close-panel"]').click();
