@@ -1750,3 +1750,10 @@ html,body,#app{max-width:100%;overflow-x:clip!important}
 .drawer:has(#bulkEditForm) #bulkEditForm label{font-size:11px}
 .drawer:has(#bulkEditForm) #bulkEditForm>button[type=submit]{grid-column:1/-1;position:sticky;bottom:0;background:#187a6f;color:white;min-height:38px}
 @media(max-width:760px){.prd5-gpo-filter{grid-template-columns:1fr}.drawer:has(#bulkEditForm) #bulkEditForm{grid-template-columns:1fr}}
+
+/* Feedback do ponto onde a animação do grafo foi interrompida. */
+.prd44-graph-layout .graph-shell{position:relative}
+.prd5-animation-blocker{position:absolute;left:12px;right:12px;bottom:40px;z-index:4;display:grid;grid-template-columns:1fr;gap:3px;padding:10px 12px;background:#fffdf9;border:1px solid #b97836;border-left:4px solid #7A1F3D;box-shadow:0 3px 15px #1c344022;border-radius:6px;font-size:11px}
+.prd5-animation-blocker[hidden]{display:none!important}
+.prd5-animation-blocker strong{font-size:12px;color:#7A1F3D}
+.prd5-animation-blocker button{justify-self:start}
