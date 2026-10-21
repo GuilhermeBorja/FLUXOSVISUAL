@@ -2034,6 +2034,23 @@ function bindPanel() {
     event.stopPropagation();
     const action = button.dataset.action;
     if(prd43ConfirmInline(button))return;
+    if(button.dataset.prd5GpoPage){ui.prd5GpoPage=Math.max(0,(Number(ui.prd5GpoPage)||0)+(button.dataset.prd5GpoPage==="next"?1:-1));renderPanel(false);return;}
+    if(button.dataset.prd5DuplicateProfile){
+      if(!canManageGpo(currentUser())){panelFailure(new Error("Acesso negado pelo GPO."));return;}
+      const original=state.permissionProfiles.find(p=>p.id===button.dataset.prd5DuplicateProfile);
+      if(original){
+        const name="Cópia de "+original.name+" "+(state.permissionProfiles.length+1);
+        const duplicate={...original,id:uid("profile"),name,inactive:false,createdBy:currentUser().id,createdAt:nowIso()};
+        state.permissionProfiles.push(duplicate);
+        state.permissionRules.filter(r=>r.subjectType==="profile"&&r.subjectId===original.id).forEach(r=>state.permissionRules.push({...r,id:uid("gpo"),subjectId:duplicate.id,createdAt:nowIso(),createdBy:currentUser().id}));
+        saveState();renderPanel(false);notify("Perfil duplicado e regras preservadas.");
+      }return;
+    }
+    if(button.dataset.prd5ToggleProfile){
+      if(!canManageGpo(currentUser())){panelFailure(new Error("Acesso negado pelo GPO."));return;}
+      const profile=state.permissionProfiles.find(p=>p.id===button.dataset.prd5ToggleProfile);
+      if(profile){profile.inactive=!profile.inactive;saveState();renderPanel(false);}return;
+    }
     if (action === "close-panel") { closePanel(); return; }
     if (action === "prd5-parent-root") { ui.createParentId="";renderPanel(false);return; }
     if (action === "archive-item") { try { const count=archiveItem(ui.selectedItemId); ui.selectedItemId=""; ui.panel=""; ui.scopeId="all"; saveState(); notify(count + " item(ns) arquivado(s)."); render(); } catch(error) { panelFailure(error); } return; }
@@ -2084,6 +2101,16 @@ function bindPanel() {
       } catch (error) { panelFailure(error); }
     }
   };
+  root.querySelector("#prd5GpoSearch")?.addEventListener("input",e=>{ui.prd5GpoQuery=e.target.value;ui.prd5GpoPage=0;const pos=e.target.selectionStart;renderPanel(false);const field=document.querySelector("#prd5GpoSearch");field?.focus();field?.setSelectionRange(pos,pos);});
+  for(const [id,key] of [["prd5GpoEffect","prd5GpoEffect"],["prd5GpoOperation","prd5GpoOperation"]])root.querySelector("#"+id)?.addEventListener("change",e=>{ui[key]=e.target.value;ui.prd5GpoPage=0;renderPanel(false);});
+  root.querySelectorAll(".prd5-profile-rename").forEach(form=>form.addEventListener("submit",e=>{
+    e.preventDefault();if(!canManageGpo(currentUser()))return;
+    const profile=state.permissionProfiles.find(p=>p.id===form.dataset.profileId);
+    const name=String(new FormData(form).get("name")||"").trim();
+    if(!profile||!name)return;
+    if(state.permissionProfiles.some(p=>p.id!==profile.id&&p.name.toLowerCase()===name.toLowerCase())){panelFailure(new Error("Nome de perfil já utilizado."));return;}
+    profile.name=name;saveState();renderPanel(false);
+  }));
   const prd5TextInput=root.querySelector("#prd43PasteActivities");
   prd5TextInput?.addEventListener("input",event=>renderQuickStepRows(event.target.value));
   prd5TextInput?.addEventListener("keydown",prd5IndentKeydown);
