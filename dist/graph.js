@@ -1,10 +1,10 @@
 const FluxosGraph = (() => {
   const colors = {
-    red: { fill: "#ffeded", stroke: "#cf4047" },
-    green: { fill: "#e4f6eb", stroke: "#26905a" },
-    blue: { fill: "#e8f1ff", stroke: "#3879ca" },
-    yellow: { fill: "#fff5d8", stroke: "#c69b2d" },
-    gray: { fill: "#f0f1f3", stroke: "#939aa5" },
+    red: { fill: "#ffe7e9", stroke: "#b42332" },
+    green: { fill: "#cce8d5", stroke: "#115e38" },
+    blue: { fill: "#d8f0df", stroke: "#238254" },
+    yellow: { fill: "#fff0b8", stroke: "#9f6a00" },
+    gray: { fill: "#ebeff2", stroke: "#596872" },
   };
 
   function projectRoot(item, byId) {
@@ -46,11 +46,11 @@ const FluxosGraph = (() => {
     const nodes = items.map((item) => {
       const root = labels.project ? labels.project(item) : projectRoot(item, byId);
       const groupId = grouping === "owner" ? item.ownerId || "unassigned"
-        : grouping === "organization" ? item.organizationId
+        : grouping === "organization" ? item.organizationId || "org_unassigned"
         : grouping === "connections" ? connected.get(item.id) : root.id;
       if (!groups.has(groupId)) {
         const name = grouping === "owner" ? labels.owner(item.ownerId)
-          : grouping === "organization" ? labels.organization(item.organizationId)
+          : grouping === "organization" ? (item.organizationId ? labels.organization(item.organizationId) : "Sem empresa")
           : grouping === "connections" ? projectRoot(byId.get(groupId), byId).title : root.title;
         groups.set(groupId, { id: groupId, name, nodes: [] });
       }
@@ -63,17 +63,17 @@ const FluxosGraph = (() => {
     let columnX = 0;
     [...groups.values()].forEach((group, index) => {
       if (index % 2 === 0) {
-        if (index) rowY += rowHeight + 180;
+        if (index) rowY += rowHeight + 220;
         columnX = 0;
         rowHeight = 0;
       }
-      const size = Math.max(450, Math.ceil(Math.sqrt(group.nodes.length)) * 210);
+      const size = Math.max(510, Math.ceil(Math.sqrt(group.nodes.length)) * 290);
       group.center = { x: columnX + size / 2, y: rowY + size / 2 };
-      columnX += size + 150;
+      columnX += size + 190;
       rowHeight = Math.max(rowHeight, size);
       group.nodes.forEach((node, nodeIndex) => {
         const angle = nodeIndex * Math.PI * 2 / Math.max(group.nodes.length, 1) - Math.PI / 2;
-        const radius = node.isRoot ? 0 : 130 + group.nodes.length * 11;
+        const radius = node.isRoot ? 0 : 165 + Math.min(group.nodes.length * 15, 185);
         node.x = group.center.x + Math.cos(angle) * radius;
         node.y = group.center.y + Math.sin(angle) * radius;
         const stored = saved?.[node.id];
@@ -91,15 +91,15 @@ const FluxosGraph = (() => {
       // Simulate once: a stable workspace preserves the user's manual arrangement.
       const simulation = d3.forceSimulation(nodes).stop()
         .force("link", d3.forceLink(links).id((node) => node.id)
-          .distance((link) => link.relation.relationType === "contains" ? 235 : 205)
+           .distance((link) => link.relation.relationType === "contains" ? 275 : 250)
           .strength((link) => link.source.groupId !== link.target.groupId ? 0.005 : link.relation.relationType === "contains" ? 0.13 : 0.35))
-        .force("charge", d3.forceManyBody().strength(-470))
-        .force("collision", d3.forceCollide().radius(112).iterations(3))
+         .force("charge", d3.forceManyBody().strength(-720))
+         .force("collision", d3.forceCollide().radius(145).iterations(4))
         .force("x", d3.forceX((node) => groups.get(node.groupId).center.x).strength(0.07))
         .force("y", d3.forceY((node) => groups.get(node.groupId).center.y).strength(0.07));
       simulation.tick(220);
     }
-    return { nodes, links, groups: [...groups.values()], nodeById };
+    return { nodes, links, groups: [...groups.values()], nodeById, connected };
   }
 
   function bounds(nodes) {
@@ -107,20 +107,20 @@ const FluxosGraph = (() => {
       x: Math.min(...nodes.map((node) => node.x)) - 108,
       y: Math.min(...nodes.map((node) => node.y)) - 86,
       right: Math.max(...nodes.map((node) => node.x)) + 108,
-      bottom: Math.max(...nodes.map((node) => node.y)) + 145,
+      bottom: Math.max(...nodes.map((node) => node.y)) + 207,
     };
   }
 
-  function wrapLabel(title, limit = 19) {
-    const words = title.split(/\s+/);
-    const lines = [""];
-    for (const word of words) {
-      const last = lines.length - 1;
-      if (lines[last] && (lines[last] + " " + word).length > limit) lines.push(word);
-      else lines[last] += (lines[last] ? " " : "") + word;
+  function wrapLabel(title,limit=24){
+    const words=String(title||"").trim().split(/\s+/),lines=[""];
+    for(const word of words){
+      const last=lines.length-1;
+      if(lines[last]&&(lines[last]+" "+word).length>limit)lines.push(word);
+      else lines[last]+=(lines[last]?" ":"")+word;
     }
-    if (lines.length > 2) lines.splice(1, lines.length - 1, lines.slice(1).join(" ").slice(0, limit - 3) + "...");
-    return lines.map((line) => line.length > limit ? line.slice(0, limit - 3) + "..." : line);
+    // Nomes completos sempre acessiveis no title/aria-label. Ate 4 linhas no grafo.
+    if(lines.length>4)lines.splice(3,lines.length-3,lines.slice(3).join(" ").slice(0,limit-1)+"…");
+    return lines.map(line=>line.length>limit?line.slice(0,limit-1)+"…":line);
   }
 
   function mount(container, options) {
@@ -135,31 +135,41 @@ const FluxosGraph = (() => {
     container.innerHTML = `
       <svg class="graph-svg" role="group" aria-label="Grafo de processos e suas relações">
         <defs>
-          <marker id="graph-arrow" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L9,0L0,4" fill="#a0a7b1"/></marker>
+          <marker id="graph-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,1 L10,5 L0,9 Z" fill="#286d73"/></marker>
+          <marker id="graph-arrow-reverse" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,-4L9,0L0,4" fill="#168b82"/></marker>
           <marker id="graph-arrow-red" viewBox="0 -5 10 10" refX="9" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L9,0L0,4" fill="#cf4047"/></marker>
         </defs>
         <g class="graph-scene">
           <g class="graph-groups">${model.groups.map((group) => `<g data-group="${esc(group.id)}"><rect rx="8"/><text class="group-label">${esc(group.name)}</text><text class="group-count">${group.nodes.length} itens</text></g>`).join("")}</g>
-          <g class="graph-edges">${model.links.map((link) => `<g data-edge="${esc(link.relation.id)}" class="graph-edge ${link.relation.relationType === "contains" ? "hierarchy" : ""} ${link.relation.relationType === "blocks" ? "blocking" : ""}" role="button" tabindex="0" aria-label="${esc(link.source.item.title)} ${esc(options.labels.relation(link.relation.relationType))} ${esc(link.target.item.title)}"><title>${esc(options.labels.relation(link.relation.relationType))}${link.relation.lagDays ? ` · defasagem ${link.relation.lagDays}d` : ""}</title><path class="edge-hit"/><path class="edge-path" marker-end="url(#${link.relation.relationType === "blocks" ? "graph-arrow-red" : "graph-arrow"})"/><text class="edge-label" text-anchor="middle">${esc(link.relation.relationType === "contains" ? "contém" : link.relation.relationType === "blocks" ? "bloqueia" : link.relation.relationType === "approves" ? "aprova" : link.relation.relationType === "relates_to" ? "conecta" : link.relation.relationType)}${link.relation.lagDays ? ` ${link.relation.lagDays > 0 ? "+" : ""}${link.relation.lagDays}d` : ""}</text></g>`).join("")}</g>
+          <g class="graph-edges">${model.links.map((link) => `<g data-edge="${esc(link.relation.id)}" class="graph-edge ${link.relation.relationType === "contains" ? "hierarchy" : ""} ${link.relation.relationType === "blocks" ? "blocking" : ""}" role="button" tabindex="0" aria-label="${esc(link.source.item.title)} ${esc(options.labels.relation(link.relation.relationType))} ${esc(link.target.item.title)}"><title>${esc(options.labels.relation(link.relation.relationType))}${link.relation.lagDays ? ` · defasagem ${link.relation.lagDays}d` : ""}</title><path class="edge-hit"/><path class="edge-path" ${link.relation.relationType==="contains"?"":'marker-end="url(#graph-arrow)"'}/><text class="edge-label" text-anchor="middle">${esc(link.relation.relationType === "contains" ? "contém" : link.relation.relationType === "blocks" ? "bloqueia" : link.relation.relationType === "approves" ? "aprova" : link.relation.relationType === "relates_to" ? "conecta" : link.relation.relationType)}${link.relation.lagDays ? ` ${link.relation.lagDays > 0 ? "+" : ""}${link.relation.lagDays}d` : ""}</text></g>`).join("")}</g>
+          <path class="prd4-link-preview" visibility="hidden" />
           <g class="graph-nodes">${model.nodes.map((node) => {
             const color = colors[options.labels.signal(node.item)] || colors.gray;
+            const typeColor = options.labels.typeColor ? options.labels.typeColor(node.item) : color.stroke;
+            const statusColor = options.labels.statusColor ? options.labels.statusColor(node.item) : color.stroke;
             const lines = wrapLabel(node.item.title);
             const number = node.isRoot ? options.labels.type(node.item).slice(0, 1) : String(model.groups.find((group) => group.id === node.groupId).nodes.filter((candidate) => !candidate.isRoot).indexOf(node) + 1).padStart(2, "0");
             return `<g class="graph-node ${node.isRoot ? "root-node" : ""}" data-node="${esc(node.id)}" role="button" tabindex="0" aria-label="${esc(node.item.title)}, ${esc(options.labels.owner(node.item.ownerId))}, ${esc(options.labels.status(node.item))}, ${esc(options.labels.duration(node.item))}">
-              <title>${esc(node.item.title)}\n${esc(options.labels.owner(node.item.ownerId))}\n${esc(options.labels.status(node.item))}\nTempo total: ${esc(options.labels.duration(node.item))}\nDuração prevista: ${esc(options.labels.planned(node.item))}</title>
+              <title>${esc(node.item.title)}\n${esc(options.labels.owner(node.item.ownerId))}\n${esc(options.labels.status(node.item))}\nTempo total: ${esc(options.labels.duration(node.item))}\nTempo com responsável atual: ${esc(options.labels.ownerTimer ? options.labels.ownerTimer(node.item) : options.labels.duration(node.item))}\nDuração prevista: ${esc(options.labels.planned(node.item))}\nProgresso: ${esc(options.labels.progress(node.item))}%\nTérmino esperado: ${esc(options.labels.expected(node.item))}\nDesvio: ${esc(options.labels.deviation(node.item))}\nBloqueios: ${esc(options.labels.blockers(node.item))}\nDependências: ${esc(options.labels.dependencies(node.item))}</title>
               <circle class="node-selection" r="${node.radius + 6}"/>
-              <circle class="node-circle" r="${node.radius}" fill="${color.fill}" stroke="${color.stroke}"/>
-              <text class="node-number" text-anchor="middle" y="5" fill="${color.stroke}">${esc(number)}</text>
-              <text class="node-title" text-anchor="middle">${lines.map((line, index) => `<tspan x="0" y="${node.radius + 23 + index * 19}">${esc(line)}</tspan>`).join("")}</text>
-              <text class="node-owner" text-anchor="middle" y="${node.radius + 64}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
-              <text class="node-duration" text-anchor="middle" y="${node.radius + 84}">Total ${esc(options.labels.duration(node.item))}</text>
-              <text class="node-status" text-anchor="middle" y="${node.radius + 103}" fill="${color.stroke}">${esc(options.labels.status(node.item))}</text>
+              <circle class="node-circle" r="${node.radius}" fill="${color.fill}" stroke="${esc(statusColor)}"/>
+              <text class="node-number" text-anchor="middle" y="5" fill="${esc(typeColor)}">${esc(number)}</text>
+              <text class="node-title" text-anchor="middle" xml:space="preserve">${lines.map((line, index) => `<tspan x="0" y="${node.radius + 23 + index * 19}">${esc(line)}</tspan>`).join("")}</text>
+              <text class="node-owner" text-anchor="middle" y="${node.radius + 107}">${esc(options.labels.owner(node.item.ownerId).slice(0, 27))}</text>
+              <text class="node-status" text-anchor="middle" y="${node.radius + 131}" fill="${esc(statusColor)}">${esc(options.labels.status(node.item))}</text>
+              <text class="node-due" text-anchor="middle" y="${node.radius + 148}">Prazo: ${esc(options.labels.idealEnd ? options.labels.idealEnd(node.item) : "—")}</text>
+              ${options.labels.hasChildren?.(node.item)?`<g class="graph-collapse-toggle" data-graph-expand="${esc(node.id)}" role="button" tabindex="0" aria-label="${options.labels.isCollapsed?.(node.item)?"Expandir":"Recolher"} subitens de ${esc(node.item.title)}" title="${options.labels.isCollapsed?.(node.item)?"Expandir":"Recolher"} níveis deste item">
+                <rect x="${node.radius + 3}" y="-36" width="23" height="23" rx="6"/>
+                <text x="${node.radius+14.5}" y="-20" text-anchor="middle">${options.labels.isCollapsed?.(node.item)?"+":"−"}</text>
+              </g>`:""}
+              ${options.labels.hasChildren?.(node.item)?"":`<circle class="graph-connector" cx="${node.radius + 13}" cy="0" r="11" aria-label="Arraste para conectar" />`}
             </g>`;
           }).join("")}</g>
         </g>
       </svg>`;
     const svg = container.querySelector("svg");
     const scene = svg.querySelector(".graph-scene");
+    const connectionPreview = svg.querySelector(".prd4-link-preview");
     const nodeElements = new Map([...svg.querySelectorAll("[data-node]")].map((element) => [element.dataset.node, element]));
     const edgeElements = new Map([...svg.querySelectorAll("[data-edge]")].map((element) => [element.dataset.edge, element]));
     const groupElements = new Map([...svg.querySelectorAll("[data-group]")].map((element) => [element.dataset.group, element]));
@@ -167,6 +177,9 @@ const FluxosGraph = (() => {
     let gesture = null;
     const pointers = new Map();
     let selectedId = options.selectedId;
+    let propagationTimers = [];
+    let selectedRelationId = "";
+    let animationState = null;
 
     function draw() {
       scene.setAttribute("transform", `translate(${transform.x},${transform.y}) scale(${transform.scale})`);
@@ -214,19 +227,230 @@ const FluxosGraph = (() => {
 
     function select(id) {
       selectedId = id;
-      const related = new Set([id]);
+      selectMany(id ? [id] : []);
+    }
+
+    function selectMany(ids) {
+      const selected = new Set(ids.filter((id) => model.nodeById.has(id)));
+      const related = new Set(selected);
       model.links.forEach((link) => {
-        if (link.source.id === id) related.add(link.target.id);
-        if (link.target.id === id) related.add(link.source.id);
+        if (selected.has(link.source.id)) related.add(link.target.id);
+        if (selected.has(link.target.id)) related.add(link.source.id);
       });
       nodeElements.forEach((element, nodeId) => {
-        element.classList.toggle("selected", nodeId === id);
-        element.classList.toggle("dimmed", !!id && !related.has(nodeId));
+        element.classList.toggle("selected", selected.has(nodeId));
+        element.classList.toggle("dimmed", selected.size > 0 && !related.has(nodeId));
       });
       edgeElements.forEach((element, edgeId) => {
         const link = model.links.find((candidate) => candidate.relation.id === edgeId);
-        element.classList.toggle("dimmed", !!id && link.source.id !== id && link.target.id !== id);
+        element.classList.toggle("dimmed", selected.size > 0 && !selected.has(link.source.id) && !selected.has(link.target.id));
       });
+    }
+
+    function clearAnimation() {
+      propagationTimers.forEach(clearTimeout);
+      propagationTimers=[];
+      nodeElements.forEach(el=>el.classList.remove("propagation-active","propagation-current","propagation-stop"));
+      edgeElements.forEach(el=>el.classList.remove("propagation-active","propagation-reverse"));
+      svg.querySelectorAll(".prd4-traversal-label").forEach(el=>el.remove());
+    }
+
+    function hasFlowBlocker(id) {
+      const item=model.nodeById.get(id)?.item;
+      return item?.status==="blocked" || Boolean(item?.inheritedBlockedFrom?.length);
+    }
+
+    function animationPath(rootId,layoutMode) {
+      const items=options.items,byId=new Map(items.map(item=>[item.id,item]));
+      const orderIndex=new Map(items.map((item,index)=>[item.id,index]));
+      const children=new Map();
+      for(const item of items){
+        if(item.parentId && byId.has(item.parentId)){
+          if(!children.has(item.parentId))children.set(item.parentId,[]);
+          children.get(item.parentId).push(item);
+        }
+      }
+      const visual=(a,b)=>Number(a.sortOrder??0)-Number(b.sortOrder??0)||orderIndex.get(a.id)-orderIndex.get(b.id);
+      const preliminary=[],visited=new Set();
+      function traverse(id) {
+        if(visited.has(id))return;
+        visited.add(id);preliminary.push(id);
+        for(const child of [...(children.get(id)||[])].sort(visual))traverse(child.id);
+      }
+      traverse(rootId);
+      const active=new Set(preliminary);
+      const dependencies=model.links.filter(link=>(link.relation.relationType==="TI" || link.relation.relationType==="contains")
+        && active.has(link.source.id) && active.has(link.target.id));
+      const outgoing=new Map(preliminary.map(id=>[id,[]]));
+      const indegree=new Map(preliminary.map(id=>[id,0]));
+      const levels=new Map(preliminary.map(id=>[id,0]));
+      for(const link of dependencies){
+        outgoing.get(link.source.id).push(link.target.id);
+        indegree.set(link.target.id,indegree.get(link.target.id)+1);
+      }
+      const remaining=new Set(preliminary),sorted=[],preferred=[];
+      while(remaining.size){
+        let next=preferred.find(id=>remaining.has(id)&&indegree.get(id)===0)
+          ||preliminary.find(id=>remaining.has(id)&&indegree.get(id)===0);
+        if(!next)next=preliminary.find(id=>remaining.has(id)); // invalid legacy graph; never loop infinitely
+        sorted.push(next);remaining.delete(next);
+        const pending=preferred.indexOf(next);
+        if(pending>=0)preferred.splice(pending,1);
+        const childPriority=dependencies.filter(link=>link.source.id===next && link.relation.relationType==="contains").map(link=>link.target.id);
+        const temporalPriority=dependencies.filter(link=>link.source.id===next && link.relation.relationType==="TI").map(link=>link.target.id);
+        preferred.unshift(...[...childPriority,...temporalPriority].filter(id=>remaining.has(id)&&!preferred.includes(id)));
+        for(const to of outgoing.get(next)){
+          indegree.set(to,indegree.get(to)-1);
+          levels.set(to,Math.max(levels.get(to),levels.get(next)+1));
+        }
+      }
+      // Edges are the only allowed visual routes. Containment is traversable
+      // in both directions; temporal links only in their forward direction.
+      const adjacent=new Map(preliminary.map(id=>[id,[]]));
+      for(const link of model.links){
+        if(!active.has(link.source.id)||!active.has(link.target.id))continue;
+        if(link.relation.relationType==="contains"){
+          adjacent.get(link.source.id).push({id:link.target.id,edgeId:link.relation.id});
+          adjacent.get(link.target.id).push({id:link.source.id,edgeId:link.relation.id});
+        } else if(link.relation.relationType==="TI"){
+          adjacent.get(link.source.id).push({id:link.target.id,edgeId:link.relation.id});
+        }
+      }
+      function route(from,to){
+        if(from===to)return [];
+        const current=byId.get(from),target=byId.get(to);
+        // The sibling temporal link is preferred over an unnecessary return.
+        const direct=adjacent.get(from)?.find(edge=>edge.id===to
+          && model.links.some(link=>link.relation.id===edge.edgeId && link.relation.relationType==="TI"));
+        if(direct && current?.parentId===target?.parentId)return [{nodeId:to,edgeId:direct.edgeId}];
+        // On a branch transition first return to the immediate parent. A
+        // downward containment move is not a branch transition.
+        let origin=from,prefix=[];
+        if(current?.parentId && current.parentId!==target?.parentId && target?.parentId!==from){
+          const back=adjacent.get(from)?.find(edge=>edge.id===current.parentId);
+          if(back){prefix=[{nodeId:current.parentId,edgeId:back.edgeId}];origin=current.parentId;}
+        }
+        if(origin===to)return prefix;
+        const queue=[{id:origin,path:prefix}],seen=new Set([origin]);
+        while(queue.length){
+          const entry=queue.shift();
+          const edges=[...(adjacent.get(entry.id)||[])].sort((x,y)=>{
+            const px=byId.get(entry.id)?.parentId;
+            return Number(y.id===px)-Number(x.id===px);
+          });
+          for(const edge of edges){
+            if(seen.has(edge.id))continue;
+            const path=[...entry.path,{nodeId:edge.id,edgeId:edge.edgeId}];
+            if(edge.id===to)return path;
+            seen.add(edge.id);queue.push({id:edge.id,path});
+          }
+        }
+        // Separate disconnected projects cannot be linked by invented edges.
+        return [{nodeId:to,edgeId:""}];
+      }
+      const steps=[];
+      if(layoutMode==="parallel"){
+        const waves=new Map();
+        for(const id of sorted){
+          const level=levels.get(id);
+          if(!waves.has(level))waves.set(level,[]);
+          waves.get(level).push(id);
+        }
+        for(const [,ids] of [...waves].sort((a,b)=>a[0]-b[0])){
+          const edges=model.links.filter(link=>ids.includes(link.target.id)
+            && active.has(link.source.id)
+            && ["TI","contains"].includes(link.relation.relationType)).map(link=>link.relation.id);
+          steps.push({nodeIds:ids,edgeIds:edges});
+        }
+      } else {
+        let previous="";
+        for(const id of sorted){
+          const nextSteps=previous ? route(previous,id) : [{nodeId:id,edgeId:""}];
+          for(const entry of nextSteps){
+            if(entry.nodeId===previous)continue;
+            const link=entry.edgeId ? model.links.find(link=>link.relation.id===entry.edgeId) : null;
+            const reverse=link && link.target.id===previous && link.source.id===entry.nodeId;
+            steps.push({nodeIds:[entry.nodeId],edgeIds:entry.edgeId?[entry.edgeId]:[],
+              reverseEdgeIds:reverse?[entry.edgeId]:[]});
+            previous=entry.nodeId;
+          }
+        }
+      }
+      return steps;
+    }
+
+    function highlightTraversalPath(edgeIds) {
+      const active = new Set(edgeIds || []);
+      edgeElements.forEach((el,id) => el.classList.toggle("propagation-path", active.has(id)));
+    }
+
+    function animateNext() {
+      if(!animationState || animationState.paused)return;
+      if(animationState.index>=animationState.steps.length){
+        animationState.paused=true;
+        return;
+      }
+      const step=animationState.steps[animationState.index++];
+      nodeElements.forEach(el=>el.classList.remove("propagation-current"));
+      for(const id of step.nodeIds){
+        const el=nodeElements.get(id);
+        el?.classList.add("propagation-active","propagation-current");
+        if(hasFlowBlocker(id))el?.classList.add("propagation-stop");
+        if(el){
+          let label=el.querySelector(".prd4-traversal-label");
+          if(!label){
+            label=document.createElementNS("http://www.w3.org/2000/svg","text");
+            label.setAttribute("class","prd4-traversal-label");
+            label.setAttribute("x",String(model.nodeById.get(id).radius+19));
+            label.setAttribute("y","-14");
+            el.appendChild(label);
+          }
+          label.textContent=String(animationState.index);
+        }
+      }
+      highlightTraversalPath(step.edgeIds);
+      for(const id of step.edgeIds){
+        const el=edgeElements.get(id);el?.classList.add("propagation-active");
+        el?.classList.toggle("propagation-reverse",Boolean(step.reverseEdgeIds?.includes(id)));
+      }
+      if(animationState.stopAtBlocked && step.nodeIds.some(hasFlowBlocker)){
+        animationState.paused=true;
+        options.onStopAtBlocker?.(step.nodeIds.filter(hasFlowBlocker));
+        return;
+      }
+      propagationTimers.push(setTimeout(animateNext,550));
+    }
+
+    function propagate(id,mode="sequential",stopAtBlocked=false) {
+      if(!model.nodeById.has(id))return false;
+      if(animationState?.paused && animationState.root===id
+         && animationState.mode===mode && animationState.stopAtBlocked===stopAtBlocked
+         && animationState.index<animationState.steps.length){
+        animationState.paused=false;animateNext();return true;
+      }
+      clearAnimation();
+      const byId=new Map(options.items.map(item=>[item.id,item]));
+      let root=byId.get(id),seen=new Set();
+      while(root?.parentId && byId.has(root.parentId)&&!seen.has(root.id)){
+        seen.add(root.id);root=byId.get(root.parentId);
+      }
+      if(!root)return false;
+      animationState={root:id,mode,stopAtBlocked,paused:false,index:0,
+        steps:animationPath(root.id,mode)};
+      animateNext();
+      return true;
+    }
+
+    function pause() {
+      if(!animationState)return;
+      animationState.paused=true;
+      propagationTimers.forEach(clearTimeout);propagationTimers=[];
+    }
+    function restart() {
+      if(!animationState)return;
+      const {root,mode,stopAtBlocked}=animationState;
+      animationState=null;
+      return propagate(root,mode,stopAtBlocked);
     }
 
     function fit(initial = false) {
@@ -264,7 +488,9 @@ const FluxosGraph = (() => {
     }
 
     svg.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
+      if(event.button!==0)return;
+      const expand=event.target.closest("[data-graph-expand]");
+      if(expand){event.preventDefault();event.stopPropagation();options.onToggleCollapse?.(expand.dataset.graphExpand);return;}
       const point = localPoint(event);
       pointers.set(event.pointerId, point);
       svg.setPointerCapture(event.pointerId);
@@ -275,8 +501,39 @@ const FluxosGraph = (() => {
       }
       const target = event.target.closest("[data-node]");
       const edge = event.target.closest("[data-edge]");
-      gesture = target ? { kind: "node", id: target.dataset.node, start: point, origin: { x: model.nodeById.get(target.dataset.node).x, y: model.nodeById.get(target.dataset.node).y }, moved: false }
-        : { kind: "pan", start: point, origin: { ...transform }, moved: false, edgeId: edge?.dataset.edge };
+      const group = !target && event.target.closest("[data-group]");
+      if (target?.querySelector && event.target.closest(".graph-connector")) {
+        gesture={kind:"link",id:target.dataset.node,start:point,moved:false};
+        connectionPreview.setAttribute("visibility","visible");
+      } else if (target) {
+        const id = target.dataset.node;
+        // Controlled PRD3 magnetism attempt: the selected node follows the pointer;
+        // linked nodes respond proportionally by graph distance without force re-simulation.
+        const distanceById = new Map([[id, 0]]);
+        const queue = [id];
+        while (queue.length) {
+          const currentId = queue.shift();
+          for (const link of model.links) {
+            const neighborId = link.source.id === currentId ? link.target.id
+              : link.target.id === currentId ? link.source.id : "";
+            if (neighborId && !distanceById.has(neighborId)) {
+              distanceById.set(neighborId, distanceById.get(currentId) + 1);
+              queue.push(neighborId);
+            }
+          }
+        }
+        gesture = {
+          kind: "nodes", id, start: point,
+          nodes: [...distanceById].map(([nodeId, distance]) => {
+            const node = model.nodeById.get(nodeId);
+            return { id: nodeId, x: node.x, y: node.y, influence: distance === 0 ? 1 : Math.max(0.08, Math.pow(0.32, distance)) };
+          }),
+          moved: false,
+        };
+      } else if (group) {
+        const groupNodes = model.groups.find((entry) => entry.id === group.dataset.group)?.nodes || [];
+        gesture = { kind: "group", id: group.dataset.group, start: point, nodes: groupNodes.map((node) => ({ id: node.id, x: node.x, y: node.y })), moved: false };
+      } else gesture = { kind: "pan", start: point, origin: { ...transform }, moved: false, edgeId: edge?.dataset.edge };
       svg.classList.add("dragging");
     });
     svg.addEventListener("pointermove", (event) => {
@@ -289,14 +546,22 @@ const FluxosGraph = (() => {
         const newScale = Math.max(0.12, Math.min(2.5, gesture.transform.scale * Math.hypot(b.x - a.x, b.y - a.y) / Math.max(gesture.distance, 1)));
         const ratio = newScale / gesture.transform.scale;
         transform = { scale: newScale, x: (a.x + b.x) / 2 - (gesture.center.x - gesture.transform.x) * ratio, y: (a.y + b.y) / 2 - (gesture.center.y - gesture.transform.y) * ratio };
+      } else if(gesture.kind==="link") {
+        const source=model.nodeById.get(gesture.id);
+        const x=(point.x-transform.x)/transform.scale,y=(point.y-transform.y)/transform.scale;
+        connectionPreview.setAttribute("d",`M${source.x+source.radius+13},${source.y} L${x},${y}`);
+        if(Math.hypot(point.x-gesture.start.x,point.y-gesture.start.y)>4)gesture.moved=true;
       } else {
         const dx = point.x - gesture.start.x;
         const dy = point.y - gesture.start.y;
         if (Math.hypot(dx, dy) > 4) gesture.moved = true;
-        if (gesture.kind === "node") {
-          const node = model.nodeById.get(gesture.id);
-          node.x = gesture.origin.x + dx / transform.scale;
-          node.y = gesture.origin.y + dy / transform.scale;
+        if (gesture.kind === "nodes" || gesture.kind === "group") {
+          for (const origin of gesture.nodes) {
+            const node = model.nodeById.get(origin.id);
+            const influence = gesture.kind === "nodes" ? origin.influence ?? 1 : 1;
+            node.x = origin.x + dx / transform.scale * influence;
+            node.y = origin.y + dy / transform.scale * influence;
+          }
         } else {
           transform.x = gesture.origin.x + dx;
           transform.y = gesture.origin.y + dy;
@@ -310,16 +575,31 @@ const FluxosGraph = (() => {
       const completed = gesture;
       gesture = null;
       svg.classList.remove("dragging");
-      if (completed?.kind === "node") {
+      if(completed?.kind==="link") {
+        connectionPreview.setAttribute("visibility","hidden");
+        if(!cancelled){
+          const point=localPoint(event), x=(point.x-transform.x)/transform.scale,y=(point.y-transform.y)/transform.scale;
+          const destination=[...model.nodeById.values()].find(node=>node.id!==completed.id && Math.hypot(node.x-x,node.y-y)<=node.radius+15);
+          if(destination) options.onCreateRelation?.(completed.id,destination.id);
+        }
+      } else if (completed?.kind === "nodes" || completed?.kind === "group") {
         if (completed.moved) savePositions();
-        else if (!cancelled) { select(completed.id); options.onSelect(completed.id); }
+        else if (!cancelled && completed.kind === "nodes") { select(completed.id); options.onSelect(completed.id); }
       } else if (completed?.kind === "pan" && !completed.moved && !cancelled) {
         if (completed.edgeId) {
           const link = model.links.find((candidate) => candidate.relation.id === completed.edgeId);
+          selectedRelationId=link.relation.id;
+          edgeElements.forEach((element,id)=>element.classList.toggle("prd4-edge-selected",id===selectedRelationId));
           options.onRelation(link.relation);
         } else select("");
       }
     }
+    svg.addEventListener("keydown",event=>{
+      const toggle=event.target.closest("[data-graph-expand]");
+      if(toggle && (event.key==="Enter"||event.key===" ")){
+        event.preventDefault();options.onToggleCollapse?.(toggle.dataset.graphExpand);
+      }
+    });
     svg.addEventListener("pointerup", (event) => finish(event));
     svg.addEventListener("pointercancel", (event) => finish(event, true));
     svg.addEventListener("wheel", (event) => {
@@ -332,7 +612,7 @@ const FluxosGraph = (() => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         if (nodeElement) { select(nodeElement.dataset.node); options.onSelect(nodeElement.dataset.node); }
-        else if (edge) options.onRelation(model.links.find((link) => link.relation.id === edge.dataset.edge).relation);
+        else if (edge) {selectedRelationId=edge.dataset.edge;edgeElements.forEach((element,id)=>element.classList.toggle("prd4-edge-selected",id===selectedRelationId));options.onRelation(model.links.find((link) => link.relation.id === edge.dataset.edge).relation);}
       } else if (nodeElement && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault();
         const node = model.nodeById.get(nodeElement.dataset.node);
@@ -342,12 +622,30 @@ const FluxosGraph = (() => {
         savePositions();
       }
     });
-    const observer = new ResizeObserver(() => draw());
+    const onDeleteKey=(event)=>{
+      if(!["Delete","Backspace"].includes(event.key)||!selectedRelationId)return;
+      const focused=document.activeElement;
+      if(focused?.matches?.("input,textarea,select,[contenteditable=true]"))return;
+      const rel=model.links.find(link=>link.relation.id===selectedRelationId)?.relation;
+      if(rel?.relationType==="TI"){
+        event.preventDefault();options.onDeleteRelation?.(selectedRelationId);
+        selectedRelationId="";
+      }
+    };
+    document.addEventListener("keydown",onDeleteKey);
+    let lastViewportSize={w:Math.round(container.getBoundingClientRect().width),h:Math.round(container.getBoundingClientRect().height)};
+    const observer = new ResizeObserver(() => {
+      const bounds=container.getBoundingClientRect(),w=Math.round(bounds.width),h=Math.round(bounds.height);
+      const resized=Math.abs(w-lastViewportSize.w)>8||Math.abs(h-lastViewportSize.h)>8;
+      lastViewportSize={w,h};
+      if(resized && model.nodes.length && !animationState)fit();
+      else draw();
+    });
     observer.observe(container);
     if (options.initialTransform) { transform = { ...options.initialTransform }; draw(); }
     else fit(true);
     select(selectedId);
-    return { fit, zoom, select, destroy: () => observer.disconnect(), model, getTransform: () => ({ ...transform }) };
+    return { fit, zoom, select, selectMany, propagate, pause, restart, destroy: () => { propagationTimers.forEach(clearTimeout); document.removeEventListener("keydown",onDeleteKey); observer.disconnect(); }, model, getTransform: () => ({ ...transform }) };
   }
 
   return { layout, mount, connectedGroups, projectRoot };
