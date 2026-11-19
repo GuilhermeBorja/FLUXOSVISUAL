@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poço do elevador · Fluxo Visual</title>
+<style>
+:root{color-scheme:light;--ink:#192f35;--muted:#53696e;--line:#d6e1df;--teal:#076c64;--mint:#daf1e8;--paper:#f3f6f4;--orange:#bd5836;font:15px/1.45 "Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--paper)}*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit;color:inherit}button,select{cursor:pointer}button{background:white;border:1px solid var(--line);border-radius:6px;padding:8px 13px;font-weight:600}button:hover{border-color:var(--teal);background:#edf7f2}button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #e38c3b;outline-offset:2px}header{background:#152f34;color:white;padding:13px max(4vw,18px);display:flex;align-items:center;justify-content:space-between;gap:15px}.brand{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px;letter-spacing:-.7px}.brand svg{width:34px;height:34px}header label{display:flex;align-items:center;gap:10px;color:#cfe4df;font-size:13px}header select{background:#29464b;color:white;border:1px solid #557074;border-radius:6px;padding:7px}.shell{max-width:1530px;padding:24px 4vw 42px;margin:auto}.crumb,.eyebrow,small{font-size:12px;color:var(--muted)}.crumb{margin-bottom:16px}.hero{background:#e2f0e9;border:1px solid #c8ded4;border-radius:12px;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden;padding:24px 30px;gap:20px}.hero h1{font:600 clamp(28px,3vw,44px)/1.12 Georgia,serif;letter-spacing:-1.6px;margin:5px 0 8px}.hero p{margin:0;max-width:690px}.eyebrow{text-transform:uppercase;letter-spacing:1.6px;font-weight:700;color:#36695f}.drawing{width:210px;height:110px;flex:none;color:#498479}.strip{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:10px;background:white;margin:14px 0 20px}.metric{padding:12px 20px}.metric+.metric{border-left:1px solid var(--line)}.metric b{display:block;font-size:20px;letter-spacing:-.5px}.tools,nav,.panelHead,.row,.legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tools,.panelHead{justify-content:space-between}.tools{margin-bottom:14px}nav{gap:2px;background:#e4ebe7;padding:3px;border-radius:8px}nav button{border:0;background:none}nav button[aria-pressed=true]{background:white;box-shadow:0 1px 3px #17362d26}.layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(295px,1fr);gap:15px;align-items:start}.panel{min-width:0;background:white;border:1px solid var(--line);border-radius:10px;overflow:hidden}.panelHead,.inset{padding:16px 19px}.panelHead{border-bottom:1px solid var(--line)}h2,h3,p{margin:0}h2{font-size:19px;letter-spacing:-.5px}h3{font-size:16px}.sub{font-size:13px;color:var(--muted);margin:3px 0 0}.chip{border-radius:50px;padding:3px 9px;font-size:12px;font-weight:600;background:#eaf0ed;color:#395550;display:inline-block}.alert{color:#924122;background:#ffeadf}.done{color:#12634f;background:var(--mint)}.primary{background:var(--teal);color:white;border-color:var(--teal)}.primary:hover{background:#075a53;color:white}.chartScroll{overflow-x:auto}.chart{min-width:100%;width:max-content;--label:190px;--day:44px}.gline{display:grid;grid-template-columns:var(--label) auto;border-bottom:1px solid var(--line);align-items:stretch}.taskname,.daylabel{position:sticky;left:0;background:white;z-index:2;border:0;border-radius:0;text-align:left;padding:13px 12px}.taskname small{display:block;font-weight:400}.sel .taskname{background:#e7f3ed;box-shadow:inset 3px 0 var(--teal)}.axis,.track{width:calc(var(--n)*var(--day));position:relative}.axis{display:flex;background:#f4f7f5}.axis span{width:var(--day);text-align:center;font-size:12px;padding:7px 0}.axis b,.axis small{display:block}.today{background:#d9eee2}.daylabel{font-size:12px;align-content:center;color:var(--muted);background:#f4f7f5}.track{min-height:66px;background:repeating-linear-gradient(to right,transparent 0 calc(var(--day) - 1px),#e7ece9 calc(var(--day) - 1px) var(--day))}.track:before{content:"";position:absolute;left:calc(var(--today)*var(--day));top:0;bottom:0;border-left:1px dashed #42907d}.bar,.ref,.base{position:absolute;left:calc(var(--s)*var(--day) + 2px);width:calc(var(--w)*var(--day) - 4px)}.bar{top:17px;height:21px;border:0;border-radius:4px;background:#71ac99;font:bold 11px/21px "Segoe UI",sans-serif;padding:0 4px;color:#133f34;text-align:center;white-space:nowrap}.bar:hover{background:#8abda9}.late{background:#edb094;color:#602c18}.ref,.base{height:3px;top:41px;background:#2d625d}.base{top:48px;background:repeating-linear-gradient(90deg,#757f81 0 4px,transparent 4px 6px)}.legend{padding:13px 17px;color:var(--muted);font-size:12px;gap:14px}.legend i{display:inline-block;width:17px;margin-right:4px;border-top:3px solid #71ac99;vertical-align:middle}.legend .ac{border-color:#2d625d}.legend .bl{border-top:2px dashed #757f81}.callout{background:#eef5f1;padding:12px;border-left:3px solid #76a696;margin:12px 0;font-size:14px}.action{background:#f6f8f6;border-top:1px solid var(--line);padding:15px 19px}.action p{margin:6px 0 10px}.action label,dialog label{display:block;font-size:13px;font-weight:600;margin:9px 0}.action input,.action select,.action textarea,dialog input,dialog textarea{display:block;width:100%;padding:8px;border:1px solid #aabcba;border-radius:5px;margin-top:4px;background:white}textarea{min-height:55px;resize:vertical}.dates{display:flex;justify-content:space-between;gap:8px}.dates b{display:block;font-size:15px}.actor{font-size:13px;color:var(--muted);margin:7px 0}.log{list-style:none;margin:0;padding:0}.log li{padding:12px 0;border-bottom:1px solid var(--line)}.log li:last-child{border:0}.log p{font-size:14px;overflow-wrap:anywhere}.log small{font-variant-numeric:tabular-nums}.chain{padding:18px;display:grid;gap:0}.node{display:block;text-align:left;padding:12px 14px}.node strong,.node small{display:block}.node[aria-pressed=true]{border-color:var(--teal);background:#f0f8f4}.arrow{margin-left:20px;font-size:12px;color:var(--muted);padding:4px 0}.note{font-size:13px;color:var(--muted);padding:10px 18px;background:#fafbf9;border-top:1px solid var(--line)}details{margin-top:12px;font-size:13px}summary{cursor:pointer;font-weight:600}.msg{padding:9px 13px;margin-bottom:10px;background:var(--mint);border-radius:5px;font-size:14px}.msg:empty{display:none}dialog{border:1px solid var(--line);border-radius:12px;padding:22px;max-width:min(430px,94vw)}dialog::backdrop{background:#142d3299}dialog .row{margin-top:16px}footer{margin-top:22px;color:var(--muted);font-size:12px}.error{color:#962e21}.disabled{color:var(--muted)}@media(min-width:1350px){.chart{--label:220px;--day:50px}}@media(max-width:970px){.layout{grid-template-columns:1fr}.drawing{width:150px}.panelHead,.inset{padding:14px 16px}}@media(max-width:620px){header{align-items:flex-start}.brand{font-size:16px}header label{display:grid;gap:2px}.shell{padding:15px 12px}.hero{padding:18px}.drawing{display:none}.strip{grid-template-columns:1fr 1fr}.metric{padding:9px 12px}.metric:nth-child(3){border-left:0}.metric:nth-child(n+3){border-top:1px solid var(--line)}.tools{align-items:flex-start}.chart{--label:142px;--day:38px}.tools button{font-size:13px}.taskname{font-size:13px}}
+.chartScroll{container-type:inline-size}.chart{--day:max(44px,calc((100cqw - var(--label))/var(--n)))}.linkTI{pointer-events:none;position:absolute;z-index:1;top:38px;bottom:-17px;left:calc(var(--finish)*var(--day) - 7px);width:calc(var(--gap)*var(--day) + 16px);background:linear-gradient(#619288,#619288) left top/1px 54% no-repeat,linear-gradient(#619288,#619288) left 54%/100% 1px no-repeat,linear-gradient(#619288,#619288) right bottom/1px 46% no-repeat}.linkTI:after{content:"";position:absolute;right:-3px;bottom:1px;border:solid #619288;border-width:0 1px 1px 0;padding:2.5px;transform:rotate(45deg)}.bar{z-index:1}.action details form{padding:5px 0}
+</style>
+<header><div class="brand"><svg viewBox="0 0 36 36" fill="none" stroke="#9ddcc2" stroke-width="2.5" aria-hidden="true"><rect x="2" y="3" width="13" height="12" rx="3"/><path d="M9 15v9h12"/><rect x="21" y="19" width="13" height="12" rx="3"/></svg>Fluxo Visual</div><label>Testar como <select id="person" aria-label="Participante"></select></label></header>
+<main class="shell"><div class="crumb">Obras &nbsp; / &nbsp; Residencial Aurora &nbsp; / &nbsp; Torre A</div>
+<section class="hero"><div><span class="eyebrow">Residencial Aurora · Torre A</span><h1>Poço do elevador</h1><p>Coordenar o reparo civil e a vistoria do poço para liberar a montagem das guias.</p></div>
+<svg class="drawing" viewBox="0 0 210 110" fill="none" stroke="currentColor" aria-label="Corte esquemático do poço do elevador" role="img"><defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 5L5 0" stroke="currentColor" opacity=".45"/></pattern></defs><path d="M46 6h8v90h75V6h8v98H46z" fill="url(#hatch)"/><path d="M13 21h33m91 0h35M13 59h33m91 0h35M13 96h33m91 0h35M60 7v84m63-84v84m-56-42h48v36H67zm0 0 24-12 24 12M88 4v34m6-34v34M60 15h63M181 20v76m-4-75h8m-8 38h8m-8 37h8"/><path d="M8 26h38m91 0h25M8 64h38m91 0h25M8 101h38m91 0h25M91 10v94" stroke-dasharray="3 4" opacity=".65"/></svg></section>
+<section id="summary" class="strip" aria-label="Resumo do fluxo"></section>
+<div class="tools"><nav aria-label="Visualização" id="tabs"></nav><div class="row"><span id="statusDate" class="sub"></span><button id="advance" title="Avançar a data de status da simulação">Dia seguinte →</button></div></div>
+<div role="status" id="notice" class="msg"></div><div class="layout"><section class="panel" id="view"></section><aside class="panel" id="detail" aria-label="Atividade selecionada"></aside></div>
+<footer>Cenário fictício · Calendário em dias corridos · Recarregue a página para reiniciar.</footer></main>
+<dialog id="proposal"><form id="proposalForm"><h2>Propor novo compromisso</h2><p class="sub" id="proposalItem"></p><label>Término proposto<input type="date" name="due" required></label><label>Escopo da entrega<textarea name="scope" required maxlength="320"></textarea></label><label>Condições do acordo<textarea name="terms" required maxlength="320"></textarea></label><p class="sub" id="signers"></p><div class="row"><button class="primary">Enviar proposta</button><button type="button" id="cancel">Cancelar</button></div></form></dialog>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const people={plan:['Clara','Planejamento'],client:['Lívia','Engenharia da obra'],civil:['Rui','Equipe civil'],lift:['Bia','Montadora'],read:['Otávio','Diretoria']};
+const tasks=[
+ {name:'Reparar o poço',owner:'civil',scope:'Regularizar as faces internas conforme o levantamento da obra.',duration:2,start:0},
+ {name:'Vistoriar o poço',owner:'client',scope:'Conferir prumo e dimensões e registrar a liberação para a montadora.',duration:1,start:2},
+ {name:'Montar as guias',owner:'lift',scope:'Instalar e conferir as guias no trecho liberado.',duration:2,start:3}
+].map(t=>({...t,pct:0,first:null,end:null,block:'',versions:[],pending:null,review:null,last:null}));
+const epoch=Date.UTC(2026,10,17), dayMs=86400000;
+const date=d=>new Date(epoch+d*dayMs), iso=d=>date(d).toISOString().slice(0,10);
+const fmt=d=>date(d).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',timeZone:'UTC'});
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let today=0,actor='plan',selected=0,tab='Cronograma',phase='draft';
+const events=[{day:0,who:'plan',i:null,text:'Rascunho preparado com três atividades, responsáveis e dependências término–início.'}];
+const active=()=>phase==='active', baseline=t=>t.start+t.duration-1, agreement=t=>t.versions.at(-1);
+function schedule(){
+ const rows=[];
+ for(const [i,t] of tasks.entries()){
+  const release=i?rows[i-1].end+1:t.start;
+  const start=t.first??Math.max(today,release);
+  const remaining=t.review?Math.max(1,t.review.days-Math.max(0,today-t.review.day)):Math.max(1,t.duration-Math.max(0,today-(t.first??today)));
+  const end=t.end??(Math.max(start,today)+remaining-1);
+  rows.push({start,end,release});
+ }
+ return rows;
+}
+function waiting(i){return i>0&&(tasks[i-1].end===null||today<=tasks[i-1].end)}
+function state(i){const t=tasks[i];if(!active())return phase==='draft'?'Rascunho':'Em aprovação';if(t.end!==null)return 'Concluída';if(t.block)return 'Bloqueada';if(waiting(i))return 'Aguardando TI';return t.pct?'Em execução':'Liberada'}
+function lead(){const i=tasks.findIndex(t=>t.end===null);return i<0?2:i}
+function add(text,i=selected){events.push({day:today,who:actor,i,text})}
+function chip(s){return '<span class="chip '+(s==='Bloqueada'?'alert':s==='Concluída'||s==='Liberada'?'done':'')+'">'+esc(s)+'</span>'}
+function metric(k,v){return '<div class="metric"><small>'+k+'</small><b>'+v+'</b></div>'}
+function dueText(t){return agreement(t)?fmt(agreement(t).due):'—'}
+function actionBtn(id,label,primary=true){return '<button type="button" data-do="'+id+'" class="'+(primary?'primary':'')+'">'+label+'</button>'}
+function switchTo(id){return actionBtn('switch-'+id,'Assumir perfil de '+people[id][0],false)}
+function next(i){
+ const t=tasks[i];
+ if(phase==='draft')return 'Clara confere a sequência e envia o plano inicial.';
+ if(phase==='sent')return 'Lívia avalia as datas e aprova o compromisso inicial.';
+ if(t.pending)return 'Aceite pendente de '+t.pending.signers.filter(p=>!t.pending.yes.includes(p)).map(p=>people[p][0]).join(' e ')+'.';
+ if(t.end!==null)return i<2?'Entrega registrada. A próxima etapa é '+tasks[i+1].name.toLowerCase()+'.':'Entrega final registrada.';
+ if(waiting(i))return tasks[i-1].end===null?'Depende de '+tasks[i-1].name.toLowerCase()+' ('+people[tasks[i-1].owner][0]+').':'Disponível a partir de '+fmt(tasks[i-1].end+1)+'. Avance a data de status.';
+ if(t.block)return people[t.owner][0]+' informa quando o impedimento for resolvido. Clara avalia o impacto no prazo.';
+ return people[t.owner][0]+' registra o avanço físico e a ocorrência de campo.';
+}
+function render(message=''){
+ const sc=schedule(),last=tasks[2],closed=tasks.filter(t=>t.end!==null).length;
+ $('notice').textContent=message;$('person').value=actor;
+ $('summary').innerHTML=metric('Situação do fluxo',closed===3?'Concluído':phase==='draft'?'Rascunho':phase==='sent'?'Em aprovação':'Em execução')+metric('Etapas concluídas',closed+' de 3')+metric('Compromisso final',dueText(last))+metric(closed===3?'Término real':'Tendência final',fmt(sc[2].end));
+ $('statusDate').textContent='Data de status · '+fmt(today);$('advance').disabled=!active()||closed===3;
+ $('tabs').innerHTML=['Cronograma','Dependências','Histórico'].map(v=>'<button data-tab="'+v+'" aria-pressed="'+(tab===v)+'">'+v+'</button>').join('');
+ const header=(title,caption)=>'<div class="panelHead"><div><h2>'+title+'</h2><p class="sub">'+caption+'</p></div></div>';
+ if(tab==='Cronograma')renderChart(sc);
+ if(tab==='Dependências')$('view').innerHTML=header('Cadeia de liberação','Fluxo por responsável · término–início')+'<div class="chain">'+tasks.map((t,i)=>(i?'<div class="arrow">↓ &nbsp; TI · dia seguinte, sem defasagem adicional</div>':'')+'<button class="node" data-item="'+i+'" aria-pressed="'+(i===selected)+'"><small>'+people[t.owner].join(' · ')+'</small><strong>'+t.name+'</strong>'+chip(state(i))+' <small>Tendência '+fmt(sc[i].end)+' · Compromisso '+dueText(t)+'</small><small>'+esc(next(i))+'</small></button>').join('')+'</div>';
+ if(tab==='Histórico')$('view').innerHTML=header('Histórico do fluxo','Registros em ordem de lançamento, do mais recente para o mais antigo.')+'<div class="inset"><ol class="log">'+events.slice().reverse().map(e=>'<li><small>'+fmt(e.day)+' · '+people[e.who][0]+' · '+(e.i===null?'Fluxo':tasks[e.i].name)+'</small><p>'+esc(e.text)+'</p></li>').join('')+'</ol></div>';
+ if(tab==='Cronograma')document.querySelectorAll('.track').forEach((track,i)=>{
+  if(i+1===tasks.length)return;
+  const link=document.createElement('i');link.className='linkTI';link.setAttribute('aria-hidden','true');
+  link.style.setProperty('--finish',sc[i].end+1);link.style.setProperty('--gap',sc[i+1].start-sc[i].end-1);track.append(link);
+ });
+ renderDetail(sc);
+ if(active()){
+  const t=tasks[selected],release=sc[selected].release;
+  const counter=t.end!==null?'Ciclo total · '+(t.end-release+1)+' dia(s) desde a liberação':waiting(selected)?'Liberação prevista · '+fmt(release):t.block?'Bloqueada desde '+fmt(t.blockDay):t.first!==null?'Iniciada em '+fmt(t.first):'Liberada desde '+fmt(release);
+  const p=document.createElement('p');p.className='sub';p.textContent=counter;
+  if(t.end===null&&!waiting(selected)&&today>(t.last?.day??release))p.textContent+=' · Medição diária pendente';
+  $('detail').querySelector('.dates').after(p);
+ }
+}
+function renderChart(sc){
+ const last=Math.max(6,today,...sc.map(r=>r.end),...tasks.map(t=>agreement(t)?.due??0));
+ const n=last+1;
+ const range=(s,e)=>'style="--s:'+s+';--w:'+(e-s+1)+'"';
+ const days=Array.from({length:n},(_,i)=>'<span class="'+(i===today?'today':'')+'" title="'+iso(i)+'"><small>'+date(i).toLocaleDateString('pt-BR',{weekday:'short',timeZone:'UTC'}).replace('.','')+'</small><b>'+fmt(i)+'</b></span>').join('');
+ $('view').innerHTML='<div class="panelHead"><div><h2>Cronograma da frente</h2><p class="sub">Selecione uma atividade para consultar ou agir.</p></div>'+chip('3 etapas')+'</div><div class="chartScroll"><div class="chart" style="--n:'+n+';--today:'+today+'"><div class="gline"><div class="daylabel">Atividade / responsável</div><div class="axis">'+days+'</div></div>'+tasks.map((t,i)=>'<div class="gline '+(selected===i?'sel':'')+'"><button class="taskname" aria-pressed="'+(selected===i)+'" data-item="'+i+'">'+t.name+'<small>'+people[t.owner][0]+' · '+state(i)+'</small></button><div class="track"><button class="bar '+(agreement(t)&&sc[i].end>agreement(t).due?'late':'')+'" data-item="'+i+'" '+range(sc[i].start,sc[i].end)+' aria-label="'+t.name+', '+t.pct+'%, término '+fmt(sc[i].end)+'">'+t.pct+'%</button>'+(agreement(t)?'<i class="ref" '+range(t.start,agreement(t).due)+'></i><i class="base" '+range(t.start,baseline(t))+'></i>':'')+'</div></div>').join('')+'</div></div><div class="legend"><span><i></i>Tendência / realizado</span><span><i class="ac"></i>Compromisso vigente</span><span><i class="bl"></i>Linha de base</span></div><div class="note">Sequência TI &nbsp; Reparo → Vistoria → Montagem</div>';
+}
+function renderDetail(sc){
+ const i=selected,t=tasks[i],v=agreement(t),r=sc[i],delta=v?r.end-v.due:0;
+ const impact=t.end!==null?'Término real em '+fmt(t.end)+'.':delta>0?'Tendência '+delta+' dia(s) após o compromisso.':'Término previsto em '+fmt(r.end)+'.';
+ $('detail').innerHTML='<div class="panelHead"><span class="eyebrow">Atividade selecionada</span>'+chip(state(i))+'</div><div class="inset"><h2>'+t.name+'</h2><p class="actor">'+people[t.owner].join(' · ')+'</p><p>'+esc(v?.scope??t.scope)+'</p><div class="callout"><b>'+impact+'</b><br>'+esc(next(i))+'</div><div class="dates"><div><small>'+(!active()?'Plano inicial':'Linha de base')+'</small><b>'+fmt(baseline(t))+'</b></div><div><small>Vigente</small><b>'+dueText(t)+'</b></div><div><small>Realizado</small><b>'+t.pct+'%</b></div></div>'+(t.block?'<p class="error">Impedimento · '+esc(t.block)+'</p>':'')+(t.last?'<p class="sub">Última medição · '+fmt(t.last.day)+' · '+esc(t.last.fact)+'</p>':'')+(t.versions.length?'<details><summary>Acordos registrados ('+t.versions.length+')</summary>'+t.versions.map((v,k)=>'<p>V'+(k+1)+' · '+fmt(v.due)+' · '+esc(v.scope)+'<br>'+esc(v.terms)+'</p>').join('')+'</details>':'')+'</div><section class="action" id="actionbox">'+controls(i)+'</section>';
+}
+function controls(i){
+ const t=tasks[i];
+ if(!active()){
+ const draft=phase==='draft',who=draft?'plan':'client';
+ const plan=tasks.map(x=>x.name+' · '+fmt(x.start)+(x.duration>1?' a '+fmt(baseline(x)):'')).join('<br>');
+ const edit=draft&&actor==='plan'?'<details><summary>Ajustar duração desta atividade</summary><form id="draftDuration"><label>Dias corridos<input type="number" name="days" min="1" max="30" required value="'+t.duration+'"></label><button>Aplicar ao rascunho</button></form></details>':'';
+ return '<h3>'+ (draft?'Conferir plano inicial':'Aprovar plano inicial')+'</h3><p>'+plan+'</p><p>A aprovação fixa a linha de base das três entregas.</p>'+(actor===who?actionBtn(draft?'send':'approve',draft?'Enviar para aprovação':'Aprovar compromisso inicial'):switchTo(who))+edit;
+ }
+ let out='';
+ if(t.pending){const p=t.pending;out+='<h3>Proposta em aceite</h3><p>'+fmt(p.due)+' · '+esc(p.scope)+'<br>'+esc(p.terms)+'</p><p>'+p.signers.map(s=>people[s][0]+' · '+(p.yes.includes(s)?'aceitou':'pendente')).join('<br>')+'</p>';
+ const unsigned=p.signers.filter(s=>!p.yes.includes(s));
+ out+=unsigned.includes(actor)?actionBtn('accept','Aceitar proposta')+' '+actionBtn('reject','Recusar',false):switchTo(unsigned[0]);out+='<hr>'}
+ if(t.end!==null)return out+'<h3>Entrega concluída</h3><p>Realizado por '+people[t.owner][0]+' em '+fmt(t.end)+'.</p>'+(i<2?actionBtn('next','Ver próxima etapa',false):'');
+ if(!waiting(i)&&actor===t.owner){
+ if(t.block)out+='<form id="unblock"><label>Como o impedimento foi resolvido?<textarea name="fact" required maxlength="320"></textarea></label><button class="primary">Desbloquear atividade</button></form>';
+ else out+='<form id="measure"><h3>Registrar medição</h3><p class="sub">Data efetiva e de registro · '+fmt(today)+' · Previsto no plano inicial ao fim do dia: '+Math.min(100,Math.max(0,Math.round((today-t.start+1)*100/t.duration)))+'%</p><label>Avanço físico acumulado (%)<input name="pct" type="number" required min="'+t.pct+'" max="100" step="1" value="'+t.pct+'"></label><label>Ocorrência<select name="kind"><option>Sem impedimento</option><option>Impedimento</option></select></label><label>Fato observado<textarea name="fact" maxlength="320" placeholder="Descreva a ocorrência de campo"></textarea></label><button class="primary">Salvar medição</button></form>';
+ }else if(waiting(i))out+='<p>'+esc(nextDependency(i))+'</p>'+actionBtn('prev','Ver predecessora',false);
+ else if(actor!=='plan')out+=switchTo(t.owner);
+ if(actor==='plan'){
+ if(!waiting(i))out+='<form id="review"><h3>Analisar duração restante</h3><label>Dias corridos, incluindo hoje<input name="days" type="number" min="1" max="30" required value="'+Math.max(1,schedule()[i].end-today+1)+'"></label><label>Fundamento da análise<textarea name="fact" required maxlength="320"></textarea></label><button>Atualizar tendência</button></form>';
+ if(!t.pending)out+='<p>'+actionBtn('propose','Propor novo compromisso',false)+'</p>';
+ if(!waiting(i))out+=switchTo(t.owner);
+ }else if(actor!=='read'&&!waiting(i)&&!t.pending)out+='<p>'+switchTo('plan')+'</p>';
+ return out;
+}
+function nextDependency(i){return tasks[i-1].end===null?'A execução aguarda a entrega da predecessora.':'Predecessora concluída. A execução abre em '+fmt(tasks[i-1].end+1)+'.'}
+function changeActor(p){actor=p;render('Perfil ativo · '+people[p].join(' — '))}
+function mutate(fn,message){
+ const before=schedule().map(r=>r.end);fn();schedule().forEach((r,i)=>{if(r.end!==before[i])add('Tendência de término passou de '+fmt(before[i])+' para '+fmt(r.end)+' após '+message.toLowerCase()+'.',i)});render(message);
+}
+$('person').innerHTML=Object.entries(people).map(([k,p])=>'<option value="'+k+'">'+p.join(' · ')+'</option>').join('');
+$('person').onchange=e=>changeActor(e.target.value);
+$('advance').onclick=()=>{if(!active()||tasks.every(t=>t.end!==null))return;mutate(()=>{today++;add('Data de status avançada para '+fmt(today)+'.',null);selected=lead()},'Avanço da data de status')};
+document.addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.tab){tab=b.dataset.tab;render();return}
+ if(b.dataset.item!==undefined){selected=Number(b.dataset.item);render();if(matchMedia('(max-width:970px)').matches)$('detail').scrollIntoView({block:'start'});return}
+ const a=b.dataset.do,t=tasks[selected];if(!a)return;
+ if(a.startsWith('switch-')){changeActor(a.slice(7));return}
+ if(a==='prev'||a==='next'){selected+=a==='prev'?-1:1;render();return}
+ if(a==='send'&&actor==='plan'&&phase==='draft'){phase='sent';add('Plano inicial enviado à engenharia da obra.',null);render('Plano enviado. Lívia pode aprovar.')}
+ if(a==='approve'&&actor==='client'&&phase==='sent'){phase='active';tasks.forEach(t=>t.versions.push({due:baseline(t),scope:t.scope,terms:'Plano inicial aprovado por Lívia.'}));add('Compromisso inicial aprovado. Linha de base registrada e reparo liberado.',null);render('Plano aprovado. Rui já pode medir o reparo.')}
+ if(a==='propose'&&actor==='plan'&&!t.pending){
+  const f=$('proposalForm');f.reset();f.elements.due.min=iso(Math.max(today,t.start));f.elements.due.max=iso(Math.max(today,t.start)+120);f.elements.due.value=iso(Math.max(today,t.start,schedule()[selected].end));f.elements.scope.value=agreement(t).scope;
+  $('proposalItem').textContent=t.name+' · Vigente até '+dueText(t);$('signers').textContent='Aceites necessários · '+signers(t).map(s=>people[s][0]).join(' e ');$('proposal').showModal();
+ }
+ if((a==='accept'||a==='reject')&&t.pending&&t.pending.signers.includes(actor)&&!t.pending.yes.includes(actor)){
+ const p=t.pending;if(a==='reject'){add('Proposta para '+fmt(p.due)+' recusada. Preservado o compromisso vigente.');t.pending=null;render('Proposta recusada.');return}
+ p.yes.push(actor);add('Aceite registrado para a proposta de '+fmt(p.due)+'.');
+ if(p.yes.length===2){t.versions.push(p);t.pending=null;add('Compromisso V'+t.versions.length+' vigente após os dois aceites.');render('Novo compromisso vigente. Linha de base preservada.')}else render('Primeiro aceite registrado. Falta o aceite da outra parte.');
+ }
+});
+// Na vistoria a engenharia entrega o resultado ao planejamento; nas demais etapas ela demanda a entrega.
+function signers(t){return [t.owner==='client'?'plan':'client',t.owner]}
+$('cancel').onclick=()=>$('proposal').close();
+document.addEventListener('submit',e=>{
+ e.preventDefault();const f=e.target,t=tasks[selected],v=new FormData(f),fact=String(v.get('fact')??'').trim();
+ const invalid=(name,msg)=>{const el=f.elements[name];el.setCustomValidity(msg);el.reportValidity();el.setCustomValidity('')};
+ if(f.id==='draftDuration'&&phase==='draft'&&actor==='plan'){
+  mutate(()=>{t.duration=Number(v.get('days'));tasks.forEach((x,i)=>{if(i)x.start=baseline(tasks[i-1])+1});add('Duração do rascunho alterada para '+t.duration+' dia(s).')},'Ajuste do rascunho');return;
+ }
+ if(f.id==='proposalForm'&&actor==='plan'&&!t.pending){
+ const scope=v.get('scope').trim(),terms=v.get('terms').trim();if(!scope||!terms){invalid(!scope?'scope':'terms','Informe o conteúdo do acordo.');return}
+ const due=Math.round((Date.parse(v.get('due')+'T00:00:00Z')-epoch)/dayMs);t.pending={due,scope,terms,signers:signers(t),yes:[]};add('Proposta para '+fmt(due)+' · '+scope+' · '+terms+'.');$('proposal').close();render('Proposta enviada para aceite bilateral.');return
+ }
+ if(!active()||t.end!==null||waiting(selected))return;
+ if(f.id==='review'&&actor==='plan'){if(!fact){invalid('fact','Informe o fundamento.');return}const days=Number(v.get('days'));mutate(()=>{t.review={day:today,days};add('Duração restante avaliada em '+days+' dia(s). '+fact)},'Revisão da duração restante');return}
+ if(actor!==t.owner)return;
+ if(f.id==='unblock'&&t.block){if(!fact){invalid('fact','Informe a solução.');return}t.block='';add('Impedimento resolvido. '+fact);render('Atividade desbloqueada.');return}
+ if(f.id==='measure'&&!t.block){
+ const pct=Number(v.get('pct')),blocked=v.get('kind')==='Impedimento';
+ if(blocked&&!fact){invalid('fact','Descreva o impedimento.');return}if(blocked&&pct===100){invalid('pct','Resolva o impedimento antes de concluir.');return}
+ mutate(()=>{t.pct=pct;if(pct>0&&t.first===null)t.first=today;if(blocked){t.block=fact;t.blockDay=today}t.last={day:today,fact:fact||'Sem impedimento'};if(pct===100){t.end=today;if(t.pending){add('Proposta pendente encerrada pela conclusão da entrega.');t.pending=null}}add('Medição de '+pct+'% · '+v.get('kind')+(fact?' · '+fact:'')+'.')},pct===100?'Conclusão da atividade':'Registro de medição');
+ }
+});
+render();
+</script>
+</html>

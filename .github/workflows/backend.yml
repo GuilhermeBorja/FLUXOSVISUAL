@@ -1,0 +1,81 @@
+name: PRD6 - Backend and shared workspace
+
+on:
+  push:
+    paths:
+      - 'server/**'
+      - 'scripts/setup.mjs'
+      - 'scripts/backup.mjs'
+      - 'scripts/restore.mjs'
+      - 'dist/**'
+      - 'tests/backend*'
+      - 'browser-tests/backend*'
+      - 'package*.json'
+      - 'Dockerfile'
+      - 'compose.yaml'
+      - '.dockerignore'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'scripts/setup.mjs'
+      - 'scripts/backup.mjs'
+      - 'scripts/restore.mjs'
+      - 'dist/**'
+      - 'tests/backend*'
+      - 'browser-tests/backend*'
+      - 'package*.json'
+      - 'Dockerfile'
+      - 'compose.yaml'
+      - '.dockerignore'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check
+      - run: npm run check:backend
+      - name: Existing frontend contract
+        run: npm test
+      - name: Backend authorization, transactions, persistence and isolation
+        run: node --test tests/backend*.test.mjs
+      - name: Install browser runner
+        run: npx playwright install --with-deps chromium
+      - name: Two authenticated browser sessions and responsive UI
+        run: node browser-tests/backend-e2e.mjs
+      - name: Administration, real accounts and password changes
+        run: node browser-tests/backend-admin-e2e.mjs
+      - name: Templates, nullable durations, derived dates and comment audit
+        run: node browser-tests/backend-template-e2e.mjs
+      - name: Local HTTP gate with 500 items and 1000 TI relations
+        env:
+          FLUXOS_PERFORMANCE_GATE: 'true'
+        run: node tests/backend-benchmark.mjs
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Image, isolated setup and persistence after restart
+        run: node tests/backend-container-smoke.mjs

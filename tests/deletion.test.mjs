@@ -5,8 +5,10 @@ import { readFileSync } from "node:fs";
 
 const source=readFileSync(new URL("../dist/app.js",import.meta.url),"utf8");
 function context(storage=new Map()) {
+  const hasSavedState=storage.has("fluxosVisualState.v2");
   const sandbox=vm.createContext({console,document:{querySelector:()=>({})},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)}});
   vm.runInContext(source,sandbox);
+  vm.runInContext(hasSavedState ? "state=loadState();" : "state=seedState();",sandbox);
   const run=script=>vm.runInContext(script,sandbox);
   run('state.currentUserId="u_luis";');
   return run;
@@ -37,10 +39,10 @@ test("excluir só o pai mantém a estrutura dos subitens sem pais inexistentes",
   assert.equal(run('state.items.every((item)=>!item.parentId || !!getItem(item.parentId))'),true);
 });
 
-test("todos os comandos de exclusão negam níveis inferiores a 10 antes de alterar dados",()=>{
+test("todos os comandos de exclusão sem autorização GPO são negados antes de alterar dados",()=>{
   const run=context();
   run('state.currentUserId="u_virginia";before=JSON.stringify(state);');
-  for(const command of ['removeItem("item_adm",{cascade:true})','removeUser("u_mateus")','removeSector("sec_rh",{replacementId:"sec_obra"})','removeOrganization("org_dmk")']) assert.throws(()=>run(command),/nível 10/);
+  for(const command of ['removeItem("item_adm",{cascade:true})','removeUser("u_mateus")','removeSector("sec_rh",{replacementId:"sec_obra"})','removeOrganization("org_dmk")']) assert.throws(()=>run(command),/GPO/);
   assert.equal(run('JSON.stringify(state)===before'),true);
 });
 
@@ -101,4 +103,16 @@ test("exclusões persistem ao reabrir os dados e não restauram o exemplo inicia
   assert.equal(reopened('getItem("item_adm")'),undefined);
   assert.equal(reopened('state.users.some((user)=>user.id==="u_mateus")'),false);
   assert.equal(reopened('state.archivedItems.length'),7);
+});
+
+test("P0: remover um pai mantendo os filhos sincroniza todos os vínculos CONTÉM ancestrais",()=>{
+  const run=context();
+  run(`root=createItem({...${defaults},title:"Raiz"});middle=createItem({...${defaults},title:"Pai intermediário",parentId:root.id});child=createItem({...${defaults},title:"Filho",parentId:middle.id});grandchild=createItem({...${defaults},title:"Neto",parentId:child.id});`);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===grandchild.id)'),true);
+  run('removeItem(middle.id,{keepChildren:true});');
+  assert.equal(run('getItem(child.id).parentId'),"");
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===child.id)'),false);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===grandchild.id)'),false);
+  assert.equal(run('state.relations.some((r)=>r.relationType==="contains" && r.sourceId===child.id && r.targetId===grandchild.id)'),true);
+  assert.equal(run('state.archivedRelations.some((r)=>r.relationType==="contains" && r.sourceId===root.id && r.targetId===grandchild.id)'),true);
 });

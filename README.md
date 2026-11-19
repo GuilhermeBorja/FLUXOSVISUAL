@@ -1,72 +1,121 @@
-# Fluxos · Gestão operacional
+# Fluxo Visual — PRD6
 
-MVP navegável com uma única área operacional. O núcleo mantém Item, Relação, Evento e Pessoa/Papel; tabela e grafo consultam os mesmos registros e as mesmas alçadas.
+Gestão visual de projetos, atividades, dependências TI e aprovações, com Gantt estruturado e grafo analítico. A **PRD6**, versão **0.7.0-prd6**, integra o frontend PRD5 a um servidor com autenticação real, persistência compartilhada, autorização GPO, auditoria e anexos privados.
 
-## Como abrir localmente
+**Código desta implementação:** [branch PRD6](https://github.com/GuilhermeBorja/FLUXOSVISUAL/tree/PRD6), no repositório [GuilhermeBorja/FLUXOSVISUAL](https://github.com/GuilhermeBorja/FLUXOSVISUAL). O pacote entregue também contém o projeto completo para execução local. A demonstração estática existente continua disponível no [GitHub Pages](https://guilhermeborja.github.io/FLUXOSVISUAL/). Para usar as contas e os dados compartilhados desta versão, abra a URL do servidor iniciado abaixo.
 
-Para gerar as dependências visuais e verificar o código:
+## Executar com Node.js
 
-```bash
+Requisito: **Node.js 24 LTS**. Obtenha a PRD6 pelo GitHub ou extraia o pacote entregue. A instalação inicial cria um administrador e um workspace vazio.
+
+```sh
+git clone --branch PRD6 https://github.com/GuilhermeBorja/FLUXOSVISUAL.git
+cd FLUXOSVISUAL
+```
+
+Na pasta do projeto:
+
+```sh
 npm ci
 npm run build
+cp .env.example .env
+npm run setup -- --email seu@email.com --name "Seu nome" --organization "Sua empresa" --workspace "Sua obra" --state PE
+npm start
+```
+
+No PowerShell, substitua `cp .env.example .env` por `Copy-Item .env.example .env`.
+
+Abra **http://localhost:3000**. O setup apresenta uma senha aleatória uma única vez; use-a no primeiro login e altere-a pelo menu da conta. Também é possível fornecer uma senha de 12 a 128 caracteres por entrada padrão, conforme o [guia de operação](docs/BACKEND-OPERACAO.md). Não existem senhas padrão. Repetir o setup preserva a instalação existente.
+
+Os scripts `start`, `setup`, `backup` e `restore` carregam `.env`. O banco SQLite e os anexos ficam em `DATA_DIR`, inicialmente `./data`. Mantenha esse diretório em armazenamento persistente.
+
+## Executar com Docker Compose
+
+Na pasta do projeto entregue, depois de copiar `.env.example` para `.env`:
+
+```sh
+docker compose build
+docker compose run --rm fluxosvisual node scripts/setup.mjs --email seu@email.com --name "Seu nome" --organization "Sua empresa" --workspace "Sua obra" --state PE
+docker compose up -d
+docker compose logs -f fluxosvisual
+```
+
+O container utiliza usuário sem privilégios e volume persistente para os dados. Consulte [instalação, atualização e restauração](docs/BACKEND-OPERACAO.md) para portas, permissões do volume e proxy HTTPS. O endpoint `GET /api/health` verifica se o serviço responde e consegue consultar o banco.
+
+## Funcionalidades implementadas
+
+| Área | Comportamento |
+| --- | --- |
+| Contas e sessões | Login por e-mail e senha, scrypt, cookie HttpOnly, CSRF, limitação de tentativas, troca e redefinição de senha com revogação de sessões. |
+| Workspace e GPO | Vínculo de acesso obrigatório, regras por usuário e perfil, escopo mais específico, Negar no empate e ausência de regra negando acesso. O servidor aplica a autorização às leituras e às alterações. |
+| Hierarquia e TI | `parentId` como única origem da hierarquia; Contém derivado nas consultas; criação de árvore, movimentação e edição em lote atômicas; rejeição de ciclos, órfãos e TI entre grupos. |
+| Cronograma | Dias corridos inclusivos, duração nula preservada, baseline, recálculo TI, resumos ponderados e criticidade somente com rede completa e válida. |
+| Aprovações e bloqueios | Um aprovador por rodada, decisões imutáveis, reabertura em nova rodada, revisão após reprovação e fontes de impedimento resolvidas individualmente. |
+| Cadastros e modelos | Empresas, setores, usuários, perfis, regras, cores/ícones por empresa, arquivamento e modelos com novas identidades. Aprovações copiadas começam pendentes. |
+| Colaboração | Revisão do workspace e versão dos itens, resposta 409 para conflito, preservação do rascunho, atualização periódica entre sessões e preferências por pessoa/workspace. |
+| Anexos e histórico | Conteúdo privado, SHA-256, links temporários com nova autorização, exclusão lógica, auditoria append-only e consulta paginada com filtros. |
+| Operação | Configuração por ambiente, logs estruturados com correlação, backup online e restauração verificada de banco e anexos. |
+
+A exportação operacional usa os dados autorizados da sessão. A projeção da API fornece o mesmo conjunto filtrado para Gantt, grafo e contadores; o cálculo é refeito no servidor ao gravar. O navegador não é fonte de autenticação, permissões, decisões históricas ou campos calculados.
+
+## Configuração principal
+
+| Variável | Padrão / finalidade |
+| --- | --- |
+| `HOST` | `127.0.0.1` com Node; `0.0.0.0` dentro do container. |
+| `PORT` | `3000`; no Compose, é a porta publicada no host. |
+| `DATA_DIR` | `./data` com Node; volume em `/var/lib/fluxosvisual` no container. |
+| `PUBLIC_ORIGIN` | `http://localhost:3000`; URL exata do navegador. Exigida em produção, com HTTPS para origem pública. |
+| `TZ` | `America/Sao_Paulo` no exemplo e no Compose. |
+| `ATTACHMENT_MAX_BYTES` | `10485760` — 10 MiB por arquivo. |
+| `ATTACHMENT_QUOTA_BYTES` | `1073741824` — 1 GiB por workspace, incluindo arquivos excluídos logicamente. |
+| `ATTACHMENT_SCAN_COMMAND` | Executável opcional de inspeção de anexos; recebe o caminho do arquivo. |
+| `REQUIRE_ATTACHMENT_SCAN` | `true` para recusar upload sem scanner configurado. |
+
+O armazenamento desta versão foi preparado para **uma instância da aplicação por banco SQLite**, com disco local persistente. Hospedagem sem disco persistente ou múltiplas réplicas simultâneas exige adaptar a camada de armazenamento. O frontend e a API são servidos na mesma origem.
+
+## Backup e recuperação
+
+```sh
+npm run backup -- /caminho/novo/backup
+npm run restore -- /caminho/do/backup /caminho/novo/dados-restaurados
+```
+
+O backup pode ocorrer com o serviço ativo. A restauração valida manifesto, SHA-256, integridade e referências do banco, exige um destino novo/vazio e revoga sessões antigas. Siga o [procedimento completo de restauração](docs/BACKEND-OPERACAO.md#5-restaurar-sem-sobrescrever-a-instalação) para interromper o serviço, validar a recuperação e apontar a instalação ao novo diretório. A retenção dos backups é uma decisão operacional da empresa.
+
+## Verificar a implementação
+
+```sh
 npm run check
-npm test
+npm run check:backend
+npm run test:all
+npx playwright install chromium
+npm run test:backend:browser
+node tests/backend-benchmark.mjs
 ```
 
-Abra `dist/index.html` no navegador ou rode um servidor estático dentro desta pasta:
+A [workflow do backend](.github/workflows/backend.yml) executa testes de contrato, API, autorização, persistência, recuperação, três cenários completos de navegador, medição com 500 itens/1.000 relações e um teste do container com reinício e conferência de persistência.
 
-```bash
-python3 -m http.server 8080 --directory dist
-```
+Os testes de navegador usam instalações temporárias e contas próprias de teste. O [relatório de aceite](docs/backend-acceptance.md) distingue os resultados efetivamente executados e os limites das medições. `tests/core.test.mjs` contém cenários históricos anteriores à hierarquia canônica da PRD5; o gate atual usa `tests/prd5.test.mjs` e as suítes `backend*.test.mjs`.
 
-Depois acesse `http://localhost:8080`.
+## Organização do código
 
-## Fluxo de uso
+- `server/index.mjs`: servidor HTTP, rotas, frontend e anexos.
+- `server/storage.mjs`, `auth.mjs`, `credential-policy.mjs`: persistência, sessões e administração de credenciais.
+- `server/domain.mjs`, `commands.mjs`, `service.mjs`: domínio, validação, GPO, transações, projeções e auditoria.
+- `dist/backend.js`: integração do frontend com a API.
+- `dist/app.js`, `dist/workspace.js`, `dist/graph.js`: frontend integrado e regras compartilhadas originadas na PRD5.
+- `scripts/setup.mjs`, `backup.mjs`, `restore.mjs`: instalação e recuperação.
 
-1. Entrar com um perfil demonstrativo.
-2. Usar a visão **Sintética** para consultar os projetos em tabela; ativar **Mostrar subitens** para expandir sua estrutura.
-3. Usar a visão **Analítica** para ver os itens como nós conectados. Arrastar nós, ampliar, enquadrar e agrupar por projeto, responsável, empresa ou conexão. A posição dos nós é salva por usuário e agrupamento.
-4. Selecionar uma linha ou um nó para atualizar nome, status, responsável, início, término e contexto. Cada mudança registra autor, data efetiva e data do registro.
-5. Criar itens e subitens pelo painel lateral. Na criação de um projeto, adicionar várias etapas de uma vez e conectá-las por TI.
-6. Consultar ou criar relações no painel do item; o histórico fica na aba do mesmo painel.
-7. Administradores acessam usuários, empresas, setores e alçadas pelo painel **Cadastros**.
-8. O nível 10 pode excluir itens pela lixeira da tabela ou do painel, e usuários, empresas e setores pelas lixeiras em **Cadastros**. A confirmação mostra quais vínculos serão alterados.
+O servidor executa as regras compartilhadas da PRD5 em contexto isolado, acrescidas de validação e autorização próprias. A API aceita comandos definidos; não executa código enviado pelo cliente. Os arquivos em `sources/` permanecem referências históricas; o frontend mantido neste repositório fica em `dist/`.
 
-## Exclusão e vínculos
+## Documentação e implantação
 
-- Itens: excluir junto com todos os subitens ou excluir apenas o pai, mantendo os filhos diretos como itens independentes. Relações que envolvem itens excluídos são retiradas do grafo.
-- Usuários: saem do cadastro e do login. É possível transferir suas demandas para outro responsável ou mantê-las sem responsável. Autoria e histórico continuam identificando o usuário original.
-- Setores: se houver itens ou usuários vinculados, escolher outro setor da mesma empresa para recebê-los. Um setor vazio pode ser excluído diretamente.
-- Empresas: exclusão conjunta de seus setores, usuários, itens e descendentes. A confirmação informa subitens de outras empresas incluídos na estrutura e demandas externas que ficam sem responsável.
-- O usuário conectado e sua empresa exigem login com outro administrador antes da exclusão, para manter um acesso válido durante o teste.
-- As exclusões removem os registros das telas ativas e preservam cópias históricas locais. A exportação administrativa inclui essas cópias e os eventos. Os dados já cadastrados são mantidos ao atualizar a interface.
+- [Instalação e operação](docs/BACKEND-OPERACAO.md)
+- [Contrato HTTP e exemplos da API](docs/BACKEND-API.md)
+- [Contrato funcional PRD5](docs/PRD5-BACKEND-CONTRATO.md)
+- [Cobertura e resultados de aceite](docs/backend-acceptance.md)
 
-## O que está implementado
+O setup começa vazio e não importa automaticamente dados de demonstração armazenados em outro navegador. Uma migração de dados reais exige o arquivo de origem, mapeamento de contas e validação dos registros descrita no contrato PRD5.
 
-- Nucleo conceitual: Item, Relacao, Evento e Pessoa/Papel.
-- Login demonstrativo por usuario.
-- Cadastro de empresas, setores, usuarios e niveis de permissao.
-- Criacao de projetos, itens, subitens e relacoes.
-- Relacoes TI, II, TT, IF, contem, bloqueia, aprova e conecta.
-- Atualizacao operacional de status, responsavel, nome, prazo e data/hora da mudanca.
-- Criacao de novas subetapas dentro de itens existentes.
-- Tabela sintética com subitens expansíveis.
-- Grafo analítico com nós móveis, agrupamentos, relações direcionadas e farol.
-- Filtro de visualizacao conforme alcadas 1 a 10.
-- Persistencia local via `localStorage`.
-- Exportacao JSON do estado operacional.
-
-## Limites desta versão
-
-Este MVP usa login por seleção de perfil e persistência local (`localStorage`), sem autenticação de aplicação nem sincronização entre navegadores. As alçadas são aplicadas na interface e nos comandos locais; não são uma barreira de segurança para uso de produção com múltiplas empresas. O acesso ao Site permanece privado. A próxima etapa de produto exige autenticação real, banco compartilhado e autorização no servidor antes de uso operacional entre empresas.
-
-As relações TI/II/TT/IF são registradas e exibidas com defasagem. Esta versão não recalcula cronogramas nem impõe bloqueios automáticos de transição.
-
-## Próxima evolução
-
-- Backend com autenticacao.
-- Banco PostgreSQL para itens, relacoes e eventos.
-- Permissoes por empresa, contexto, papel e acao.
-- Colaboracao em tempo real.
-- Motor de regras e alertas.
-- Integracao com IA para sumarizacao, gargalos e proximos passos.
+Para disponibilizar o backend pela internet, é necessário definir o servidor/provedor, o volume persistente e a URL HTTPS. O GitHub Pages continua atendendo à demonstração estática; a execução do backend ocorre na instalação Node ou Docker.

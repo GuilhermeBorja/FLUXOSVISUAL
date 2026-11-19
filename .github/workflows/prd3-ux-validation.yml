@@ -1,0 +1,23 @@
+name: Validate PRD3 UX packages
+on:
+  push:
+    branches: [feature/prd3-ux-homologacao]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build && npm run check && npm test
+      - run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+      - name: Browser smoke
+        run: |
+          nohup python3 -m http.server 8080 --directory dist > /tmp/http.log 2>&1 &
+          timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
+          node browser-tests/prd3-smoke.mjs
