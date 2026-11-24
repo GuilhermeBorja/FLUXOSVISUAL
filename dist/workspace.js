@@ -1882,6 +1882,7 @@ function renderGpo() {
   state.sectors.forEach((entry) => scopes.push({type:"sector",id:entry.id,label:"Setor · " + orgName(entry.organizationId) + " / " + entry.name}));
   state.items.filter((entry) => entry.type === "project").forEach((entry) => scopes.push({type:"project",id:entry.id,label:"Projeto · " + itemContextLabel(entry)}));
   state.items.forEach((entry) => scopes.push({type:"item",id:entry.id,label:"Item · " + itemContextLabel(entry)}));
+  state.users.filter((entry) => !entry.disabled).forEach((entry) => scopes.push({type:"creator",id:entry.id,label:"Itens criados por · " + entry.name}));
   let html = '<section class="panel-section"><h3>Gestão de Permissões Organizacionais</h3><p class="muted">O GPO é a única origem de autorização neste protótipo. Escopo mais específico prevalece; em empate, negar prevalece. Sem regra aplicável, o acesso é negado.</p>';
 
   html += '<form id="gpoRuleForm" class="form-stack"><label>Usuário ou perfil<select name="subject" required>';
