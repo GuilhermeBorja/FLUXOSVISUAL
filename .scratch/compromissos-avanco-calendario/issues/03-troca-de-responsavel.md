@@ -14,3 +14,4 @@
 ## Comments
 
 - 2026-11-24: Implementado em `server/service.mjs`; acordos ativos e pendentes são encerrados na persistência da troca, e o evento de histórico registra os IDs encerrados. Teste de regressão em `tests/commitments-api.test.mjs` confirma a preservação dos aceites anteriores e o novo aceite pelo responsável atual. `npm run test:all`: 9/9 + 56/56; teste focado: 25/25.
+- 2026-11-24: Retrospectiva: o code review levantou dúvida sobre o vínculo do compromisso posterior no histórico. A consulta `/audit-events?itemId=...` confirmou a troca com os IDs anteriores e a proposta posterior com seu ID e novo responsável na mesma atividade; critérios revalidados, sem mudança de produção. Commits `54353d7` e `3d08483`; teste focado 25/25. O teste específico ainda não está incluído em `test:all` nem no workflow do backend.
