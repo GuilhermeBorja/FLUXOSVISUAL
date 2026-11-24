@@ -613,7 +613,7 @@ function statusDate(){ return String(state.asOf || today()).slice(0,10); }
 function renderMyActions() {
   const actions = state.actions || [];
   if (!actions.length) return '<section class="my-actions empty" aria-label="Minhas ações"><h2>Minhas ações <span>0</span></h2><p>Nenhuma ação pendente. Aceites e decisões aparecerão aqui quando exigirem sua resposta.</p></section>';
-  return `<section class="my-actions" aria-label="Minhas ações"><h2>Minhas ações <span>${actions.length}</span></h2>${actions.map(action => `<article><strong title="${escapeHtml(action.itemTitle || "")}">${escapeHtml(action.itemTitle || "Aceitar compromisso")}</strong><span>${dateCell(action.startAt)} → ${dateCell(action.dueAt)}${action.scopeNote ? ` · ${escapeHtml(action.scopeNote)}` : ""}</span><button type="button" class="button primary" data-accept-commitment="${escapeHtml(action.commitmentId)}">Aceitar</button></article>`).join("")}</section>`;
+  return `<section class="my-actions" aria-label="Minhas ações"><h2>Minhas ações <span>${actions.length}</span></h2>${actions.map(action => { const macro = action.scope === "macro"; const label = macro ? "Aceitar compromisso macro" : "Aceitar compromisso"; return `<article><strong title="${escapeHtml(action.itemTitle || "")}">${escapeHtml(action.itemTitle || label)}</strong><span>${macro ? "Compromisso macro do projeto · " : ""}${dateCell(action.startAt)} → ${dateCell(action.dueAt)}${action.scopeNote ? ` · ${escapeHtml(action.scopeNote)}` : ""}</span><button type="button" class="button primary" aria-label="${label}: ${escapeHtml(action.itemTitle || "")}" data-accept-commitment="${escapeHtml(action.commitmentId)}">${label}</button></article>`; }).join("")}</section>`;
 }
 
 function renderOperationalAttention() {

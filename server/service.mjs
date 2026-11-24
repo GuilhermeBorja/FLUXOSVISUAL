@@ -13,6 +13,7 @@ import {
 import { executeCommand, synchronize } from "./commands.mjs";
 import { prepareCredentialHashes } from "./credential-policy.mjs";
 import { runCommitmentsTrendMigration } from "./migrations/003_commitments_trends.mjs";
+import { runMacroCommitmentAcceptanceMigration } from "./migrations/004_macro_commitment_acceptance.mjs";
 import { calculateTrend } from "./trend.mjs";
 
 const recordKeys = [
@@ -159,6 +160,7 @@ export function initializeSchema(storage) {
     )
     .run("002_workspace_domain", stamp());
   runCommitmentsTrendMigration(storage);
+  runMacroCommitmentAcceptanceMigration(storage);
 }
 
 function empty() {
@@ -1551,6 +1553,7 @@ export function createService(
           commitmentId: commitment.id,
           itemId: commitment.itemId,
           itemTitle: safeItems.get(commitment.itemId)?.title || "",
+          scope: safeItems.get(commitment.itemId)?.type === "project" ? "macro" : "individual",
           role: "approver",
           startAt: commitment.startAt,
           dueAt: commitment.dueAt,

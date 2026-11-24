@@ -622,6 +622,45 @@ test("projection lists a pending commitment only for an independent approver", a
   assert.deepEqual((await approver.client.projection()).actions.map((action) => ({ type: action.type, commitmentId: action.commitmentId })), [{ type: "accept_commitment", commitmentId: "action_agreement" }]);
 });
 
+test("an authorized approver can accept the macro commitment on the project root", async (t) => {
+  const context = await fixture(t);
+  const { admin, app } = context;
+  const approver = await addWorkspaceUser(context, {
+    id: "u_macro_approver",
+    email: "macro-approver@example.test",
+    operations: ["view_item", "manage_commitment"],
+  });
+  const reader = await addWorkspaceUser(context, {
+    id: "u_macro_reader",
+    email: "macro-reader@example.test",
+    operations: ["view_item"],
+  });
+  const project = await createItem(admin, "Projeto macro", {
+    id: "macro_project",
+    type: "project",
+    plannedDurationDays: null,
+  });
+  app.storage.db.prepare(
+    "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run("macro_agreement", "w_a", project.id, "agreement", 1, "proposed", "2026-11-24", "2026-12-01", null, ADMIN.id, ADMIN.id, ADMIN.id, null, "2026-11-23T08:00:00.000Z");
+
+  const action = (await approver.client.projection()).actions[0];
+  assert.equal(action.itemId, project.id);
+  assert.equal(action.scope, "macro");
+  assert.deepEqual((await reader.client.projection()).actions, []);
+  await approver.client.command("acceptCommitment", [action.commitmentId]);
+
+  assert.equal(app.storage.db.prepare("SELECT status FROM commitments WHERE id=?").get("macro_agreement").status, "active");
+  const acceptance = app.storage.db.prepare("SELECT actor_id,role FROM commitment_acceptances WHERE commitment_id=?").get("macro_agreement");
+  assert.equal(acceptance.actor_id, approver.user.id);
+  assert.equal(acceptance.role, "approver");
+  assert.equal(
+    app.storage.db.prepare("SELECT aggregate_id FROM audit_events WHERE workspace_id=? AND event_type='commitment_activated' ORDER BY recorded_at DESC LIMIT 1").get("w_a").aggregate_id,
+    project.id,
+  );
+  assert.deepEqual((await approver.client.projection()).actions, []);
+});
+
 test("execution cannot propose a commitment even when it can record measurements", async (t) => {
   const context = await fixture(t);
   const { admin } = context;
