@@ -462,6 +462,23 @@ function persist(storage, workspaceId, state, before, meta, nextRevision) {
     now = stamp(),
     user = state.users.find((u) => u.id === meta.actorId) || {};
   const prior = new Map((before?.items || []).map((i) => [i.id, i]));
+  for (const item of state.items) {
+    const old = prior.get(item.id);
+    if (!old || old.ownerId === item.ownerId) continue;
+    const endedCommitments = db.prepare(
+      "SELECT id FROM commitments WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status IN('proposed','active') ORDER BY version",
+    ).all(workspaceId, item.id);
+    if (endedCommitments.length)
+      db.prepare(
+        "UPDATE commitments SET status='superseded' WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status IN('proposed','active')",
+      ).run(workspaceId, item.id);
+    const ownerChange = (state.events || []).findLast(
+      (event) => event.itemId === item.id && event.eventType === "owner_changed" &&
+        event.fromValue === old.ownerId && event.toValue === item.ownerId,
+    );
+    if (ownerChange)
+      ownerChange.endedCommitmentIds = endedCommitments.map(({ id }) => id);
+  }
   const itemInsert = db.prepare(
     "INSERT INTO items VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(workspace_id,id) DO UPDATE SET parent_item_id=excluded.parent_item_id,order_index=excluded.order_index,organization_id=excluded.organization_id,owner_id=excluded.owner_id,version=excluded.version,archived_at=excluded.archived_at,data_json=excluded.data_json",
   );
