@@ -717,6 +717,11 @@ function reconcileBlockers(state, before, actorId) {
     }
 }
 
+function isExecutableTaskOwner(state, item, userId) {
+  return item?.type === "task" && item.ownerId === userId &&
+    !state.items.some((candidate) => candidate.parentId === item.id);
+}
+
 export function createService(
   storage,
   {
@@ -1258,15 +1263,16 @@ export function createService(
       "COMMITMENT_PROPOSAL_SUPERSEDED",
       "Existe uma proposta mais recente para esta atividade.",
     );
+    const role = isExecutableTaskOwner(d.state, item, userId) ? "owner" : "approver";
     assert(
-      userId !== commitment.proposedBy,
+      userId !== commitment.proposedBy || role === "owner",
       403,
       "COMMITMENT_ACCEPTANCE_FORBIDDEN",
       "Quem propôs o compromisso não pode aprovar a própria proposta.",
     );
     db.prepare(
       "INSERT OR IGNORE INTO commitment_acceptances(commitment_id,actor_id,role,accepted_at) VALUES(?,?,?,?)",
-    ).run(commitment.id, userId, "approver", stamp());
+    ).run(commitment.id, userId, role, stamp());
     db.prepare(
       "UPDATE commitments SET status='superseded' WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status='proposed' AND id<>?",
     ).run(workspaceId, item.id, commitment.id);
@@ -1281,7 +1287,7 @@ export function createService(
       actorId: userId,
       correlationId,
       organizationId: item.organizationId,
-      payload: { commitmentId: commitment.id, role: "approver", status },
+      payload: { commitmentId: commitment.id, role, status },
     });
     return { id: commitment.id, itemId: item.id, status };
   };
@@ -1544,14 +1550,20 @@ export function createService(
         if (!latest || commitment.version > latest.version) latestPendingByItem.set(commitment.itemId, commitment);
       }
       actions = [...latestPendingByItem.values()]
-        .filter((commitment) => commitment.proposedBy !== userId && !accepted.has(commitment.id))
+        .filter((commitment) => {
+          const item = safeItems.get(commitment.itemId);
+          const isOwner = isExecutableTaskOwner(domain.state, item, userId);
+          return (commitment.proposedBy !== userId || isOwner) && !accepted.has(commitment.id);
+        })
         .filter((commitment) => evaluatePermission(domain.state, actor, "manage_commitment", safeItems.get(commitment.itemId)).allowed)
         .map((commitment) => ({
           type: "accept_commitment",
           commitmentId: commitment.id,
           itemId: commitment.itemId,
           itemTitle: safeItems.get(commitment.itemId)?.title || "",
-          role: "approver",
+          role: isExecutableTaskOwner(domain.state, safeItems.get(commitment.itemId), userId)
+            ? "owner"
+            : "approver",
           startAt: commitment.startAt,
           dueAt: commitment.dueAt,
           scopeNote: commitment.scopeNote || "",

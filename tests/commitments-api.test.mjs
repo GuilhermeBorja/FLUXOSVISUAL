@@ -622,6 +622,55 @@ test("projection lists a pending commitment only for an independent approver", a
   assert.deepEqual((await approver.client.projection()).actions.map((action) => ({ type: action.type, commitmentId: action.commitmentId })), [{ type: "accept_commitment", commitmentId: "action_agreement" }]);
 });
 
+test("the authorized activity owner can accept their own proposal and the acceptance is recorded", async (t) => {
+  const context = await fixture(t);
+  const { admin, app } = context;
+  const owner = await addWorkspaceUser(context, {
+    id: "u_commitment_owner_self",
+    email: "commitment-owner-self@example.test",
+    operations: ["view_item", "manage_commitment"],
+  });
+  const item = await createItem(admin, "Compromisso próprio", { id: "owner_self_commitment", ownerId: owner.user.id });
+  app.storage.db.prepare(
+    "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run("owner_self_agreement", "w_a", item.id, "agreement", 1, "proposed", "2026-11-20", "2026-11-22", null, owner.user.id, ADMIN.id, owner.user.id, null, "2026-11-19T08:00:00.000Z");
+
+  const actions = (await owner.client.projection()).actions;
+  assert.deepEqual(actions.map(({ type, commitmentId, role }) => ({ type, commitmentId, role })), [
+    { type: "accept_commitment", commitmentId: "owner_self_agreement", role: "owner" },
+  ]);
+
+  await owner.client.command("acceptCommitment", ["owner_self_agreement"]);
+
+  assert.equal(app.storage.db.prepare("SELECT status FROM commitments WHERE id=?").get("owner_self_agreement").status, "active");
+  assert.equal(
+    app.storage.db.prepare("SELECT role FROM commitment_acceptances WHERE commitment_id=? AND actor_id=?").get("owner_self_agreement", owner.user.id).role,
+    "owner",
+  );
+  assert.deepEqual(
+    JSON.parse(app.storage.db.prepare("SELECT payload_json FROM audit_events WHERE workspace_id=? AND event_type='commitment_activated' ORDER BY recorded_at DESC LIMIT 1").get("w_a").payload_json),
+    { commitmentId: "owner_self_agreement", role: "owner", status: "active" },
+  );
+});
+
+test("a proposer who is not the activity owner cannot accept their proposal", async (t) => {
+  const context = await fixture(t);
+  const { admin, app } = context;
+  const owner = await addWorkspaceUser(context, {
+    id: "u_commitment_nonproposer_owner",
+    email: "commitment-nonproposer-owner@example.test",
+    operations: ["view_item", "manage_commitment"],
+  });
+  const item = await createItem(admin, "Proposta de terceiro", { id: "nonowner_proposal", ownerId: owner.user.id });
+  app.storage.db.prepare(
+    "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run("nonowner_proposal_agreement", "w_a", item.id, "agreement", 1, "proposed", "2026-11-20", "2026-11-22", null, ADMIN.id, ADMIN.id, owner.user.id, null, "2026-11-19T08:00:00.000Z");
+
+  assert.deepEqual((await admin.projection()).actions.map((action) => action.commitmentId), []);
+  await assert.rejects(admin.command("acceptCommitment", ["nonowner_proposal_agreement"]));
+  assert.deepEqual((await owner.client.projection()).actions.map((action) => action.commitmentId), ["nonowner_proposal_agreement"]);
+});
+
 test("execution cannot propose a commitment even when it can record measurements", async (t) => {
   const context = await fixture(t);
   const { admin } = context;
