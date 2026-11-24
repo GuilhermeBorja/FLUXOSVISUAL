@@ -725,6 +725,22 @@ test("changing an activity owner closes the active commitment and records both o
       { version: 3, status: "active", ownerId: nextOwner.user.id },
     ],
   );
+  const historyResponse = await admin.request(
+    `/api/workspaces/w_a/audit-events?itemId=${item.id}&limit=100`,
+  );
+  assert.equal(historyResponse.status, 200);
+  const itemHistory = historyResponse.data.events;
+  const ownerChangeEvent = itemHistory.find((event) => event.eventType === "owner_changed");
+  assert.ok(ownerChangeEvent);
+  assert.equal(ownerChangeEvent.fromValue, previousOwner.user.id);
+  assert.equal(ownerChangeEvent.toValue, nextOwner.user.id);
+  assert.deepEqual(ownerChangeEvent.endedCommitmentIds, ["owner_change_agreement", "owner_change_pending"]);
+  const nextProposalEvent = itemHistory.find(
+    (event) => event.eventType === "commitment_proposed" && event.commitmentId === nextCommitmentId,
+  );
+  assert.ok(nextProposalEvent);
+  assert.equal(nextProposalEvent.itemId, item.id);
+  assert.equal(nextProposalEvent.ownerId, nextOwner.user.id);
 });
 
 test("execution cannot propose a commitment even when it can record measurements", async (t) => {
