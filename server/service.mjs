@@ -462,6 +462,23 @@ function persist(storage, workspaceId, state, before, meta, nextRevision) {
     now = stamp(),
     user = state.users.find((u) => u.id === meta.actorId) || {};
   const prior = new Map((before?.items || []).map((i) => [i.id, i]));
+  for (const item of state.items) {
+    const old = prior.get(item.id);
+    if (!old || old.ownerId === item.ownerId) continue;
+    const endedCommitments = db.prepare(
+      "SELECT id FROM commitments WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status IN('proposed','active') ORDER BY version",
+    ).all(workspaceId, item.id);
+    if (endedCommitments.length)
+      db.prepare(
+        "UPDATE commitments SET status='superseded' WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status IN('proposed','active')",
+      ).run(workspaceId, item.id);
+    const ownerChange = (state.events || []).findLast(
+      (event) => event.itemId === item.id && event.eventType === "owner_changed" &&
+        event.fromValue === old.ownerId && event.toValue === item.ownerId,
+    );
+    if (ownerChange)
+      ownerChange.endedCommitmentIds = endedCommitments.map(({ id }) => id);
+  }
   const itemInsert = db.prepare(
     "INSERT INTO items VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(workspace_id,id) DO UPDATE SET parent_item_id=excluded.parent_item_id,order_index=excluded.order_index,organization_id=excluded.organization_id,owner_id=excluded.owner_id,version=excluded.version,archived_at=excluded.archived_at,data_json=excluded.data_json",
   );
@@ -715,6 +732,11 @@ function reconcileBlockers(state, before, actorId) {
       blocker.resolvedBy = actorId;
       blocker.resolvedAt = now;
     }
+}
+
+function isExecutableTaskOwner(state, item, userId) {
+  return item?.type === "task" && item.ownerId === userId &&
+    !state.items.some((candidate) => candidate.parentId === item.id);
 }
 
 export function createService(
@@ -1258,15 +1280,16 @@ export function createService(
       "COMMITMENT_PROPOSAL_SUPERSEDED",
       "Existe uma proposta mais recente para esta atividade.",
     );
+    const role = isExecutableTaskOwner(d.state, item, userId) ? "owner" : "approver";
     assert(
-      userId !== commitment.proposedBy,
+      userId !== commitment.proposedBy || role === "owner",
       403,
       "COMMITMENT_ACCEPTANCE_FORBIDDEN",
       "Quem propôs o compromisso não pode aprovar a própria proposta.",
     );
     db.prepare(
       "INSERT OR IGNORE INTO commitment_acceptances(commitment_id,actor_id,role,accepted_at) VALUES(?,?,?,?)",
-    ).run(commitment.id, userId, "approver", stamp());
+    ).run(commitment.id, userId, role, stamp());
     db.prepare(
       "UPDATE commitments SET status='superseded' WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status='proposed' AND id<>?",
     ).run(workspaceId, item.id, commitment.id);
@@ -1281,7 +1304,7 @@ export function createService(
       actorId: userId,
       correlationId,
       organizationId: item.organizationId,
-      payload: { commitmentId: commitment.id, role: "approver", status },
+      payload: { commitmentId: commitment.id, role, status },
     });
     return { id: commitment.id, itemId: item.id, status };
   };
@@ -1544,14 +1567,20 @@ export function createService(
         if (!latest || commitment.version > latest.version) latestPendingByItem.set(commitment.itemId, commitment);
       }
       actions = [...latestPendingByItem.values()]
-        .filter((commitment) => commitment.proposedBy !== userId && !accepted.has(commitment.id))
+        .filter((commitment) => {
+          const item = safeItems.get(commitment.itemId);
+          const isOwner = isExecutableTaskOwner(domain.state, item, userId);
+          return (commitment.proposedBy !== userId || isOwner) && !accepted.has(commitment.id);
+        })
         .filter((commitment) => evaluatePermission(domain.state, actor, "manage_commitment", safeItems.get(commitment.itemId)).allowed)
         .map((commitment) => ({
           type: "accept_commitment",
           commitmentId: commitment.id,
           itemId: commitment.itemId,
           itemTitle: safeItems.get(commitment.itemId)?.title || "",
-          role: "approver",
+          role: isExecutableTaskOwner(domain.state, safeItems.get(commitment.itemId), userId)
+            ? "owner"
+            : "approver",
           startAt: commitment.startAt,
           dueAt: commitment.dueAt,
           scopeNote: commitment.scopeNote || "",

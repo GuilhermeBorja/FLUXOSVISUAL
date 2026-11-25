@@ -622,6 +622,127 @@ test("projection lists a pending commitment only for an independent approver", a
   assert.deepEqual((await approver.client.projection()).actions.map((action) => ({ type: action.type, commitmentId: action.commitmentId })), [{ type: "accept_commitment", commitmentId: "action_agreement" }]);
 });
 
+test("the authorized activity owner can accept their own proposal and the acceptance is recorded", async (t) => {
+  const context = await fixture(t);
+  const { admin, app } = context;
+  const owner = await addWorkspaceUser(context, {
+    id: "u_commitment_owner_self",
+    email: "commitment-owner-self@example.test",
+    operations: ["view_item", "manage_commitment"],
+  });
+  const item = await createItem(admin, "Compromisso próprio", { id: "owner_self_commitment", ownerId: owner.user.id });
+  app.storage.db.prepare(
+    "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run("owner_self_agreement", "w_a", item.id, "agreement", 1, "proposed", "2026-11-20", "2026-11-22", null, owner.user.id, ADMIN.id, owner.user.id, null, "2026-11-19T08:00:00.000Z");
+
+  const actions = (await owner.client.projection()).actions;
+  assert.deepEqual(actions.map(({ type, commitmentId, role }) => ({ type, commitmentId, role })), [
+    { type: "accept_commitment", commitmentId: "owner_self_agreement", role: "owner" },
+  ]);
+
+  await owner.client.command("acceptCommitment", ["owner_self_agreement"]);
+
+  assert.equal(app.storage.db.prepare("SELECT status FROM commitments WHERE id=?").get("owner_self_agreement").status, "active");
+  assert.equal(
+    app.storage.db.prepare("SELECT role FROM commitment_acceptances WHERE commitment_id=? AND actor_id=?").get("owner_self_agreement", owner.user.id).role,
+    "owner",
+  );
+  assert.deepEqual(
+    JSON.parse(app.storage.db.prepare("SELECT payload_json FROM audit_events WHERE workspace_id=? AND event_type='commitment_activated' ORDER BY recorded_at DESC LIMIT 1").get("w_a").payload_json),
+    { commitmentId: "owner_self_agreement", role: "owner", status: "active" },
+  );
+});
+
+test("a proposer who is not the activity owner cannot accept their proposal", async (t) => {
+  const context = await fixture(t);
+  const { admin, app } = context;
+  const owner = await addWorkspaceUser(context, {
+    id: "u_commitment_nonproposer_owner",
+    email: "commitment-nonproposer-owner@example.test",
+    operations: ["view_item", "manage_commitment"],
+  });
+  const item = await createItem(admin, "Proposta de terceiro", { id: "nonowner_proposal", ownerId: owner.user.id });
+  app.storage.db.prepare(
+    "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run("nonowner_proposal_agreement", "w_a", item.id, "agreement", 1, "proposed", "2026-11-20", "2026-11-22", null, ADMIN.id, ADMIN.id, owner.user.id, null, "2026-11-19T08:00:00.000Z");
+
+  assert.deepEqual((await admin.projection()).actions.map((action) => action.commitmentId), []);
+  await assert.rejects(admin.command("acceptCommitment", ["nonowner_proposal_agreement"]));
+  assert.deepEqual((await owner.client.projection()).actions.map((action) => action.commitmentId), ["nonowner_proposal_agreement"]);
+});
+
+test("changing an activity owner closes the active commitment and records both owners in history", async (t) => {
+  const context = await fixture(t);
+  const { admin, app } = context;
+  const previousOwner = await addWorkspaceUser(context, {
+    id: "u_previous_owner",
+    email: "previous-owner@example.test",
+    operations: ["view_item", "manage_commitment"],
+  });
+  const nextOwner = await addWorkspaceUser(context, {
+    id: "u_next_owner",
+    email: "next-owner@example.test",
+    operations: ["view_item", "manage_commitment"],
+  });
+  const item = await createItem(admin, "Transferir compromisso", {
+    id: "owner_change_commitment",
+    ownerId: previousOwner.user.id,
+  });
+  app.storage.db.prepare(
+    "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run("owner_change_agreement", "w_a", item.id, "agreement", 1, "active", "2026-11-20", "2026-11-22", null, ADMIN.id, ADMIN.id, previousOwner.user.id, "2026-11-19T08:00:00.000Z", "2026-11-19T08:00:00.000Z");
+  app.storage.db.prepare(
+    "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  ).run("owner_change_pending", "w_a", item.id, "agreement", 2, "proposed", "2026-11-23", "2026-11-25", null, ADMIN.id, ADMIN.id, previousOwner.user.id, null, "2026-11-19T09:00:00.000Z");
+  app.storage.db.prepare(
+    "INSERT INTO commitment_acceptances(commitment_id,actor_id,role,accepted_at) VALUES(?,?,?,?)",
+  ).run("owner_change_agreement", previousOwner.user.id, "owner", "2026-11-19T08:00:00.000Z");
+
+  await admin.command("updateItem", [item.id, { ownerId: nextOwner.user.id }]);
+
+  assert.equal(app.storage.db.prepare("SELECT status FROM commitments WHERE id=?").get("owner_change_agreement").status, "superseded");
+  const change = JSON.parse(app.storage.db.prepare("SELECT payload_json FROM audit_events WHERE workspace_id=? AND event_type='owner_changed' ORDER BY recorded_at DESC LIMIT 1").get("w_a").payload_json);
+  assert.deepEqual(
+    { fromValue: change.fromValue, toValue: change.toValue, endedCommitmentIds: change.endedCommitmentIds },
+    { fromValue: previousOwner.user.id, toValue: nextOwner.user.id, endedCommitmentIds: ["owner_change_agreement", "owner_change_pending"] },
+  );
+  assert.equal(app.storage.db.prepare("SELECT COUNT(*) AS count FROM commitment_acceptances WHERE commitment_id=?").get("owner_change_agreement").count, 1);
+
+  await admin.command("proposeCommitment", [item.id, {
+    startAt: "2026-11-23",
+    dueAt: "2026-11-25",
+    ownerId: nextOwner.user.id,
+  }]);
+  const nextCommitmentId = app.storage.db.prepare("SELECT id FROM commitments WHERE workspace_id=? AND item_id=? AND kind='agreement' AND version=3").get("w_a", item.id).id;
+  await nextOwner.client.command("acceptCommitment", [nextCommitmentId]);
+  assert.deepEqual(
+    app.storage.db.prepare(
+      "SELECT version,status,owner_id AS ownerId FROM commitments WHERE workspace_id=? AND item_id=? AND kind='agreement' ORDER BY version",
+    ).all("w_a", item.id).map((row) => ({ ...row })),
+    [
+      { version: 1, status: "superseded", ownerId: previousOwner.user.id },
+      { version: 2, status: "superseded", ownerId: previousOwner.user.id },
+      { version: 3, status: "active", ownerId: nextOwner.user.id },
+    ],
+  );
+  const historyResponse = await admin.request(
+    `/api/workspaces/w_a/audit-events?itemId=${item.id}&limit=100`,
+  );
+  assert.equal(historyResponse.status, 200);
+  const itemHistory = historyResponse.data.events;
+  const ownerChangeEvent = itemHistory.find((event) => event.eventType === "owner_changed");
+  assert.ok(ownerChangeEvent);
+  assert.equal(ownerChangeEvent.fromValue, previousOwner.user.id);
+  assert.equal(ownerChangeEvent.toValue, nextOwner.user.id);
+  assert.deepEqual(ownerChangeEvent.endedCommitmentIds, ["owner_change_agreement", "owner_change_pending"]);
+  const nextProposalEvent = itemHistory.find(
+    (event) => event.eventType === "commitment_proposed" && event.commitmentId === nextCommitmentId,
+  );
+  assert.ok(nextProposalEvent);
+  assert.equal(nextProposalEvent.itemId, item.id);
+  assert.equal(nextProposalEvent.ownerId, nextOwner.user.id);
+});
+
 test("execution cannot propose a commitment even when it can record measurements", async (t) => {
   const context = await fixture(t);
   const { admin } = context;
