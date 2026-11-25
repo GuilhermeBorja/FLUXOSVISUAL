@@ -52,6 +52,43 @@ try {
   await login(owner);
   assert.equal(await owner.locator('#loginForm select').count(), 0, 'production login does not offer impersonation');
 
+  await owner.locator('[data-action="admin"]').click();
+  assert.ok(await owner.locator('[data-admin-tab="calendar"]').count(), 'calendar settings are visible to an authorized administrator');
+  await owner.locator('[data-admin-tab="calendar"]').click();
+  const calendarForm = owner.locator('#calendarForm');
+  await calendarForm.waitFor();
+  assert.match(await owner.locator('#panelRoot').innerText(), /Nenhum calendário de projeto configurado/);
+  await calendarForm.locator('[name="kind"]').selectOption('working_time');
+  await calendarForm.locator('[name="workingWeekdays"]').evaluateAll(elements => elements.forEach(element => { element.checked = false; }));
+  const emptyWeekdayRequest = owner.waitForRequest(request => request.url().endsWith('/commands') && request.method() === 'POST', { timeout: 750 }).then(() => true).catch(() => false);
+  await calendarForm.locator('button[type="submit"]').click();
+  assert.equal(await emptyWeekdayRequest, false, 'a working-time calendar cannot be saved without any working day');
+  assert.match(await owner.locator('#panelError').innerText(), /Selecione pelo menos um dia de trabalho/);
+  await calendarForm.locator('[name="workingWeekdays"]').evaluateAll(elements => elements.forEach(element => { element.checked = [1, 2, 3, 4, 5, 6].includes(Number(element.value)); }));
+  await calendarForm.locator('[name="holidays"]').fill('25/12/2026');
+  const invalidCalendarResponse = owner.waitForResponse(response => response.url().endsWith('/commands') && response.request().method() === 'POST');
+  await calendarForm.locator('button[type="submit"]').click();
+  assert.equal((await invalidCalendarResponse).status(), 422);
+  assert.equal(await owner.locator('#panelError').isVisible(), true, 'backend calendar validation errors are shown in the panel');
+  await calendarForm.locator('[name="holidays"]').fill('2026-12-25');
+  const calendarResponse = owner.waitForResponse(response => response.url().endsWith('/commands') && response.request().method() === 'POST');
+  await calendarForm.locator('button[type="submit"]').click();
+  assert.equal((await calendarResponse).status(), 200);
+  assert.match(await owner.locator('#noticeRoot').innerText(), /Calendário atualizado/);
+  assert.deepEqual({ ...setup.app.storage.db.prepare('SELECT id,kind,timezone,definition_json FROM project_calendars WHERE workspace_id=? AND id=?').get('w_a', 'project-calendar') }, {
+    id: 'project-calendar', kind: 'working_time', timezone: 'America/Sao_Paulo',
+    definition_json: JSON.stringify({ kind: 'working_time', workingWeekdays: [1, 2, 3, 4, 5, 6], holidays: ['2026-12-25'] }),
+  });
+  await owner.reload({ waitUntil: 'networkidle' });
+  await owner.waitForFunction(() => window.FluxosBackend?.status.ready);
+  await owner.locator('[data-action="admin"]').click();
+  await owner.locator('[data-admin-tab="calendar"]').click();
+  await owner.locator('#calendarForm').waitFor();
+  assert.equal(await owner.locator('#calendarForm [name="kind"]').inputValue(), 'working_time');
+  assert.equal(await owner.locator('#calendarForm [name="workingWeekdays"][value="6"]').isChecked(), true);
+  assert.equal(await owner.locator('#calendarForm [name="holidays"]').inputValue(), '2026-12-25');
+  await closePanel(owner);
+
   await owner.locator('.workspace-heading-actions [data-action="create"]').click();
   const form = owner.locator('#createItemForm');
   await form.locator('#prd43PasteActivities').fill('Projeto compartilhado\n\tAtividade compartilhada\n\tRevisão compartilhada');
@@ -103,6 +140,10 @@ try {
   }
   await owner.setViewportSize({ width: 1366, height: 768 });
   await login(operator, user.email);
+  await expand(operator, root.id);
+  await operator.locator('[data-action="admin"]').click();
+  assert.equal(await operator.locator('[data-admin-tab="calendar"]').count(), 0, 'calendar settings are hidden without manage_calendar permission');
+  await operator.locator('#panelRoot button[data-action="close-panel"]').click();
   await expand(operator, root.id);
   await operator.locator(`.prd5-gantt-edit[data-select="${activity.id}"]`).click();
   assert.equal(await operator.locator('#measurementForm').count(), 0, 'users without measurement permission do not get an editable field');

@@ -1493,6 +1493,7 @@ export function createService(
         message: "Cronograma incompleto.",
       };
     }
+    let calendars = [];
     let trend;
     let commitmentRecords = [];
     let actions = [];
@@ -1514,7 +1515,7 @@ export function createService(
         )
         .all(workspaceId)
         .map((policy) => ({ ...policy, milestones: JSON.parse(policy.milestonesJson || "[]") }));
-      const calendars = db
+      calendars = db
         .prepare(
           "SELECT id,kind,timezone,definition_json FROM project_calendars WHERE workspace_id=?",
         )
@@ -1569,6 +1570,7 @@ export function createService(
       .get(workspaceId);
     return {
       state,
+      calendars,
       asOf,
       revision,
       workspace,

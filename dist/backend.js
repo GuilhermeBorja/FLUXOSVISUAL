@@ -48,6 +48,7 @@
   function desiredState() {
     const desired = clone(approvalBase || state);
     for (const key of ["events", "registryEvents", "approvalDecisions", "attachments", "archivedAttachments"]) delete desired[key];
+    delete desired.calendars;
     for (const key of preferenceKeys) delete desired[key];
     delete desired.currentUserId;
     for (const user of desired.users || []) {
@@ -172,6 +173,7 @@
     if (!projection?.state || !Number.isInteger(Number(projection.revision))) throw new Error("O servidor retornou uma projeção inválida.");
     const preferences = preservePreferences ? preferenceData(state) : null;
     state = Object.assign(emptyState(), projection.state);
+    state.calendars = projection.calendars || [];
     state.asOf = projection.asOf || state.asOf || new Date().toISOString();
     state.trend = projection.trend || { itemTrendById: {} };
     state.commitments = projection.commitments || [];
@@ -609,9 +611,11 @@
   }
 
   async function manageCalendar(form) {
+    const kind = String(form.get("kind") || "working_time");
     const workingWeekdays = form.getAll("workingWeekdays").map(Number);
+    if (kind === "working_time" && !workingWeekdays.length) throw new Error("Selecione pelo menos um dia de trabalho.");
     const holidays = String(form.get("holidays") || "").split(",").map(value => value.trim()).filter(Boolean);
-    return operationalCommand("manageCalendar", [{ id: "project-calendar", kind: String(form.get("kind") || "working_time"), timezone: "America/Sao_Paulo", workingWeekdays, holidays }], "Calendário atualizado.");
+    return operationalCommand("manageCalendar", [{ id: "project-calendar", kind, timezone: "America/Sao_Paulo", workingWeekdays, holidays }], "Calendário atualizado.");
   }
 
   async function createCorrectiveActivity(form, itemId) {

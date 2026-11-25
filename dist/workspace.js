@@ -1930,11 +1930,29 @@ function renderUserEditForm() {
   return `<section class="panel-section"><h3>Editar usuário</h3><form id="userEditForm" class="form-stack"><input type="hidden" name="userId" value="${escapeHtml(user.id)}"/><div class="form-row"><label>Nome<input name="name" value="${escapeHtml(user.name)}" required maxlength="160"/></label><label>E-mail<input name="email" type="email" value="${escapeHtml(user.email)}" required/></label></div><label>Perfil GPO<select name="profileId"><option value="">Permissões individuais</option>${(state.permissionProfiles || []).map((profile) => option(profile.id,profile.name,profile.id === user.profileId)).join("")}</select></label><div class="form-row"><label>Empresa<select name="organizationId" id="editUserOrganization">${organizations.map((org) => option(org.id,org.name,org.id === user.organizationId)).join("")}</select></label><label>Setor<select name="sectorId" id="editUserSector">${sectors.map((sector) => option(sector.id,sector.name,sector.id === user.sectorId)).join("")}</select></label></div><label>Estado (UF)<input name="state" value="${escapeHtml(user.state || "")}" maxlength="2" required/></label><div class="row-actions"><button class="button primary" type="submit">Salvar alterações</button><button class="button quiet" type="button" data-action="cancel-user-edit">Cancelar</button></div></form></section>`;
 }
 
+function renderCalendarSettings() {
+  if (gpoDecision(currentUser(), "manage_calendar", null) !== true) return "";
+  const calendar = (state.calendars || []).find((entry) => entry.id === "project-calendar");
+  const weekdays = new Set(calendar?.workingWeekdays || [1, 2, 3, 4, 5]);
+  const holidays = Array.isArray(calendar?.holidays) ? calendar.holidays.join(", ") : "";
+  const weekdayLabels = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+  return `<section class="panel-section"><h3>Calendário do workspace</h3>
+    <p class="muted" role="status">${calendar ? "Configuração atual do calendário de projeto." : "Nenhum calendário de projeto configurado. O cronograma considera dias úteis de segunda a sexta-feira."}</p>
+    <form id="calendarForm" class="form-stack">
+      <label>Tipo de calendário<select name="kind">${option("working_time", "Dias úteis", (calendar?.kind || "working_time") === "working_time")}${option("elapsed_days", "Dias corridos", calendar?.kind === "elapsed_days")}</select></label>
+      <fieldset><legend>Dias de trabalho</legend><div class="form-row">${weekdayLabels.map((label, day) => `<label class="inline-check"><input type="checkbox" name="workingWeekdays" value="${day}" ${weekdays.has(day) ? "checked" : ""}/>${label}</label>`).join("")}</div></fieldset>
+      <label>Feriados (AAAA-MM-DD, separados por vírgula)<input name="holidays" value="${escapeHtml(holidays)}" placeholder="2026-12-25, 2027-01-01"/><small>Deixe vazio quando não houver feriados cadastrados.</small></label>
+      <p class="muted">Fuso horário: America/Sao_Paulo</p>
+      <button class="button primary" type="submit">Salvar calendário</button>
+    </form></section>`;
+}
+
 function renderAdmin() {
   const tabs = [];
   if (canManageAnyUsers(currentUser())) tabs.push({id:"users",label:"Usuários"});
   if (canManageAnyOrganization(currentUser()) || gpoDecision(currentUser(),"manage_organization",null) === true) tabs.push({id:"organizations",label:"Empresas e setores"});
   if (canManageGpo(currentUser())) { tabs.push({id:"gpo",label:"GPO"}); tabs.push({id:"statuses",label:"Status"}); }
+  if (gpoDecision(currentUser(),"manage_calendar",null) === true) tabs.push({id:"calendar",label:"Calendário"});
   if (canManageGpo(currentUser()) || state.items.some((item)=>item.archivedAt && canEditItem(currentUser(),item))) tabs.push({id:"archive",label:"Arquivados"});
   if (canManageAnyOrganization(currentUser()) || canManageGpo(currentUser())) tabs.push({id:"types",label:"Tipos de item"});
   tabs.push({id:"preferences",label:"Preferências"});
@@ -1945,6 +1963,7 @@ function renderAdmin() {
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}${gpoDecision(currentUser(),"manage_organization",null) === true ? `<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section>` : ""}<section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.filter((org) => canManageOrganization(currentUser(),org.id)).map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "gpo" && canManageGpo(currentUser()) ? renderGpo() : ""}
     ${ui.adminTab === "statuses" && canManageGpo(currentUser()) ? renderStatusSettings() : ""}
+    ${ui.adminTab === "calendar" ? renderCalendarSettings() : ""}
     ${ui.adminTab === "archive" && (canManageGpo(currentUser()) || state.items.some((item)=>item.archivedAt && canEditItem(currentUser(),item))) ? renderArchivedItemsGrouped() : ""}
     ${ui.adminTab === "types" ? renderTypeSettings() : ""}
     ${ui.adminTab === "preferences" ? renderViewSettingsPanel().replace(/^.*?<div class="drawer-body">/s,"").replace(/<\/div>$/,"") : ""}
