@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG GITHUB_SHA=local
+ENV GITHUB_SHA=$GITHUB_SHA
 RUN npm run build && npm run check && npm run check:backend
 
 FROM node:24-bookworm-slim AS runtime
