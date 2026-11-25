@@ -1,5 +1,8 @@
 let graphInstance = null;
 let returnFocus = null;
+let prd43GanttObserver = null;
+let prd43SelectedTiId = "";
+let prd44LinkSource = "";
 ui.positions = {};
 
 function icon(name) {
@@ -179,7 +182,7 @@ function statusBadge(item, compact = false){
   if(!flags.length&&isOverdue(item))flags.push(Math.abs(delta)+"d de atraso");
   if(!flags.length&&isAtRisk(item))flags.push("risco");
   const detail=!compact&&flags.length?`<span class="prd43-status-alert" title="${escapeHtml(alerts.source||flags.join(" · "))}">${escapeHtml(flags.join(" · "))}</span>`:"";
-  return `<span class="status-badge ${signal}" style="--status-color:${escapeHtml(prd43Colors[signal])}" title="${escapeHtml(signalLabel(item))}"><span class="status-symbol">${icon(config.icon)}</span><span class="prd43-status-name">${escapeHtml(statusDisplayLabel(item))}</span>${detail}</span>`;
+  return `<span class="status-badge ${signal}" style="--status-color:${escapeHtml(config.color)}" title="${escapeHtml(signalLabel(item))}"><span class="status-symbol">${icon(config.icon)}</span><span class="prd43-status-name">${escapeHtml(statusDisplayLabel(item))}</span>${detail}</span>`;
 }
 function dateCell(value, withTime = false) {
   if (!value) return "—";
@@ -249,7 +252,7 @@ function prd41SavePaneWidths() {
 function prd41ApplyPaneLayout() {
   const container = document.querySelector(".prd41-workspace");
   if (!container || !prd41PaneWidths) return;
-  if(container.classList.contains("prd5-two-pane")){container.style.setProperty("--prd5-gantt-width",prd5GanttWidth+"%");container.classList.toggle("is-focused",!!prd41FocusedPane);container.dataset.focus=prd41FocusedPane||"all";container.querySelectorAll(".prd41-pane").forEach(el=>el.classList.toggle("is-focus-target",el.dataset.pane===prd41FocusedPane));container.querySelectorAll("[data-pane-focus]").forEach(el=>{const selected=el.dataset.paneFocus===prd41FocusedPane;el.setAttribute("aria-pressed",String(selected));el.setAttribute("title",selected?"Restaurar painéis":"Maximizar painel");el.setAttribute("aria-label",selected?"Restaurar painéis":"Maximizar "+el.dataset.paneFocus);el.innerHTML=icon(selected?"minimize-2":"maximize-2");});mountIcons();requestAnimationFrame(prd43DrawGanttRelations);return;}
+  if(container.classList.contains("prd5-two-pane")){container.style.setProperty("--prd5-gantt-width",prd5GanttWidth+"%");container.classList.toggle("is-focused",!!prd41FocusedPane);container.dataset.focus=prd41FocusedPane||"all";container.querySelectorAll(".prd41-pane").forEach(el=>el.classList.toggle("is-focus-target",el.dataset.pane===prd41FocusedPane));container.querySelectorAll("[data-pane-focus]").forEach(el=>{const selected=el.dataset.paneFocus===prd41FocusedPane;el.setAttribute("aria-pressed",String(selected));el.setAttribute("title",selected?"Restaurar painéis":"Maximizar painel");el.setAttribute("aria-label",selected?"Restaurar painéis":"Maximizar "+el.dataset.paneFocus);el.innerHTML=icon(selected?"minimize-2":"maximize-2");});container.querySelectorAll('[data-pane-split="gantt-graph"]').forEach(el=>{el.setAttribute("aria-valuemin","35");el.setAttribute("aria-valuemax","80");el.setAttribute("aria-valuenow",String(Math.round(prd5GanttWidth)));});mountIcons();requestAnimationFrame(prd43DrawGanttRelations);return;}
   const values = prd41PaneWidths;
   container.style.setProperty("--pane-table", values.table + "fr");
   container.style.setProperty("--pane-graph", values.graph + "fr");
@@ -840,74 +843,9 @@ function emptyMarkup() {
 }
 
 function scheduleAnalysis(items) {
-  const children = new Set(items.map((item) => item.parentId).filter(Boolean));
-  let tasks = items.filter((item) => !children.has(item.id) && item.status !== "cancelled");
-  if (!tasks.length) tasks = items.filter((item) => item.status !== "cancelled");
-  if (!tasks.length) return {valid:true,reliable:false,startDate:today(),finishDate:"",durationDays:0,rows:[],message:"Não há atividades ativas para calcular a previsão."};
-  const taskIds = new Set(tasks.map((item) => item.id));
-  const temporalTypes = new Set(["TI"]);
-  const dependencies = expandedSummaryTi(items, relationsFor(items)).filter((relation) => temporalTypes.has(relation.relationType) && taskIds.has(relation.sourceId) && taskIds.has(relation.targetId));
-  const sortedDates = tasks.map((item) => item.plannedStartAt).filter(Boolean).sort();
-  const startDate = sortedDates[0] || today();
-  const duration = new Map();
-  const plannedStart = new Map();
-  let durationsComplete = tasks.length > 0;
-  for (const item of tasks) {
-    const explicitDuration = Number(item.plannedDurationDays);
-    const hasExplicitDuration = item.plannedDurationDays !== null && item.plannedDurationDays !== undefined && item.plannedDurationDays !== "" && Number.isFinite(explicitDuration) && explicitDuration >= 0;
-    const hasDateRange = item.plannedStartAt && item.dueAt && item.dueAt >= item.plannedStartAt;
-    const days = hasExplicitDuration
-      ? explicitDuration
-      : hasDateRange
-        ? inclusiveDurationDays(item.plannedStartAt,item.dueAt)
-        : null;
-    if (days === null) durationsComplete = false;
-    duration.set(item.id,days ?? 0);
-    plannedStart.set(item.id,item.plannedStartAt ? Math.max(0,(new Date(item.plannedStartAt + "T12:00:00") - new Date(startDate + "T12:00:00")) / 86400000) : 0);
-  }
-  const reliable = tasks.length > 0 && durationsComplete && tasks.every((item) => item.plannedStartAt && (item.plannedDurationDays !== undefined && item.plannedDurationDays !== null && item.plannedDurationDays !== "" || item.dueAt && item.dueAt >= item.plannedStartAt));
-  const incoming = new Map(tasks.map((item) => [item.id,[]]));
-  const outgoing = new Map(tasks.map((item) => [item.id,[]]));
-  dependencies.forEach((relation) => {
-    incoming.get(relation.targetId).push(relation);
-    outgoing.get(relation.sourceId).push(relation);
-  });
-  const indegree = new Map(tasks.map((item) => [item.id,incoming.get(item.id).length]));
-  const queue = tasks.filter((item) => indegree.get(item.id) === 0).map((item) => item.id);
-  const order = [];
-  while (queue.length) {
-    const id = queue.shift();
-    order.push(id);
-    for (const relation of outgoing.get(id)) {
-      const next = indegree.get(relation.targetId) - 1;
-      indegree.set(relation.targetId,next);
-      if (next === 0) queue.push(relation.targetId);
-    }
-  }
-  if (order.length !== tasks.length) return {valid:false,reliable:false,startDate,finishDate:"",durationDays:0,rows:tasks.map((item) => ({item,startOffset:plannedStart.get(item.id),duration:duration.get(item.id),slack:null,critical:false})),message:"Há um ciclo nas dependências temporais. O caminho crítico não pode ser calculado."};
-  const earliest = new Map(tasks.map((item) => [item.id,plannedStart.get(item.id)]));
-  const offsetFor = (relation) => temporalStartOffset(relation,duration.get(relation.sourceId),duration.get(relation.targetId));
-  for (const id of order) for (const relation of outgoing.get(id)) {
-    earliest.set(relation.targetId,Math.max(earliest.get(relation.targetId),earliest.get(id) + offsetFor(relation)));
-  }
-  // II/IF links do not guarantee that terminal nodes finish last.
-  const projectFinish = Math.max(0,...tasks.map((item) => earliest.get(item.id) + durationEndOffset(duration.get(item.id))));
-  const projectDuration = projectFinish + (tasks.some((item) => duration.get(item.id) > 0) ? 1 : 0);
-  const latest = new Map(tasks.map((item) => [item.id,projectFinish - durationEndOffset(duration.get(item.id))]));
-  for (const id of [...order].reverse()) for (const relation of outgoing.get(id)) {
-    latest.set(id,Math.min(latest.get(id),latest.get(relation.targetId) - offsetFor(relation)));
-  }
-  const rows = tasks.map((item) => {
-    const es = earliest.get(item.id);
-    const slack = Math.max(0,latest.get(item.id) - es);
-    return {item,startOffset:es,duration:duration.get(item.id),slack,critical:slack < 0.01};
-  });
-  return {valid:true,reliable,startDate,finishDate:shiftedDate(startDate,Math.ceil(projectFinish)),durationDays:Math.ceil(projectDuration),rows,message:reliable ? "" : "Cronograma incompleto: informe a data inicial idealizada e uma duração explícita (ou início e término válidos) para cada atividade; nenhuma duração é presumida."};
+  return FluxosDomain.analyzeSchedule(items, relationsFor(items), { today: today() });
 }
 
-let prd43SelectedTiId="";
-let prd43GanttObserver=null;
-let prd44LinkSource="";
 function ganttCommitmentsFor(item){
   const records=(state.commitments||[]).filter(entry=>entry.itemId===item.id).map(entry=>({...entry}));
   if(!records.some(entry=>entry.kind==="baseline")&&(item.baselineStartAt||item.baselineDueAt)) records.push({itemId:item.id,kind:"baseline",version:1,status:"active",startAt:item.baselineStartAt||item.plannedStartAt||"",dueAt:item.baselineDueAt||item.dueAt||""});
@@ -1347,7 +1285,7 @@ function mountGraph(items) {
       hasChildren: item=>state.items.some(child=>child.parentId===item.id&&!child.archivedAt),
       isCollapsed: item=>!ui.showSubitems||ui.collapsed?.has(item.id),
       type: (item) => itemTypeConfig(item.type,item.organizationId).label, typeColor: (item) => itemTypeConfig(item.type,item.organizationId).color, status: (item) => signalLabel(item),
-      signal: signalOf, statusColor: (item) => prd43Colors[signalOf(item)], duration: elapsedLabel, ownerTimer: ownerElapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
+      signal: signalOf, statusColor: (item) => statusConfig(item.status, item.organizationId).color, duration: elapsedLabel, ownerTimer: ownerElapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
       progress: (item) => Math.round(Number(item.progressPercent || 0)),
       expected: (item) => state.trend?.itemTrendById?.[item.id]?.trendDueAt ? formatDate(state.trend.itemTrendById[item.id].trendDueAt) : forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
       deviation: (item) => {

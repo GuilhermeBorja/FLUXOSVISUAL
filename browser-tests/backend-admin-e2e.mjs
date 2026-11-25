@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { fixture, TEST_PASSWORD, ADMIN } from '../tests/backend-support.mjs';
+import { fixture, TEST_PASSWORD, ADMIN, createItem } from '../tests/backend-support.mjs';
 
 const cleanups = [], errors = [], checks = [];
 const setup = await fixture({ after: callback => cleanups.push(callback) });
@@ -78,8 +78,11 @@ try {
   await page.locator('[data-status-setting="ready"] [name="icon"]').selectOption('square-check');
   await page.locator('[data-status-setting="ready"] [name="color"]').fill('#174b7a');
   await save(page, '[data-status-setting="ready"] button[type="submit"]');
+  await page.locator('[data-status-setting="blocked"] [name="color"]').fill('#174b7a');
+  await save(page, '[data-status-setting="blocked"] button[type="submit"]');
   projection = await setup.admin.projection();
   assert.deepEqual(projection.state.statusSettings[company.id].ready, { icon: 'square-check', color: '#174b7a' });
+  assert.deepEqual(projection.state.statusSettings[company.id].blocked, { icon: 'ban', color: '#174b7a' });
   assert.equal(projection.state.statusSettings[ADMIN.organizationId]?.ready, undefined);
   checks.push('Status e ícones configuráveis por empresa sem afetar outra empresa');
 
@@ -120,6 +123,45 @@ try {
   assert.equal(projection.state.users.find(user => user.id === fiscal.id).organizationId, company.id);
   checks.push('Alteração de empresa, setor e perfil preserva identidade do usuário');
 
+  const companyRoot = await createItem(setup.admin, 'Grafo empresa raiz', { ownerId: fiscal.id, organizationId: company.id, sectorId: sector.id, state: 'SP', status: 'ready', plannedStartAt: '2026-09-01', dueAt: '2026-10-01' });
+  const companyChild = await createItem(setup.admin, 'Grafo empresa bloqueado', { ownerId: fiscal.id, organizationId: company.id, sectorId: sector.id, state: 'SP', status: 'blocked', blockedReason: 'Aguardando liberação', parentId: companyRoot.id, plannedStartAt: '2026-09-01', dueAt: '2026-10-01' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForFunction(() => FluxosBackend.status.ready);
+  await page.locator('#showSubitems').click();
+  const graph = page.locator('#graphCanvas');
+  const childNode = graph.locator(`[data-node="${companyChild.id}"]`);
+  await childNode.waitFor();
+  assert.equal(await childNode.locator('.node-circle').getAttribute('stroke'), '#174b7a');
+  assert.match(await childNode.getAttribute('aria-label'), /bloqueado/i);
+  assert.match(await childNode.locator('title').textContent(), /Bloqueios: Bloqueio próprio/);
+  await childNode.focus();
+  await childNode.press('Enter');
+  await page.getByRole('heading', { name: 'Grafo empresa bloqueado', exact: true }).waitFor();
+  const detailStatus = page.locator('#panelRoot .status-badge');
+  assert.match(await detailStatus.getAttribute('title'), /bloquead/i);
+  assert.equal(await detailStatus.evaluate(el => getComputedStyle(el).getPropertyValue('--status-color').trim()), '#174b7a');
+  assert.match(await page.locator('#panelRoot .prd43-status-alert').textContent(), /atraso/i);
+  await page.locator('#panelRoot [data-action="close-panel"]').last().click();
+  checks.push('Grafo mostra o item bloqueado e abre seus detalhes por teclado');
+
+  const splitter = page.locator('[data-pane-split="gantt-graph"]');
+  const focusGraph = page.locator('[data-pane-focus="graph"]');
+  assert.equal(await splitter.getAttribute('aria-valuemin'), '35');
+  assert.equal(await splitter.getAttribute('aria-valuemax'), '80');
+  const paneWidthBefore = await page.locator('.prd5-two-pane').evaluate(el => getComputedStyle(el).getPropertyValue('--prd5-gantt-width'));
+  await splitter.focus();
+  await splitter.press('ArrowRight');
+  const paneWidthAfter = await page.locator('.prd5-two-pane').evaluate(el => getComputedStyle(el).getPropertyValue('--prd5-gantt-width'));
+  assert.notEqual(paneWidthAfter, paneWidthBefore);
+  assert.ok(Number(await splitter.getAttribute('aria-valuenow')) > Number(await splitter.getAttribute('aria-valuemin')));
+  await focusGraph.click();
+  assert.equal(await focusGraph.getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('.prd5-two-pane').getAttribute('data-focus'), 'graph');
+  await focusGraph.click();
+  assert.equal(await page.locator('.prd5-two-pane').getAttribute('data-focus'), 'all');
+  checks.push('Splitter anuncia limites/valor, redimensiona por teclado e foco do painel pode ser ativado/restaurado');
+
+  await tab(page, 'users');
   await page.locator(`[data-edit-user="${fiscal.id}"]`).click();
   const resetPassword = 'Another local acceptance password 2026!';
   await page.locator('#userEditForm [name="backendPassword"]').fill(resetPassword);

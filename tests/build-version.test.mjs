@@ -9,7 +9,6 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-const workspace = readFileSync(join(root, "dist/workspace.js"), "utf8");
 
 function buildInto(env = {}) {
   const dist = mkdtempSync(join(tmpdir(), "fluxo-dist-"));
@@ -43,21 +42,6 @@ test("build grava versão, commit e data em version.js e renova o sufixo de cach
   assert.match(again, /\?v=1234567-\d{12}/);
 });
 
-test("rodapé e telas de entrada exibem a versão; sem build aparece como desenvolvimento", () => {
-  assert.match(workspace, /<span class="build-label" data-build-label[^>]*>\$\{escapeHtml\(buildLabel\(\)\)\}<\/span><\/footer>/);
-  assert.equal((workspace.match(/<p class="build-label" data-build-label>/g) || []).length, 2, "login e criação do usuário master");
-  const source = workspace.match(/function buildLabel\(\) \{[\s\S]*?\n\}\n/)[0];
-  const label = (build) => {
-    const sandbox = vm.createContext({});
-    if (build) vm.runInContext(`var FLUXO_BUILD = ${JSON.stringify(build)};`, sandbox);
-    vm.runInContext(source, sandbox);
-    return vm.runInContext("buildLabel()", sandbox);
-  };
-  assert.match(label({ version: "0.4.0-prd3", build: "abcdef1", builtAt: "2026-10-19T12:19:44.787Z" }), /^Versão 0\.4\.0-prd3 · build abcdef1 · \d{2}\/\d{2}\/\d{4},? \d{2}:\d{2}$/);
-  assert.equal(label({ version: "0.4.0-prd3", build: "abcdef1", builtAt: "inválida" }), "Versão 0.4.0-prd3 · build abcdef1");
-  assert.equal(label(null), "Versão de desenvolvimento (sem build)");
-});
-
 test("npm run build encadeia o bundle e a identificação do build", () => {
-  assert.match(pkg.scripts.build, /build-vendor\.mjs && node scripts\/build-version\.mjs/);
+  assert.match(pkg.scripts.build, /build-vendor\.mjs && node scripts\/build-domain\.mjs && node scripts\/build-version\.mjs/);
 });

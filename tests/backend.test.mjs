@@ -166,11 +166,18 @@ test('backend: remover TI exige delete_relation e arquivo respeita permissões d
   const rel = p.state.relations[0];
   const remove = await client.request('/api/workspaces/w_a/commands', { method: 'POST', body: { expectedRevision: p.revision, commands: [{ type: 'removeRelation', args: [rel.id] }] } });
   assert.equal(remove.status, 403);
+  const afterRemove = await client.projection();
+  assert.equal(afterRemove.revision, p.revision);
+  assert.deepEqual(afterRemove.state.relations, p.state.relations);
+  assert.deepEqual(afterRemove.state.events, p.state.events);
   await admin.sync(state => state.permissionRules.push({ id: 'deny_child', subjectType: 'user', subjectId: user.id, operation: 'edit_item', scopeType: 'item', scopeId: child.id, effect: 'deny' }));
   p = await client.projection();
   const archive = await client.request('/api/workspaces/w_a/commands', { method: 'POST', body: { expectedRevision: p.revision, commands: [{ type: 'archiveItem', args: [root.id] }] } });
   assert.equal(archive.status, 403);
-  assert.ok(!(await admin.projection()).state.items.find(i => i.id === root.id).archivedAt);
+  const afterArchive = await client.projection();
+  assert.equal(afterArchive.revision, p.revision);
+  assert.deepEqual(afterArchive.state.items, p.state.items);
+  assert.deepEqual(afterArchive.state.events, p.state.events);
 });
 
 test('backend: aprovação conserva decisões imutáveis e reabertura inicia nova rodada', async t => {
@@ -301,4 +308,73 @@ test('backend: datas impossíveis, campo calculado forjado e mutação sem vers�
   const actual = (await admin.projection()).state.items.find(i => i.id === item.id);
   for (const field of ['createdBy', 'createdAt', 'baselineStartAt', 'completedAt']) assert.equal(actual[field], item[field]);
   assert.ok(actual.version < 99999);
+});
+
+test('backend: editar TI conserva identidade, baseline e trilha de auditoria', async t => {
+  const { admin } = await fixture(t);
+  const originalSource = await createItem(admin, 'Origem anterior');
+  const replacementSource = await createItem(admin, 'Origem nova');
+  const target = await createItem(admin, 'Destino', { plannedDurationDays: 2 });
+  await admin.command('createRelation', [originalSource.id, target.id, 'TI', 0]);
+
+  let projection = await admin.projection();
+  const relation = projection.state.relations[0];
+  const targetBefore = projection.state.items.find(item => item.id === target.id);
+  await admin.command('updateRelation', [relation.id, {
+    sourceId: replacementSource.id,
+    targetId: target.id,
+    relationType: 'TI',
+    lagDays: 1,
+    description: 'Origem revisada',
+  }]);
+
+  projection = await admin.projection();
+  const updated = projection.state.relations.find(item => item.id === relation.id);
+  const targetAfter = projection.state.items.find(item => item.id === target.id);
+  assert.equal(updated.id, relation.id);
+  assert.equal(updated.sourceId, replacementSource.id);
+  assert.equal(updated.targetId, target.id);
+  assert.equal(targetAfter.baselineStartAt, targetBefore.baselineStartAt);
+  assert.equal(targetAfter.baselineDueAt, targetBefore.baselineDueAt);
+  assert.ok(projection.state.events.some(event => event.eventType === 'relation_retargeted' && event.itemId === target.id));
+});
+
+test('backend: movimento e edição de TI negados não alteram estado nem eventos', async t => {
+  const f = await fixture(t);
+  const { admin } = f;
+  const root = await createItem(admin, 'Raiz de origem', { type: 'project', plannedDurationDays: null });
+  const child = await createItem(admin, 'Filho móvel', { parentId: root.id });
+  const destination = await createItem(admin, 'Raiz de destino', { type: 'project', plannedDurationDays: null });
+  const predecessor = await createItem(admin, 'Predecessora');
+  const successor = await createItem(admin, 'Sucessora');
+  await admin.command('createRelation', [predecessor.id, successor.id, 'TI', 0]);
+  const { user, client } = await addWorkspaceUser(f, { operations: ['view_item', 'edit_item', 'change_hierarchy', 'edit_relation'] });
+  await admin.sync(state => state.permissionRules.push(
+    { id: 'deny_move_child', subjectType: 'user', subjectId: user.id, operation: 'change_hierarchy', scopeType: 'item', scopeId: child.id, effect: 'deny' },
+    { id: 'deny_edit_relation', subjectType: 'user', subjectId: user.id, operation: 'edit_relation', scopeType: 'item', scopeId: predecessor.id, effect: 'deny' },
+  ));
+
+  let projection = await client.projection();
+  const revision = projection.revision;
+  const eventCount = projection.state.events.length;
+  const move = await client.request('/api/workspaces/w_a/commands', {
+    method: 'POST',
+    body: { expectedRevision: revision, commands: [{ type: 'moveItemHierarchy', args: [child.id, destination.id] }] },
+  });
+  assert.equal(move.status, 403);
+  projection = await client.projection();
+  assert.equal(projection.revision, revision);
+  assert.equal(projection.state.items.find(item => item.id === child.id).parentId, root.id);
+  assert.equal(projection.state.events.length, eventCount);
+
+  const relation = projection.state.relations[0];
+  const deniedEdit = await client.request('/api/workspaces/w_a/commands', {
+    method: 'POST',
+    body: { expectedRevision: projection.revision, commands: [{ type: 'updateRelation', args: [relation.id, { lagDays: 1 }] }] },
+  });
+  assert.equal(deniedEdit.status, 403);
+  const afterEdit = await client.projection();
+  assert.equal(afterEdit.revision, projection.revision);
+  assert.equal(afterEdit.state.relations[0].lagDays, relation.lagDays);
+  assert.equal(afterEdit.state.events.length, eventCount);
 });

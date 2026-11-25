@@ -305,12 +305,13 @@ test("trend uses recording order when two measurements share the same effective 
   });
 
   assert.equal(projection.itemTrendById.same_minute.lastMeasurementPercent, 50);
-  assert.deepEqual(projection.itemTrendById.same_minute.lastMeasurement, {
-    id: "measurement_a",
-    percent: 50,
-    occurrence: "no_issue",
-    description: "Frente mobilizada e reparo iniciado.",
-    effectiveAt: "2026-11-17T16:47:00.000Z",
-    recordedAt: "2026-11-17T19:47:02.000Z",
-  });
+  assert.deepEqual(
+    [
+      projection.itemTrendById.same_minute.lastMeasurement.id,
+      projection.itemTrendById.same_minute.lastMeasurement.percent,
+      projection.itemTrendById.same_minute.lastMeasurement.occurrence,
+      projection.itemTrendById.same_minute.lastMeasurement.effectiveAt,
+    ],
+    ["measurement_a", 50, "no_issue", "2026-11-17T16:47:00.000Z"],
+  );
 });

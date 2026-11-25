@@ -84,3 +84,36 @@ test('backend security: item negado não vaza em projeção, comentários autom�
   assert.doesNotMatch(JSON.stringify(history.data), /INFORMAÇÃO CONFIDENCIAL DA ORIGEM|Motivo reservado da origem/);
   assert.doesNotMatch(JSON.stringify(history.data.events.map(e => [e.before, e.after, e.fromValue, e.toValue, e.comment])), new RegExp(source.id));
 });
+
+test('backend security: relação só é projetada quando os dois itens são visíveis', async t => {
+  const f = await fixture(t);
+  const source = await createItem(f.admin, 'Origem da relação');
+  const target = await createItem(f.admin, 'Destino da relação');
+  await f.admin.command('createRelation', [source.id, target.id, 'TI', 0]);
+  const { user, client } = await addWorkspaceUser(f, { operations: ['view_item'] });
+
+  await f.admin.sync(state => state.permissionRules.push({
+    id: 'hide_relation_source', subjectType: 'user', subjectId: user.id,
+    operation: 'view_item', scopeType: 'item', scopeId: source.id, effect: 'deny',
+  }));
+  let projection = await client.projection();
+  assert.deepEqual(projection.state.items.map(item => item.id), [target.id]);
+  assert.equal(projection.state.relations.length, 0);
+
+  await f.admin.sync(state => {
+    state.permissionRules = state.permissionRules.filter(rule => rule.id !== 'hide_relation_source');
+    state.permissionRules.push({
+      id: 'hide_relation_target', subjectType: 'user', subjectId: user.id,
+      operation: 'view_item', scopeType: 'item', scopeId: target.id, effect: 'deny',
+    });
+  });
+  projection = await client.projection();
+  assert.deepEqual(projection.state.items.map(item => item.id), [source.id]);
+  assert.equal(projection.state.relations.length, 0);
+
+  await f.admin.sync(state => { state.permissionRules = state.permissionRules.filter(rule => rule.id !== 'hide_relation_target'); });
+  projection = await client.projection();
+  assert.equal(projection.state.relations.length, 1);
+  assert.equal(projection.state.relations[0].sourceId, source.id);
+  assert.equal(projection.state.relations[0].targetId, target.id);
+});

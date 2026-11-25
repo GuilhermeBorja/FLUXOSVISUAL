@@ -4,12 +4,14 @@ on:
   push:
     paths:
       - 'server/**'
+      - 'src/**'
       - 'scripts/setup.mjs'
+      - 'scripts/build-domain.mjs'
       - 'scripts/backup.mjs'
       - 'scripts/restore.mjs'
       - 'dist/**'
-      - 'tests/backend*'
-      - 'browser-tests/backend*'
+      - 'tests/**'
+      - 'browser-tests/**'
       - 'package*.json'
       - 'Dockerfile'
       - 'compose.yaml'
@@ -18,12 +20,14 @@ on:
   pull_request:
     paths:
       - 'server/**'
+      - 'src/**'
       - 'scripts/setup.mjs'
+      - 'scripts/build-domain.mjs'
       - 'scripts/backup.mjs'
       - 'scripts/restore.mjs'
       - 'dist/**'
-      - 'tests/backend*'
-      - 'browser-tests/backend*'
+      - 'tests/**'
+      - 'browser-tests/**'
       - 'package*.json'
       - 'Dockerfile'
       - 'compose.yaml'
@@ -52,18 +56,10 @@ jobs:
       - run: npm run build
       - run: npm run check
       - run: npm run check:backend
-      - name: Existing frontend contract
-        run: npm test
-      - name: Backend authorization, transactions, persistence and isolation
-        run: node --test tests/backend*.test.mjs
       - name: Install browser runner
         run: npx playwright install --with-deps chromium
-      - name: Two authenticated browser sessions and responsive UI
-        run: node browser-tests/backend-e2e.mjs
-      - name: Administration, real accounts and password changes
-        run: node browser-tests/backend-admin-e2e.mjs
-      - name: Templates, nullable durations, derived dates and comment audit
-        run: node browser-tests/backend-template-e2e.mjs
+      - name: Maintained source, backend, and authenticated browser suites
+        run: npm run test:all
       - name: Local HTTP gate with 500 items and 1000 TI relations
         env:
           FLUXOS_PERFORMANCE_GATE: 'true'

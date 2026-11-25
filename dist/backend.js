@@ -730,6 +730,7 @@
       const width = element.getBoundingClientRect().width; if (width < 200) return false;
       prd5GanttWidth = Math.max(35, Math.min(80, prd5GanttWidth + delta / width * 100));
       element.style.setProperty("--prd5-gantt-width", prd5GanttWidth + "%"); state.ganttWidth = prd5GanttWidth;
+      element.querySelector('[data-pane-split="gantt-graph"]')?.setAttribute("aria-valuenow", String(Math.round(prd5GanttWidth)));
       return true;
     };
     for (const type of ["click", "submit", "change", "keydown"]) document.addEventListener(type, event => {

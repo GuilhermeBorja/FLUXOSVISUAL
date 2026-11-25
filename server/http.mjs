@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { DomainError } from "../src/domain.mjs";
 
 /** Expected API failure. `details` must contain public, actionable information. */
 export class HttpError extends Error {
@@ -46,7 +47,7 @@ export const json = sendJson;
 
 export function sendError(request, response, error, logger = console) {
   const correlationId = requestId(request);
-  const expected = error instanceof HttpError;
+  const expected = error instanceof HttpError || error instanceof DomainError;
   const status = expected ? error.status : 500;
   if (!expected)
     logger.error(
