@@ -1,70 +1,45 @@
 name: Deploy FLUXOSVISUAL
-# Publicação oficial a partir da branch main
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
-  pages: write
-  id-token: write
+
 concurrency:
-  group: github-pages
-  cancel-in-progress: true
+  group: deploy-chronos-fluxosvisual
+  cancel-in-progress: false
+
 jobs:
-  build:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Build project
-        run: npm run build
-      - name: Check project
-        run: npm run check
-      - name: Run regression tests
-        run: npm test
-      - name: Install browser test runner
-        run: npm install --no-save playwright@1.56.0 && npx playwright install --with-deps chromium
-      - name: Run browser smoke tests
-        run: |
-          nohup python3 -m http.server 8080 --directory dist > /tmp/fluxosvisual-http.log 2>&1 &
-          timeout 20 bash -c 'until curl -fsS http://127.0.0.1:8080 >/dev/null; do sleep 1; done'
-          node browser-tests/prd5-smoke.mjs
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
   deploy:
-    needs: build
-    runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: self-hosted
     steps:
-      - name: Deploy main to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-      - name: Verify published version
-        env:
-          SITE_URL: ${{ steps.deployment.outputs.page_url }}
-          EXPECTED_BUILD: ${{ github.sha }}
+      - name: Atualizar codigo preservando .env e override
+        working-directory: /opt/fluxosvisual/FluxosVisual_PRD6
         run: |
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error "${SITE_URL}version.js?verify=${EXPECTED_BUILD}-${attempt}" | grep -F "${EXPECTED_BUILD:0:7}"; then
-              echo "Published main commit ${EXPECTED_BUILD} at ${SITE_URL}" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo 'Pages deployment completed, but the published build could not be verified.' >&2
-          exit 1
+          git config --global --add safe.directory /opt/fluxosvisual/FluxosVisual_PRD6
+          git fetch origin
+          git checkout main
+          git reset --hard origin/main
+          test -f .env
+          test -f compose.override.yaml
+
+      - name: Backup antes do deploy
+        working-directory: /opt/fluxosvisual/FluxosVisual_PRD6
+        run: |
+          docker compose exec -T fluxosvisual node scripts/backup.mjs || true
+
+      - name: Recriar container com nova imagem
+        working-directory: /opt/fluxosvisual/FluxosVisual_PRD6
+        run: |
+          docker compose up -d --build --force-recreate
+
+      - name: Validar saude da aplicacao
+        working-directory: /opt/fluxosvisual/FluxosVisual_PRD6
+        run: |
+          sleep 5
+          docker compose ps
+          curl -fsS http://127.0.0.1:3000/api/health > /dev/null
