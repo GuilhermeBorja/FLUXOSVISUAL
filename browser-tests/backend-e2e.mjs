@@ -42,11 +42,13 @@ async function closePanel(page) {
 
 try {
   const { user } = await addWorkspaceUser(setup, { id: 'u_operator', name: 'Operador de teste', email: 'operator@example.test', operations: ['view_item', 'create_item', 'edit_item', 'create_relation', 'edit_relation', 'delete_relation', 'change_owner', 'change_weight', 'change_duration', 'change_hierarchy', 'add_attachment', 'delete_attachment', 'create_approval', 'decide_approval'] });
+  const { user: executorUser } = await addWorkspaceUser(setup, { id: 'u_executor', name: 'Executor de teste', email: 'executor@example.test', operations: ['view_item', 'record_measurement'] });
   browser = await chromium.launch({ headless: true });
   const ownerContext = await browser.newContext({ viewport: { width: 1366, height: 768 } });
   const operatorContext = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
-  const owner = await ownerContext.newPage(); const operator = await operatorContext.newPage();
-  watch(owner); watch(operator);
+  const executorContext = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+  const owner = await ownerContext.newPage(); const operator = await operatorContext.newPage(); const executor = await executorContext.newPage();
+  watch(owner); watch(operator); watch(executor);
   await login(owner);
   assert.equal(await owner.locator('#loginForm select').count(), 0, 'production login does not offer impersonation');
 
@@ -55,8 +57,8 @@ try {
   await form.locator('#prd43PasteActivities').fill('Projeto compartilhado\n\tAtividade compartilhada\n\tRevisão compartilhada');
   await form.locator('[name="stepOwner_1"]').selectOption(user.id);
   await form.locator('[name="stepOwner_2"]').selectOption(user.id);
-  await form.locator('[name="stepDuration_1"]').fill('2');
-  await form.locator('[name="stepDuration_2"]').fill('1');
+  await form.locator('[name="stepDuration_1"]').fill('0');
+  await form.locator('[name="stepDuration_2"]').fill('0.5');
   await form.locator('[name="plannedStartAt"]').fill('2026-11-02');
   await form.locator('#prd43Sequence').check();
   const createdResponse = owner.waitForResponse(response => response.url().endsWith('/sync') && response.request().method() === 'POST');
@@ -69,9 +71,24 @@ try {
   const successor = projection.state.items.find(item => item.title === 'Revisão compartilhada');
   assert.ok(root && activity && successor);
   assert.equal(activity.parentId, root.id); assert.equal(successor.parentId, root.id);
+  assert.equal(activity.plannedDurationDays, 0);
+  assert.equal(successor.plannedDurationDays, 0.5);
   assert.equal(projection.state.relations.length, 1);
-  assert.equal(successor.plannedStartAt, '2026-11-04');
+  assert.equal(successor.plannedStartAt, '2026-11-02');
   await closePanel(owner);
+
+  await login(executor, executorUser.email);
+  await expand(executor, root.id);
+  await executor.locator(`.prd5-gantt-edit[data-select="${activity.id}"]`).click();
+  const measurement = executor.locator('#measurementForm');
+  await measurement.waitFor();
+  assert.equal(await measurement.locator('[name="plannedDurationDays"]').count(), 0, 'executor cannot set duration');
+  assert.equal(await measurement.locator('[name="dueAt"]').count(), 0, 'executor cannot set deadline');
+  await measurement.locator('[name="percent"]').fill('25');
+  const measurementResponse = executor.waitForResponse(response => response.url().endsWith('/commands') && response.request().method() === 'POST');
+  await measurement.locator('button[type="submit"]').click();
+  assert.equal((await measurementResponse).status(), 200);
+  assert.equal(setup.app.storage.db.prepare('SELECT percent FROM measurements WHERE workspace_id=? AND item_id=? ORDER BY effective_at DESC').get('w_a', activity.id).percent, 25);
 
   for (const width of [1366, 1920]) {
     await owner.setViewportSize({ width, height: width === 1366 ? 768 : 1080 });

@@ -57,6 +57,13 @@ const permissionOperationLabels = {
   delete_attachment: "Excluir anexo",
   create_approval: "Configurar aprovação",
   decide_approval: "Decidir aprovação",
+  record_measurement: "Registrar medição",
+  correct_measurement: "Corrigir medição",
+  adjust_remaining_duration: "Ajustar duração remanescente",
+  record_blocker: "Registrar bloqueio factual",
+  set_measurement_policy: "Configurar frequência de medição",
+  manage_calendar: "Configurar calendário",
+  create_corrective_activity: "Criar atividade corretiva",
   manage_users: "Gerenciar usuários",
   manage_gpo: "Configurar GPO",
   manage_organization: "Administrar cadastros organizacionais",
@@ -79,6 +86,7 @@ let ui = {
   adminTab: "users",
   createParentId: "",
   filtersOpen: false,
+  operationsOpen: false,
 };
 
 function uid(prefix) {
@@ -1025,7 +1033,8 @@ function createRelation(sourceId, targetId, relationType, lagDays = 0, descripti
       relation.relationType === relationType
   );
   if (exists) throw new Error("Essa relacao ja existe.");
-  if(relationType==="TI" && (state.items.some(item=>item.parentId===sourceId && !item.archivedAt) || state.items.some(item=>item.parentId===targetId && !item.archivedAt))) throw new Error("TI somente entre atividades finais.");
+  // TI em agrupadores é mantida como referência resumida. O cronograma expande
+  // a dependência para as folhas internas sem duplicar a relação na interface.
   const relation = {
     id: uid("rel"),
     sourceId,
@@ -1137,10 +1146,7 @@ function updateRelation(id, input) {
   if (!canEditItem(user, getItem(relation.sourceId)) || !canEditItem(user, getItem(relation.targetId)) || !canEditItem(user, source) || !canEditItem(user, target)) throw new Error("O GPO não permite alterar esta relação ou seus itens.");
   if (gpoDecision(user, "edit_relation", target) !== true) throw new Error("O GPO não permite alterar relações neste escopo.");
   if (!Number.isFinite(Number(input.lagDays))) throw new Error("Informe uma defasagem numérica.");
-  if (input.relationType === "TI" &&
-      (state.items.some(item=>item.parentId===source.id&&!item.archivedAt) ||
-       state.items.some(item=>item.parentId===target.id&&!item.archivedAt)))
-    throw new Error("TI somente entre atividades finais.");
+  // Relações TI em agrupadores são referências resumidas e continuam editáveis.
   if (input.relationType === "contains") {
     let cursor = source; const seen = new Set();
     while (cursor && !seen.has(cursor.id)) {
@@ -1336,7 +1342,7 @@ function validateItemInput(input, existing = null) {
   if (input.ownerId && !state.users.some((user) => user.id === input.ownerId && (!user.disabled || existing?.ownerId === user.id))) throw new Error("Selecione um responsável ativo.");
   if (input.weight !== undefined && (!Number.isFinite(Number(input.weight)) || Number(input.weight) <= 0)) throw new Error("O peso deve ser maior que zero.");
   if (input.progressPercent !== undefined && (!Number.isFinite(Number(input.progressPercent)) || Number(input.progressPercent) < 0 || Number(input.progressPercent) > 100)) throw new Error("O percentual deve ficar entre 0 e 100.");
-  if (input.plannedDurationDays !== undefined && input.plannedDurationDays !== null && input.plannedDurationDays !== "" && (!Number.isInteger(Number(input.plannedDurationDays)) || Number(input.plannedDurationDays) < 0)) throw new Error("A duração deve ser um número inteiro de dias corridos igual ou maior que zero.");
+  if (input.plannedDurationDays !== undefined && input.plannedDurationDays !== null && input.plannedDurationDays !== "" && (!Number.isFinite(Number(input.plannedDurationDays)) || Number(input.plannedDurationDays) < 0)) throw new Error("A duração deve ser um número de dias corridos igual ou maior que zero.");
   if (input.replannedDueAt && (!/^\d{4}-\d{2}-\d{2}$/.test(input.replannedDueAt) || !Number.isFinite(new Date(input.replannedDueAt + "T12:00:00").getTime()))) throw new Error("Informe uma data válida para a repactuação.");
   for (const field of ["targetStartAt","targetDueAt"]) {
     if (input[field] && (!/^\d{4}-\d{2}-\d{2}$/.test(input[field]) || !Number.isFinite(new Date(input[field] + "T12:00:00").getTime()))) throw new Error("Informe uma data-meta válida.");
@@ -1772,7 +1778,7 @@ function hasPlannedDuration(item) {
   return value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
 }
 function durationEndOffset(duration) {
-  return Math.max(0,Number(duration) - 1);
+  return Math.max(0,Math.ceil(Number(duration)) - 1);
 }
 function inclusiveFinishDate(start, duration) {
   return datePlusDays(start,durationEndOffset(duration));
@@ -1791,10 +1797,25 @@ function itemDurationDays(item) {
   return inclusiveDurationDays(item.plannedStartAt,item.dueAt);
 }
 
+function expandedSummaryTi(items, relations) {
+  const children = new Set(items.map(item=>item.parentId).filter(Boolean));
+  const leaves = items.filter(item=>!children.has(item.id));
+  const descendants = rootId => { const ids=new Set([rootId]); let changed=true; while(changed){changed=false; for(const item of items)if(item.parentId&&ids.has(item.parentId)&&!ids.has(item.id)){ids.add(item.id);changed=true;}} return ids; };
+  const leafGroups=new Map(items.map(item=>[item.id,leaves.filter(leaf=>descendants(item.id).has(leaf.id))]));
+  return relations.filter(rel=>rel.relationType==="TI").flatMap(rel=>{
+    const sources=leafGroups.get(rel.sourceId)||[],targets=leafGroups.get(rel.targetId)||[],targetIds=new Set(targets.map(item=>item.id));
+    const internalIncoming=new Set(relations.filter(entry=>entry.relationType==="TI"&&targetIds.has(entry.targetId)&&targetIds.has(entry.sourceId)).map(entry=>entry.targetId));
+    const roots=targets.filter(item=>!internalIncoming.has(item.id));
+    return (sources.length?sources:[byIdFallback(items,rel.sourceId)]).filter(Boolean).flatMap(source=>(roots.length?roots:[byIdFallback(items,rel.targetId)]).filter(Boolean).map(target=>({...rel,sourceId:source.id,targetId:target.id})));
+  });
+}
+
+function byIdFallback(items,id){return items.find(item=>item.id===id)||null;}
+
 function recalculatePlannedDates() {
   const temporal = new Set(["TI"]);
   const items = state.items.filter((item)=>!item.archivedAt), byId = new Map(items.map((item) => [item.id,item]));
-  const dependencies = state.relations.filter((r) => temporal.has(r.relationType) && byId.has(r.sourceId) && byId.has(r.targetId));
+  const dependencies = expandedSummaryTi(items, state.relations).filter((r) => temporal.has(r.relationType) && byId.has(r.sourceId) && byId.has(r.targetId));
   const incoming = new Map(items.map((item) => [item.id,[]])), outgoing = new Map(items.map((item) => [item.id,[]]));
   dependencies.forEach((r) => { incoming.get(r.targetId).push(r); outgoing.get(r.sourceId).push(r); });
   const indegree = new Map(items.map((item) => [item.id,incoming.get(item.id).length]));

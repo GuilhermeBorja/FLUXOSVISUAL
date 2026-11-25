@@ -75,7 +75,7 @@ await test("Gantt organize menu has loaded icon",async()=>{
  assert.equal(has,true);
 });
 await test("Gantt contextual creation records the origin",async()=>{
- const source=page.locator(".prd43-gantt-row").filter({has:page.locator(".gantt-item strong",{hasText:"QA ROOT B"})}).first();
+ const source=page.locator(".prd43-gantt-row").filter({has:page.locator(".gantt-item-title",{hasText:"QA ROOT B"})}).first();
  await source.locator(".prd5-gantt-more>summary").click();
  await source.locator("[data-create-child]").click();
  assert.ok((await page.locator(".prd5-parent-context").innerText()).includes("QA ROOT B"));

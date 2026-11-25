@@ -1,8 +1,10 @@
 let graphInstance = null;
 let returnFocus = null;
-ui.positions = state.graphPositions || {};
+ui.positions = {};
 
 function icon(name) {
+  if (name === "filter") name = "sliders-horizontal";
+  if (name === "grip-vertical") return "<span class=\"gantt-drag-glyph\" aria-hidden=\"true\">⋮⋮</span>";
   return `<i data-lucide="${name}"></i>`;
 }
 
@@ -353,6 +355,30 @@ const prd5DefaultColumns=["select","name","status","progress","start","due","edi
 function prd5WorkspaceKey(){return currentUser().id+":"+(ui.scopeId||"all");}
 function prd5SavedView(){return state.prd5GanttColumnViews?.[prd5WorkspaceKey()]||{};}
 function prd5SaveView(changes){state.prd5GanttColumnViews||={};state.prd5GanttColumnViews[prd5WorkspaceKey()]={...prd5SavedView(),...changes};saveState();}
+function prd5SortValue(item,key,candidate){
+ if(key==="name")return String(item.title||"").toLocaleLowerCase();
+ if(key==="owner")return String(userName(item.ownerId)||"").toLocaleLowerCase();
+ if(key==="organization")return String(orgName(item.organizationId)||"").toLocaleLowerCase();
+ if(key==="sector")return String(sectorName(item.sectorId)||"").toLocaleLowerCase();
+ if(key==="type")return String(labelOf(itemTypes,item.type)||"").toLocaleLowerCase();
+ if(key==="start")return candidate?.startAt||state.trend?.itemTrendById?.[item.id]?.trendStartAt||item.plannedStartAt||"";
+ if(key==="due")return candidate?.dueAt||state.trend?.itemTrendById?.[item.id]?.trendDueAt||item.dueAt||"";
+ if(key==="duration")return Number(item.plannedDurationDays||0);
+ if(key==="progress")return Number(item.progressPercent||0);
+ if(key==="weight")return Number(item.weight||0);
+ if(key==="status")return String(statusDisplayLabel(item)||"").toLocaleLowerCase();
+ if(key==="state")return String(item.state||"").toLocaleLowerCase();
+ if(key==="critical")return signalOf(item);
+ return String(prd5ColumnValue(item,key,false).replace(/<[^>]+>/g,"")).toLocaleLowerCase();
+}
+function prd5FilterValue(item,key,candidate){
+  if(key==="name")return String(item.title||"");
+  return String(prd5SortValue(item,key,candidate));
+}
+function prd5RowMatches(item,candidate){
+  const filters=prd5SavedView().filters||{};
+  return Object.entries(filters).every(([key,value])=>!String(value||"").trim()||prd5FilterValue(item,key,candidate).toLocaleLowerCase().includes(String(value).toLocaleLowerCase().trim()));
+}
 function prd5ColumnOrder(){
  const order=prd5SavedView().order||state.prd5GanttColumnsOrder||[];
  return [...prd5GanttColumns].sort((a,b)=>{
@@ -378,7 +404,48 @@ function prd5AdaptiveColumns(){
 function prd5ColumnVisible(name) {
   return (prd5SavedView().visible||state.prd5GanttColumns||prd5DefaultColumns).includes(name);
 }
-function prd5ColumnValue(item,key,critical){
+function prd5GanttGrid(columns) {
+  const widths=prd5SavedView().widths||{};
+  return columns.map(([key])=>widths[key]?Math.max(44,Math.min(600,Number(widths[key])))+"px":key==="name"?"minmax(118px,1.8fr)":key==="edit"?"58px":key==="select"?"25px":"minmax(48px,.9fr)").join(" ")+" minmax(220px,2.6fr)";
+}
+function prd5BindGanttColumns() {
+  const content=document.querySelector("#prd43GanttContent");
+  if(!content)return;
+  const columns=[...content.querySelectorAll("[data-gantt-column]")].map(cell=>[cell.dataset.ganttColumn,cell.textContent]);
+  const applyWidths=widths=>{
+    const grid=columns.map(([key])=>Math.max(44,Math.min(600,widths[key]))+"px").join(" ")+" minmax(220px,1fr)";
+    content.style.minWidth=(Object.values(widths).reduce((sum,width)=>sum+width,0)+220)+"px";
+    content.querySelectorAll(".gantt-axis,.prd43-gantt-row").forEach(row=>row.style.setProperty("--prd5-grid",grid));
+    prd43DrawGanttRelations();
+  };
+  const measuredWidths=()=>Object.fromEntries(columns.map(([key])=>[key,Math.round(content.querySelector('[data-gantt-column="'+key+'"]').getBoundingClientRect().width)]));
+  content.querySelectorAll("[data-gantt-resize]").forEach(handle=>{
+    handle.addEventListener("pointerdown",event=>{
+      if(event.button!==0)return;
+      event.preventDefault();event.stopPropagation();
+      const key=handle.dataset.ganttResize,widths=measuredWidths(),start=event.clientX,initial=widths[key];
+      handle.setPointerCapture(event.pointerId);
+      document.body.classList.add("gantt-column-resizing");
+      const move=e=>{if(e.pointerId!==event.pointerId)return;widths[key]=Math.max(44,Math.min(600,initial+e.clientX-start));applyWidths(widths);handle.setAttribute("aria-valuenow",String(Math.round(widths[key])));};
+      const end=e=>{if(e.pointerId!==event.pointerId)return;handle.removeEventListener("pointermove",move);handle.removeEventListener("pointerup",end);handle.removeEventListener("pointercancel",end);document.body.classList.remove("gantt-column-resizing");prd5SaveView({widths});};
+      handle.addEventListener("pointermove",move);handle.addEventListener("pointerup",end);handle.addEventListener("pointercancel",end);
+    });
+    handle.addEventListener("keydown",event=>{
+      if(!["ArrowLeft","ArrowRight","Home"].includes(event.key))return;
+      event.preventDefault();event.stopPropagation();
+      if(event.key==="Home"){prd5SaveView({widths:{}});render();return;}
+      const widths=measuredWidths(),key=handle.dataset.ganttResize;
+      widths[key]=Math.max(44,Math.min(600,widths[key]+(event.key==="ArrowRight"?16:-16)));
+      applyWidths(widths);prd5SaveView({widths});handle.setAttribute("aria-valuenow",String(widths[key]));
+    });
+    handle.addEventListener("dblclick",event=>{event.preventDefault();prd5SaveView({widths:{}});render();});
+  });
+  if(Object.keys(prd5SavedView().widths||{}).length)applyWidths(measuredWidths());
+}
+function prd5ColumnValue(item,key,critical,candidate){
+  const trend=state.trend?.itemTrendById?.[item.id]||{};
+  const trendStart=candidate?.startAt||trend.trendStartAt||item.plannedStartAt;
+  const trendDue=candidate?.dueAt||trend.trendDueAt||item.dueAt;
   switch(key){
     case "name":return '<span class="gantt-item-data">'+escapeHtml(item.title)+'</span>';
     case "type":return escapeHtml(itemTypeConfig(item.type,item.organizationId).label);
@@ -389,10 +456,10 @@ function prd5ColumnValue(item,key,critical){
     case "status":return escapeHtml(statusDisplayLabel(item));
     case "critical":return critical?"Crítico":"—";
     case "blockers":return escapeHtml(isBlocked(item)?"Bloqueado":"—");
-    case "progress":return progressCell(item);
+    case "progress":return trend.lastMeasurementPercent!=null?escapeHtml(String(Math.round(Number(trend.lastMeasurementPercent)))+"%") : progressCell(item);
     case "weight":return String(item.weight??1);
-    case "start":return dateCell(item.plannedStartAt);
-    case "due":return dateCell(item.dueAt);
+    case "start":return dateCell(trendStart);
+    case "due":return dateCell(trendDue);
     case "duration":return item.plannedDurationDays==null?"A definir":String(item.plannedDurationDays)+" d";
     case "baseline":return escapeHtml(formatDate(item.baselineDueAt));
     case "variance":return item.baselineDueAt&&item.dueAt?String(Math.round((new Date(item.dueAt)-new Date(item.baselineDueAt))/86400000))+" d":"—";
@@ -411,8 +478,8 @@ function prd44PaneToolbar(id,items){
   }
   if(id==="graph"){
     return `<button class="prd44-small-control prd44-play" data-action="propagate" title="Reproduzir sequência" aria-label="Reproduzir sequência">${icon("play")}</button>
-      <button class="prd44-small-control" data-action="pause-animation" title="Pausar" aria-label="Pausar animação">${icon("pause")}</button>
-      <details class="prd44-pane-options"><summary aria-label="Ferramentas do grafo" title="Ferramentas do grafo">${icon("sliders-horizontal")}</summary>
+      <button class="prd44-small-control" data-action="pause-animation" title="Pausar sequência" aria-label="Pausar sequência">${icon("pause")}</button>
+      <details class="prd44-pane-options"><summary aria-label="Ferramentas do mapa" title="Ferramentas do mapa">${icon("sliders-horizontal")}</summary>
         <div class="prd44-options-menu">
           <div class="prd44-zoom-controls">
             <button class="icon-button" data-action="zoom-out" title="Diminuir zoom">${icon("zoom-out")}</button>
@@ -421,10 +488,8 @@ function prd44PaneToolbar(id,items){
             <button class="icon-button" data-action="fit-graph" title="Enquadrar grafo">${icon("maximize")}</button>
             <button class="icon-button" data-action="reset-layout" title="Reorganizar nós">${icon("rotate-ccw")}</button>
           </div>
-          <button class="button quiet" data-action="restart-animation">${icon("rotate-ccw")} Reiniciar animação</button>
+          <button class="button quiet" data-action="restart-animation">${icon("rotate-ccw")} Reiniciar sequência</button>
           <label>Agrupar por<select id="groupingSelect">${[{id:"project",label:"Projeto / processo"},{id:"owner",label:"Responsável"},{id:"organization",label:"Empresa"},{id:"connections",label:"Itens conectados"}].map(entry=>option(entry.id,entry.label,ui.grouping===entry.id)).join("")}</select></label>
-          <label>Apresentação<select id="animationLayout"><option value="sequential">Sequencial</option><option value="parallel">Paralela</option></select></label>
-          <label>Análise<select id="animationMode"><option value="full">Percurso completo</option><option value="blocker">Até o bloqueio</option></select></label>
           ${ui.lastDeletedRelation?`<button class="button quiet" data-action="undo-relation">Desfazer TI</button>`:""}
         </div>
       </details>`;
@@ -438,7 +503,7 @@ function prd44PaneToolbar(id,items){
 }
 function renderPrd41Workspace(items) {
   const pane=(id,label,subtitle,content)=>`<section class="prd41-pane prd41-pane--${id} ${prd41FocusedPane===id?"is-focus-target":""}" data-pane="${id}" aria-label="${label}">
-    <header class="prd41-pane-heading prd44-pane-heading"><strong>${label}</strong>
+    <header class="prd41-pane-heading prd44-pane-heading"><div class="prd41-pane-title"><strong>${label}</strong><small>${id==="gantt"?`Status: ${escapeHtml(formatDate(statusDate()))} · `:""}${subtitle}</small></div>
       <div class="prd44-pane-actions">${prd44PaneToolbar(id,items)}
         <button type="button" class="prd41-focus-button" data-pane-focus="${id}" aria-label="Maximizar ${label}" aria-pressed="${prd41FocusedPane===id}">${icon(prd41FocusedPane===id?"minimize-2":"maximize-2")}</button>
       </div></header>
@@ -446,7 +511,7 @@ function renderPrd41Workspace(items) {
   return `<div class="prd41-workspace-viewport prd5-two-pane-viewport"><div class="prd41-workspace prd5-two-pane ${prd41FocusedPane?"is-focused":""}" data-focus="${prd41FocusedPane||"all"}">
     ${pane("gantt","Gantt estruturado","Hierarquia, dados e prazos",renderGantt(items))}
     <div class="prd41-splitter" role="separator" tabindex="0" data-pane-split="gantt-graph" aria-label="Redimensionar Gantt e Analítica" aria-orientation="vertical"><span aria-hidden="true"></span></div>
-    ${pane("graph","Grafo Analítico","Relações e animação",renderGraph(items))}
+    ${pane("graph","Grafo Analítico","Relações, grupos e sequência",renderGraph(items))}
   </div></div>`;
 }
 
@@ -496,14 +561,16 @@ function render() {
         </div>
       </header>
       <section class="workspace-heading">
-        <div class="prd42-context-title"><h1>${escapeHtml(orgName(user.organizationId) === "-" ? "Organização" : orgName(user.organizationId))}</h1><span class="prd42-items-count">${items.length} ${items.length === 1 ? "item" : "itens"}</span></div>
+        <div class="prd42-context-title"><h1>${escapeHtml(orgName(user.organizationId) === "-" ? "Organização" : orgName(user.organizationId))}</h1><span class="prd42-items-count">${items.length} ${items.length === 1 ? "item" : "itens"}</span><span class="workspace-status-date" data-status-date>Data de status: ${escapeHtml(formatDate(statusDate()))}</span></div>
         <div class="workspace-heading-actions">
           <button class="button quiet" data-action="templates">${icon("workflow")}Modelos</button>
+          <button class="button quiet ${ui.operationsOpen ? "active" : ""}" data-action="toggle-operations" aria-expanded="${ui.operationsOpen}">${icon("list-todo")}Meu painel</button>
           <button class="button primary" data-action="create" ${canCreateItem(user) ? "" : 'disabled title="Seu perfil GPO não permite criar itens neste contexto."'}>${icon("plus")}Novo item</button>
         </div>
       </section>
       ${!state.organizations.length ? `<section class="empty-state"><strong>Configure o workspace</strong><span>Cadastre a organização e ao menos um setor antes de criar itens ou usuários operacionais.</span><button class="button primary" data-action="configure-workspace">${icon("building-2")}Configurar organização</button></section>` : ""}
       <div id="noticeRoot">${noticeMarkup()}</div>
+      ${ui.operationsOpen ? `<aside id="operational-surfaces" class="operational-drawer" aria-label="Meu painel"><div class="operational-drawer-head"><div><strong>Meu painel</strong><small class="operational-as-of">Data de status: ${escapeHtml(formatDate(statusDate()))}</small></div><button type="button" class="icon-button" data-action="toggle-operations" aria-label="Fechar Meu painel">${icon("x")}</button></div>${renderOperationalAttention()}${renderOperationalHorizon()}${renderMyActions()}</aside>` : ""}
       <section class="workspace-controls" aria-label="Visualização e filtros">
         <span class="sr-only">Sintética, Analítica e Gantt integrados</span>
         <div class="view-filters">
@@ -529,6 +596,33 @@ function render() {
   prd41ApplyPaneLayout();
   mountIcons();
   requestAnimationFrame(()=>prd42RestoreWorkspaceScroll(prd42Scroll));
+}
+
+function renderOperationalHorizon() {
+  const horizon = state.horizon;
+  // Keep the operational horizon visible even when a bucket is empty. The
+  // user must discover the planning surface before it has pending rows.
+  const sections = [["availableNow", "Disponíveis agora"], ["today", "Hoje"], ["thisWeek", "Esta semana"], ["nextWeek", "Próxima semana"], ["thisMonth", "Restante do mês"], ["nextMonth", "Próximo mês"]];
+  return `<section class="operational-horizon" aria-label="Próximas atividades">${sections.map(([key, label]) => {
+    const rows = horizon?.[key] || [];
+    return `<div class="horizon-group"><h2>${label}<span>${rows.length}</span></h2>${rows.length ? `<div class="horizon-list">${rows.map(row => `<button type="button" data-select="${escapeHtml(row.itemId)}"><strong>${escapeHtml(row.title)}</strong><small>${escapeHtml(userName(row.ownerId))} · início ${dateCell(row.startAt)} · ciclo ${row.counters?.cycleDays ?? 0}d</small></button>`).join("")}</div>` : '<p>Nenhuma atividade.</p>'}</div>`;
+  }).join("")}</section>`;
+}
+function statusDate(){ return String(state.asOf || today()).slice(0,10); }
+
+function renderMyActions() {
+  const actions = state.actions || [];
+  if (!actions.length) return '<section class="my-actions empty" aria-label="Minhas ações"><h2>Minhas ações <span>0</span></h2><p>Nenhuma ação pendente. Aceites e decisões aparecerão aqui quando exigirem sua resposta.</p></section>';
+  return `<section class="my-actions" aria-label="Minhas ações"><h2>Minhas ações <span>${actions.length}</span></h2>${actions.map(action => `<article><strong title="${escapeHtml(action.itemTitle || "")}">${escapeHtml(action.itemTitle || "Aceitar compromisso")}</strong><span>${dateCell(action.startAt)} → ${dateCell(action.dueAt)}${action.scopeNote ? ` · ${escapeHtml(action.scopeNote)}` : ""}</span><button type="button" class="button primary" data-accept-commitment="${escapeHtml(action.commitmentId)}">Aceitar</button></article>`).join("")}</section>`;
+}
+
+function renderOperationalAttention() {
+  const visible=accessibleItems();
+  const dueDelta=item=>{const trend=state.trend?.itemTrendById?.[item.id];const baseline=item.baselineDueAt||item.dueAt;return trend?.trendDueAt&&baseline?Math.round((new Date(trend.trendDueAt)-new Date(baseline))/86400000):0;};
+  const trendLate=visible.filter(item=>dueDelta(item)>0).sort((a,b)=>dueDelta(b)-dueDelta(a));
+  const stopped=visible.filter(item=>{const trend=state.trend?.itemTrendById?.[item.id];return isOverdue(item)||isBlocked(item)||["blocked","measurement_pending"].includes(trend?.derivedState);}).sort((a,b)=>dueDelta(b)-dueDelta(a));
+  const render=(title,rows,empty)=>`<section class="attention-group"><h2>${title}<span>${rows.length}</span></h2>${rows.length?`<div class="attention-list">${rows.slice(0,12).map(item=>{const trend=state.trend?.itemTrendById?.[item.id],impact=dueDelta(item),agreement=ganttCommitmentsFor(item).find(entry=>entry.kind==="agreement"&&entry.status==="active"),cause=item.blockedReason||trend?.derivedState||statusDisplayLabel(item)||"Pendência";return `<button type="button" data-select="${escapeHtml(item.id)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(cause)} · responsável ${escapeHtml(userName(item.ownerId))}</small><small>Tendência ${trend?.trendDueAt?dateCell(trend.trendDueAt):"a confirmar"} · compromisso ${agreement?.dueAt?dateCell(agreement.dueAt):"não definido"} · impacto ${impact>0?`+${impact}d`:"a confirmar"}</small></button>`;}).join("")}</div>`:`<p>${empty}</p>`}</section>`;
+  return render("Tendência de atraso",trendLate,"Nenhuma tendência de atraso identificada.")+render("Atrasadas, paradas ou bloqueadas",stopped,"Nenhuma atividade parada ou bloqueada.");
 }
 
 function renderMasterSetup() {
@@ -728,8 +822,17 @@ function renderTable(items) {
   </div>`;
 }
 
-function renderBulkEditor() {
+function renderBulkEditorLegacy() {
   return `<form id="bulkEditForm" class="bulk-edit form-row"><label>Novo status<select name="status">${option("", "Manter status")}${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status)).join("")}</select></label><label>Novo responsável<select name="ownerId">${option("", "Manter responsável")}${state.users.filter((user) => !user.disabled).map((user) => option(user.id, user.name)).join("")}</select></label><label>Duração (dias)<input type="number" name="durationDays" min="0" step="1" placeholder="Manter duração"/></label><label>Peso<input type="number" name="weight" min="0.1" step="0.1" placeholder="Manter peso"/></label><label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" placeholder="Manter percentual"/></label><label>Empresa (se permitido)<select name="organizationId">${option("","Manter empresa")}${state.organizations.map(o=>option(o.id,o.name)).join("")}</select></label><label>Setor (se permitido)<select name="sectorId">${option("","Manter setor")}${state.sectors.map(se=>option(se.id,orgName(se.organizationId)+" / "+se.name)).join("")}</select></label><label><input type="checkbox" name="archive" value="1"/> Arquivar selecionados</label><label>Comentário<input name="comment" placeholder="Motivo da atualização"/></label><button class="button primary" type="submit">Aplicar aos selecionados</button></form>`;
+}
+
+// Backend mode uses the measurement workflow as the only source of real progress.
+// Keep the legacy bulk field available only for the static compatibility mode.
+function renderBulkEditor() {
+  const progressField = window.FluxosBackend?.enabled
+    ? '<span class="form-readonly-note"><strong>Avanço real</strong><small>Atualize cada atividade pelo fluxo “Atualizar execução”, com data/hora e ocorrência factual.</small></span>'
+    : '<label>Conclusão (%)<input type="number" name="progressPercent" min="0" max="100" step="1" placeholder="Manter percentual"/></label>';
+  return `<form id="bulkEditForm" class="bulk-edit form-row"><label>Novo status<select name="status">${option("", "Manter status")}${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status) => statusOption(status)).join("")}</select></label><label>Novo responsável<select name="ownerId">${option("", "Manter responsável")}${state.users.filter((user) => !user.disabled).map((user) => option(user.id, user.name)).join("")}</select></label><label>Duração (dias)<input type="number" name="durationDays" min="0" step="1" placeholder="Manter duração"/></label><label>Peso<input type="number" name="weight" min="0.1" step="0.1" placeholder="Manter peso"/></label>${progressField}<label>Empresa (se permitido)<select name="organizationId">${option("", "Manter empresa")}${state.organizations.map(o=>option(o.id,o.name)).join("")}</select></label><label>Setor (se permitido)<select name="sectorId">${option("", "Manter setor")}${state.sectors.map(se=>option(se.id,orgName(se.organizationId)+" / "+se.name)).join("")}</select></label><label><input type="checkbox" name="archive" value="1"/> Arquivar selecionados</label><label>Comentário<input name="comment" placeholder="Motivo da atualização"/></label><button class="button primary" type="submit">Aplicar aos selecionados</button></form>`;
 }
 
 function emptyMarkup() {
@@ -743,7 +846,7 @@ function scheduleAnalysis(items) {
   if (!tasks.length) return {valid:true,reliable:false,startDate:today(),finishDate:"",durationDays:0,rows:[],message:"Não há atividades ativas para calcular a previsão."};
   const taskIds = new Set(tasks.map((item) => item.id));
   const temporalTypes = new Set(["TI"]);
-  const dependencies = relationsFor(items).filter((relation) => temporalTypes.has(relation.relationType) && taskIds.has(relation.sourceId) && taskIds.has(relation.targetId));
+  const dependencies = expandedSummaryTi(items, relationsFor(items)).filter((relation) => temporalTypes.has(relation.relationType) && taskIds.has(relation.sourceId) && taskIds.has(relation.targetId));
   const sortedDates = tasks.map((item) => item.plannedStartAt).filter(Boolean).sort();
   const startDate = sortedDates[0] || today();
   const duration = new Map();
@@ -805,30 +908,99 @@ function scheduleAnalysis(items) {
 let prd43SelectedTiId="";
 let prd43GanttObserver=null;
 let prd44LinkSource="";
+function ganttCommitmentsFor(item){
+  const records=(state.commitments||[]).filter(entry=>entry.itemId===item.id).map(entry=>({...entry}));
+  if(!records.some(entry=>entry.kind==="baseline")&&(item.baselineStartAt||item.baselineDueAt)) records.push({itemId:item.id,kind:"baseline",version:1,status:"active",startAt:item.baselineStartAt||item.plannedStartAt||"",dueAt:item.baselineDueAt||item.dueAt||""});
+  if(!records.some(entry=>entry.kind==="agreement")&&(item.targetStartAt||item.targetDueAt)) records.push({itemId:item.id,kind:"agreement",version:1,status:"active",startAt:item.targetStartAt||item.plannedStartAt||"",dueAt:item.targetDueAt||item.dueAt||""});
+  return records;
+}
+function ganttCommitmentLabel(entry, records) {
+  if (entry.kind === "baseline") {
+    return records.some(record => record.kind === "agreement" && record.status === "active")
+      ? "Baseline" : "Baseline · compromisso vigente";
+  }
+  return {active:"Acordo vigente", proposed:"Proposta pendente", superseded:"Acordo anterior"}[entry.status] || "Compromisso";
+}
+function ganttRange(startAt, dueAt) {
+  const first = calendarDayNumber(startAt || dueAt);
+  const last = calendarDayNumber(dueAt || startAt);
+  return Number.isFinite(first) && Number.isFinite(last) && first <= last ? {first, last} : null;
+}
+const ganttTrendDrafts = new Map();
+function ganttDraftKey(itemId) {
+  return [window.FluxosBackend?.status?.workspaceId, state.currentUserId, itemId].join(":");
+}
+function canAdjustGanttTrend(item) {
+  return window.FluxosBackend?.enabled && !completeStatus(item.status) && !childrenOf(item.id).length &&
+    canEditItem(currentUser(), item) && gpoDecision(currentUser(), "change_duration", item) === true;
+}
+function ganttRowDates(row, scheduleStart) {
+  const commitments = ganttCommitmentsFor(row.item);
+  const baseline = commitments.find(entry => entry.kind === "baseline");
+  const agreement = commitments.find(entry => entry.kind === "agreement" && entry.status === "active");
+  const proposal = commitments.filter(entry => entry.kind === "agreement" && entry.status === "proposed")
+    .sort((a,b) => b.version - a.version)[0];
+  const trend = state.trend?.itemTrendById?.[row.item.id];
+  const trendRange = trend?.trendStartAt && trend?.trendDueAt ? ganttRange(trend.trendStartAt, trend.trendDueAt) : null;
+  const start = shiftedDate(scheduleStart, row.startOffset);
+  const end = inclusiveFinishDate(start, row.duration);
+  const plan = ganttRange(start, end);
+  const bands = [
+    ["baseline", agreement ? "Baseline original" : "Baseline original · compromisso vigente", baseline],
+    ["agreement", "Compromisso vigente", agreement],
+    ["proposal", "Proposta pendente", proposal],
+  ].map(([layer, label, entry]) => ({layer, label, entry, range:ganttRange(entry?.startAt, entry?.dueAt)}))
+   .filter(band => band.range);
+  const draft = ganttTrendDrafts.get(ganttDraftKey(row.item.id));
+  const candidate = draft || (proposal && (!agreement || proposal.version > agreement.version) ? proposal : null);
+  const candidateRange = candidate && ganttRange(candidate.startAt, candidate.dueAt);
+  return {...row, commitments, trend, trendRange, start, end, plan, bands, draft, candidate, candidateRange};
+}
+function ganttRangeStyle(range, firstDay, dayCount) {
+  return `left:${(range.first-firstDay)/dayCount*100}%;width:${(range.last-range.first+1)/dayCount*100}%`;
+}
 function renderGantt(items) {
   ui.bulkSelected ||= new Set();
   const analysis=scheduleAnalysis(items), computed=new Map(analysis.rows.map(row=>[row.item.id,row]));
+  const sortKey=prd5SavedView().sortKey||"", sortDir=prd5SavedView().sortDir||"asc";
   const rows=tableRows(items).map(({item,depth,children})=>{
     if(computed.has(item.id))return {...computed.get(item.id),depth,children};
-    const offset=item.plannedStartAt?Math.max(0,(new Date(item.plannedStartAt+"T12:00:00")-new Date(analysis.startDate+"T12:00:00"))/86400000):0;
+    const offset=item.plannedStartAt?calendarDayNumber(item.plannedStartAt)-calendarDayNumber(analysis.startDate):0;
     return {item,startOffset:offset,duration:hasPlannedDuration(item)||item.dueAt?itemDurationDays(item):0,slack:null,critical:false,structural:true,depth,children};
-  });
-  const maxDay=Math.max(1,...rows.map(row=>row.startOffset+Number(row.duration||0)+(row.slack||0)));
+  }).map(row => ganttRowDates(row, analysis.startDate)).filter(row=>prd5RowMatches(row.item,row.candidate));
+  if(sortKey)rows.sort((a,b)=>{const av=prd5SortValue(a.item,sortKey,a.candidate),bv=prd5SortValue(b.item,sortKey,b.candidate);const cmp=av< bv?-1:av>bv?1:0;return sortDir==="desc"?-cmp:cmp;});
+  if (!rows.length) return '<div class="gantt-card prd43-gantt">'+emptyMarkup()+'</div>';
+  const ranges = rows.flatMap(row => [row.plan, row.trendRange, row.candidateRange, ...row.bands.map(band => band.range)]).filter(Boolean);
+  const firstDay = ranges.length ? Math.min(...ranges.map(range => range.first)) : calendarDayNumber(analysis.startDate);
+  const finalDay = ranges.length ? Math.max(...ranges.map(range => range.last)) : firstDay;
+  const maxDay = finalDay-firstDay+1;
+  const axisStart = shiftedDate(analysis.startDate, firstDay-calendarDayNumber(analysis.startDate));
+  const ticks = [...new Set([0,.25,.5,.75,1].map(fraction => Math.round((maxDay-1)*fraction)))];
+  const todayDate=statusDate(),todayOffset=calendarDayNumber(todayDate)-firstDay;
+  const todayPercent=Math.max(0,Math.min(100,todayOffset/maxDay*100));
+  const todayInHorizon=todayOffset>=0&&todayOffset<maxDay;
   const visibleCols=prd5AdaptiveColumns();
-  const gridColumns=visibleCols.map(([key])=>key==="name"?"minmax(118px,1.8fr)":key==="edit"?"58px":key==="select"?"25px":"minmax(48px,.9fr)").join(" ")+" minmax(110px,2.6fr)";
+  const gridColumns=prd5GanttGrid(visibleCols);
   const visible=new Set(rows.map(row=>row.item.id));
   const ties=relationsFor(items).filter(rel=>rel.relationType==="TI"&&visible.has(rel.sourceId)&&visible.has(rel.targetId));
   let html=`<div class="gantt-card prd43-gantt">
     <div class="prd43-gantt-relation-editor" id="prd43GanttRelationEditor" hidden></div>`;
-  if(!rows.length)return html+emptyMarkup()+"</div>";
   html+=`<div class="prd5-gantt-bulk-toolbar"><button class="prd44-small-control prd5-bulk-edit-button" data-action="toggle-bulk" type="button" title="Editar itens selecionados">Editar selecionados (${ui.bulkSelected?.size||0})</button></div><div class="gantt-scroll" id="prd43GanttScroll"><div class="prd43-gantt-content" id="prd43GanttContent">
-    <div class="gantt-axis" style="--prd5-grid:${gridColumns}">${visibleCols.map(([key,label])=>`<span class="prd5-cell" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`).join("")}<div class="gantt-axis-track">${[0,25,50,75,100].map(percent=>`<span style="left:${percent}%">${escapeHtml(formatDate(shiftedDate(analysis.startDate,Math.round(maxDay*percent/100))))}</span>`).join("")}</div></div>`;
+    <div class="gantt-axis" style="--prd5-grid:${gridColumns}">${visibleCols.map(([key,label])=>`<span class="prd5-cell gantt-column-heading" data-gantt-column="${key}" title="${escapeHtml(label)}"><button type="button" class="gantt-column-sort" data-gantt-sort="${key}" aria-label="Ordenar por ${escapeHtml(label)}" title="Ordenar por ${escapeHtml(label)}">${escapeHtml(label)}${sortKey===key?` <small>${sortDir==="asc"?"↑":"↓"}</small>`:""}</button>${key!=="edit"&&key!=="select"?`<details class="gantt-column-filter"><summary aria-label="Filtrar ${escapeHtml(label)}" title="Filtrar ${escapeHtml(label)}">${icon("filter")}</summary><div><input type="search" data-gantt-filter="${escapeHtml(key)}" value="${escapeHtml(prd5SavedView().filters?.[key]||"")}" placeholder="Filtrar…" aria-label="Filtrar ${escapeHtml(label)}"/></div></details>`:""}<button type="button" class="gantt-column-resize" data-gantt-resize="${key}" role="separator" aria-orientation="vertical" aria-label="Redimensionar coluna ${escapeHtml(label)}" aria-valuemin="44" aria-valuemax="600" aria-valuenow="${prd5SavedView().widths?.[key]||100}" title="Arraste para redimensionar. Setas ajustam; Home restaura."></button></span>`).join("")}<div class="gantt-axis-track">${ticks.map(offset=>`<span class="gantt-tick${offset===maxDay-1?" last":""}" style="left:${offset/maxDay*100}%">${escapeHtml(formatDate(shiftedDate(axisStart,offset)))}</span>`).join("")}<span class="gantt-today-label ${todayInHorizon?"":"out-of-range"}" data-gantt-today title="${todayInHorizon?"Hoje no horizonte":"Hoje fora do horizonte exibido"}" style="--today-left:${todayPercent}%">Hoje · ${escapeHtml(formatDate(todayDate))}</span></div></div>`;
   const relationMap=new Map();
   for(const rel of ties){const incoming=relationMap.get(rel.targetId)||{before:[],after:[]};incoming.before.push(rel);relationMap.set(rel.targetId,incoming);
     const outgoing=relationMap.get(rel.sourceId)||{before:[],after:[]};outgoing.after.push(rel);relationMap.set(rel.sourceId,outgoing);}
   html+=rows.map(row=>{
-    const item=row.item, left=Math.max(0,Math.min(100,row.startOffset/maxDay*100)), width=Math.max(1,Math.min(100-left,Math.max(1,Number(row.duration||0)/maxDay*100)));
-    const start=shiftedDate(analysis.startDate,row.startOffset),end=Number(row.duration||0)>0?inclusiveFinishDate(start,row.duration):"";
+    const {item, trend, trendRange, commitments, start, end, bands} = row;
+    const barRange = row.candidateRange || trendRange || row.plan;
+    const barLabel = row.candidateRange ? (row.draft ? "Tendência ajustada · rascunho" : "Tendência proposta · aguarda aceite") : trendRange ? "Tendência" : "Planejamento";
+    const barDates = row.candidateRange ? [row.candidate.startAt, row.candidate.dueAt] : trendRange ? [trend.trendStartAt, trend.trendDueAt] : [start, end];
+    const canAdjust = canAdjustGanttTrend(item);
+    const barTitle = barLabel + ": " + barDates.map(formatDate).join(" → ") + " · " + statusDisplayLabel(item);
+    const bandTitle = ({label,entry}) => label + ": " + formatDate(entry.startAt) + " a " + formatDate(entry.dueAt);
+    const trackTitle = [item.title, ...bands.map(bandTitle), barTitle].join("\n");
+    const bandMarkup = bands.map(band => `<span data-gantt-layer="${band.layer}" class="gantt-commitment-band ${band.layer}" style="${ganttRangeStyle(band.range,firstDay,maxDay)}" role="img" aria-label="${escapeHtml(bandTitle(band))}"></span>`).join("");
+    const ganttHistory = item.id===ui.selectedItemId ? `<details class="gantt-history-inline" open><summary>Histórico (${commitments.length})</summary><div>${commitments.map(entry=>`<span><strong>${ganttCommitmentLabel(entry,commitments)}</strong> ${escapeHtml(formatDate(entry.startAt))} → ${escapeHtml(formatDate(entry.dueAt))}</span>`).join("")}${trendRange?`<span class="trend"><strong>Tendência</strong> ${escapeHtml(formatDate(trend.trendStartAt))} → ${escapeHtml(formatDate(trend.trendDueAt))}</span>`:""}</div></details>` : "";
     const tone=signalOf(item), tiesFor=relationMap.get(item.id)||{before:[],after:[]};
     const predecessor=tiesFor.before.map(rel=>getItem(rel.sourceId)?.title).filter(Boolean);
     const successor=tiesFor.after.map(rel=>getItem(rel.targetId)?.title).filter(Boolean);
@@ -842,11 +1014,16 @@ function renderGantt(items) {
       <button data-order-up="${escapeHtml(item.id)}" type="button">Mover para cima</button><button data-order-down="${escapeHtml(item.id)}" type="button">Mover para baixo</button><button data-indent="${escapeHtml(item.id)}" type="button">Indentar</button>
       ${item.parentId?`<button data-outdent="${escapeHtml(item.id)}" type="button">Recuar</button>`:""}</div></details>`:"";
     return `<div class="gantt-row prd43-gantt-row signal-${tone} ${critical?"is-critical":""} ${ui.graphHighlight && ui.graphHighlight!=="all" && (ui.graphHighlight==="critical"?!critical:ui.graphHighlight!==tone)?"prd5-signal-dim":""} ${row.structural?"structural":""} ${item.id===ui.selectedItemId?"selected":""}" data-gantt-row="${escapeHtml(item.id)}" data-row="${escapeHtml(item.id)}" data-row-draggable="${mayMove}" draggable="${mayMove}" style="--depth:${Math.min(row.depth||0,8)};--prd5-grid:${gridColumns}">
-      ${visibleCols.map(([key])=>{if(key==="name")return `<div class="gantt-item-wrap prd5-cell">${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><span class="gantt-item-title">${escapeHtml(item.title)}</span><small>${escapeHtml(userName(item.ownerId))}</small></button></div>`;if(key==="edit")return `<div class="prd5-gantt-actions prd5-cell"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>${siblingActions}</div>`;if(key==="select")return `<label class="prd5-bulk-check prd5-cell"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label>`;return `<span class="prd5-cell prd5-col-${key}">${prd5ColumnValue(item,key,critical)}</span>`;}).join("")}
-      <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(item.title+" · "+formatDate(start)+" a "+formatDate(end))}">
-        <div class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""} ${item.dueAt?"":"prd5-unplanned"}" data-gantt-bar="${escapeHtml(item.id)}" style="left:${left}%;width:${width}%" title="${escapeHtml(formatDate(start)+" → "+formatDate(end)+" · "+statusDisplayLabel(item))}">
+      ${visibleCols.map(([key])=>{if(key==="name")return `<div class="gantt-item-wrap prd5-cell">${mayMove?`<button type="button" class="gantt-row-drag" data-gantt-row-drag="${escapeHtml(item.id)}" aria-label="Mover ${escapeHtml(item.title)}" title="Arraste para organizar. Use o menu para mover pelo teclado.">${icon("grip-vertical")}</button>`:""}${toggle}<button class="gantt-item" data-select="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><span class="gantt-item-title">${escapeHtml(item.title)}</span><small>${escapeHtml(userName(item.ownerId))}</small></button></div>`;if(key==="edit")return `<div class="prd5-gantt-actions prd5-cell"><button type="button" class="prd5-gantt-edit" data-select="${escapeHtml(item.id)}" aria-label="Editar ${escapeHtml(item.title)}">${icon("pencil")}</button>${siblingActions}</div>`;if(key==="select")return `<label class="prd5-bulk-check prd5-cell"><input type="checkbox" data-bulk-item="${escapeHtml(item.id)}" ${ui.bulkSelected?.has(item.id)?"checked":""}/></label>`;return `<span class="prd5-cell prd5-col-${key}">${prd5ColumnValue(item,key,critical,row.candidate)}</span>`;}).join("")}
+      <div class="gantt-track" data-gantt-track="${escapeHtml(item.id)}" title="${escapeHtml(trackTitle)}">
+        ${todayInHorizon?`<span class="gantt-today-line" data-gantt-today aria-hidden="true" style="left:${todayPercent}%"></span>`:""}
+        ${bandMarkup}
+        ${row.candidateRange && trendRange ? `<span class="gantt-commitment-band trend" data-gantt-layer="trend" style="${ganttRangeStyle(trendRange,firstDay,maxDay)}" role="img" aria-label="Tendência calculada: ${escapeHtml(formatDate(trend.trendStartAt))} a ${escapeHtml(formatDate(trend.trendDueAt))}"></span>` : ""}
+        <div data-gantt-layer="${row.candidateRange?"candidate":trendRange?"trend":"plan"}" class="gantt-bar prd43-gantt-bar signal-${tone} ${critical?"critical":""} ${item.dueAt?"":"prd5-unplanned"}" data-gantt-bar="${escapeHtml(item.id)}" ${canAdjust?`data-gantt-date-drag="${escapeHtml(item.id)}"`:""} data-gantt-start="${escapeHtml(barDates[0])}" data-gantt-end="${escapeHtml(barDates[1])}" data-gantt-max-day="${maxDay}" style="${ganttRangeStyle(barRange,firstDay,maxDay)}" title="${escapeHtml(barTitle)}">
+          ${canAdjust?`<button type="button" class="gantt-date-resize start" data-gantt-date-resize="start" aria-label="Alterar início de ${escapeHtml(item.title)}"></button><button type="button" class="gantt-date-resize end" data-gantt-date-resize="end" aria-label="Alterar término de ${escapeHtml(item.title)}"></button>`:""}
           ${canLink?`<button type="button" class="prd43-gantt-handle" data-gantt-handle="${escapeHtml(item.id)}" title="Arraste para criar TI a partir de ${escapeHtml(item.title)}" aria-label="Criar TI a partir de ${escapeHtml(item.title)}"></button>`:""}
         </div>
+        ${ganttHistory}
       </div>
       <span class="prd43-gantt-links" title="${escapeHtml("Predecessoras: "+(predecessor.join(", ")||"nenhuma")+" · Sucessoras: "+(successor.join(", ")||"nenhuma"))}">${predecessor.length?"←"+predecessor.length:""}${successor.length?" →"+successor.length:""}</span>
     </div>`;
@@ -856,6 +1033,16 @@ function renderGantt(items) {
       <button type="button" data-highlight-signal="gray" class="gray">Não iniciado</button><button type="button" data-highlight-signal="blue" class="blue">Em execução</button><button type="button" data-highlight-signal="green" class="green">Concluído</button>
       <button type="button" data-highlight-signal="yellow" class="yellow">Risco / atraso</button><button type="button" data-highlight-signal="red" class="prd5-blocked-key">Bloqueado</button><button type="button" data-highlight-signal="critical" class="prd5-critical-key">Crítico</button>
     </div></div>`;
+  const hasBand = layer => rows.some(row => row.bands.some(band => band.layer === layer));
+  const hasAgreement = hasBand("agreement");
+  html += `<div class="gantt-commitment-legend" aria-label="Camadas do cronograma">
+    ${hasBand("baseline")?`<span class="gantt-legend-key baseline">${hasAgreement?"Baseline original":"Baseline · compromisso vigente"}</span>`:""}
+    ${hasAgreement?'<span class="gantt-legend-key agreement">Compromisso vigente</span>':""}
+    ${hasBand("proposal")?'<span class="gantt-legend-key proposal">Proposta pendente</span>':""}
+    ${rows.some(row=>row.candidateRange)?'<span class="gantt-legend-key candidate">Tendência ajustada</span>':""}
+    ${rows.some(row=>row.trendRange)?'<span class="gantt-legend-key trend">Tendência atual</span>':""}
+    ${rows.some(row=>!row.trendRange)?'<span class="gantt-legend-key plan">Planejamento</span>':""}
+    <span class="gantt-legend-key today">Hoje</span></div>`;
   return html;
 }
 function prd43DrawGanttRelations(){
@@ -932,10 +1119,14 @@ function prd43ShowGanttRelation(id){
   prd44LinkSource="";
   prd43SelectedTiId=relation?.id||"";
   if(!relation){editor.hidden=true;editor.innerHTML="";prd43DrawGanttRelations();return;}
-  const leaves=scopedItems().filter(item=>!state.items.some(child=>child.parentId===item.id&&!child.archivedAt)&&canViewItem(currentUser(),item));
+  const leaves=scopedItems().filter(item=>canViewItem(currentUser(),item));
+  const sourceTitle=getItem(relation.sourceId)?.title||"";
+  const targetTitle=getItem(relation.targetId)?.title||"";
+  const sourceChildren=childrenOf(relation.sourceId).length, targetChildren=childrenOf(relation.targetId).length;
   editor.hidden=false;
-  editor.innerHTML=`<strong>Editar TI</strong><label>Origem<select id="prd43TiSource">${leaves.map(item=>option(item.id,item.title,relation.sourceId===item.id)).join("")}</select></label>
+  editor.innerHTML=`<strong>Editar TI</strong><p class="relation-impact">${escapeHtml(sourceTitle)} → ${escapeHtml(targetTitle)}${sourceChildren||targetChildren?` · referência resumida (${sourceChildren+targetChildren} subitem(ns))`:""} · defasagem ${Number(relation.lagDays||0)}d</p><label>Origem<select id="prd43TiSource">${leaves.map(item=>option(item.id,item.title,relation.sourceId===item.id)).join("")}</select></label>
     <label>Destino<select id="prd43TiTarget">${leaves.map(item=>option(item.id,item.title,relation.targetId===item.id)).join("")}</select></label>
+    <label>Defasagem (dias)<input id="prd43TiLag" type="number" step="0.5" value="${escapeHtml(String(Number(relation.lagDays||0)))}" min="0" inputmode="decimal"/></label>
     <button type="button" class="button quiet" data-action="prd43-update-ti">Aplicar</button>
     <button type="button" class="button danger" data-action="prd43-delete-ti">Remover TI</button>
     <button type="button" class="icon-button" data-action="prd43-close-ti" aria-label="Fechar edição de TI">${icon("x")}</button>`;
@@ -949,8 +1140,62 @@ function prd43GanttDropTarget(clientX,clientY){
   }
   return null;
 }
+function beginGanttTrendDrag(event) {
+  const bar = event.target.closest("[data-gantt-date-drag]");
+  if (!bar || event.button !== 0 || !event.isPrimary || event.target.closest("[data-gantt-handle]")) return;
+  const itemId = bar.dataset.ganttDateDrag;
+  if (!canAdjustGanttTrend(getItem(itemId))) return;
+  const edge = event.target.closest("[data-gantt-date-resize]")?.dataset.ganttDateResize;
+  const trackWidth = bar.closest("[data-gantt-track]").getBoundingClientRect().width;
+  const dayCount = Number(bar.dataset.ganttMaxDay);
+  if (!trackWidth || !dayCount) return;
+  const start = bar.dataset.ganttStart, end = bar.dataset.ganttEnd;
+  const initialLeft = bar.style.left, initialWidth = bar.style.width;
+  const pointerId = event.pointerId;
+  const preview = x => {
+    const days = Math.round((x - event.clientX) / trackWidth * dayCount);
+    let startAt = edge === "end" ? start : shiftedDate(start, days);
+    let dueAt = edge === "start" ? end : shiftedDate(end, days);
+    if (startAt > dueAt) {
+      if (edge === "start") startAt = dueAt;
+      else dueAt = startAt;
+    }
+    const leftDays = calendarDayNumber(startAt) - calendarDayNumber(start);
+    bar.style.left = (parseFloat(initialLeft) + leftDays * 100 / dayCount) + "%";
+    bar.style.width = inclusiveDurationDays(startAt, dueAt) * 100 / dayCount + "%";
+    bar.dataset.dragPreview = formatDate(startAt) + " → " + formatDate(dueAt);
+    return {startAt, dueAt};
+  };
+  const move = e => { if (e.pointerId === pointerId) preview(e.clientX); };
+  const finish = e => {
+    if (e.pointerId !== pointerId) return;
+    const dates = e.type === "pointerup" ? preview(e.clientX) : null;
+    bar.removeEventListener("pointermove", move);
+    for (const name of ["pointerup","pointercancel","lostpointercapture"]) bar.removeEventListener(name, finish);
+    if (bar.hasPointerCapture(pointerId)) bar.releasePointerCapture(pointerId);
+    bar.style.left = initialLeft;
+    bar.style.width = initialWidth;
+    bar.classList.remove("is-date-dragging","is-date-resizing");
+    delete bar.dataset.dragPreview;
+    if (!dates || (dates.startAt === start && dates.dueAt === end)) return;
+    ganttTrendDrafts.set(ganttDraftKey(itemId), dates);
+    openItem(itemId);
+    document.querySelector('#commitmentProposalForm [name="scopeNote"]')?.focus();
+  };
+  event.preventDefault();
+  event.stopPropagation();
+  bar.setPointerCapture(pointerId);
+  bar.classList.add(edge ? "is-date-resizing" : "is-date-dragging");
+  bar.addEventListener("pointermove", move);
+  for (const name of ["pointerup","pointercancel","lostpointercapture"]) bar.addEventListener(name, finish);
+}
 function prd43BindGantt(){
   const content=document.querySelector("#prd43GanttContent");if(!content)return;
+  if (!content.dataset.dateDragBound) {
+    content.dataset.dateDragBound = "true";
+    content.addEventListener("pointerdown", beginGanttTrendDrag, true);
+  }
+  prd5BindGanttColumns();
   const relationSvg=content.querySelector("#prd43GanttOverlay");
   if(relationSvg&&!relationSvg.dataset.bound){
     const openRelation=event=>{
@@ -1075,13 +1320,26 @@ function renderGraph(items){
 function layoutKey() { return `${currentUser().id}:${ui.scopeId||"all"}:${ui.grouping}`; }
 
 function mountGraph(items) {
-  const projection=prd44GraphProjection(items);
+  const trendById = state.trend?.itemTrendById || {};
+  const activeDueById = new Map((state.commitments || []).filter(entry => entry.kind === "agreement" && entry.status === "active").map(entry => [entry.itemId, entry.dueAt]));
+  const focus = new Set(items.filter(item => {
+    const trend = trendById[item.id];
+    return trend?.derivedState === "measurement_pending" || trend?.derivedState === "blocked" || (trend?.trendDueAt && activeDueById.get(item.id) && trend.trendDueAt !== activeDueById.get(item.id));
+  }).map(item => item.id));
+  if (focus.size) {
+    for (const relation of state.relations.filter(relation => relation.relationType === "TI")) {
+      if (focus.has(relation.sourceId)) focus.add(relation.targetId);
+      if (focus.has(relation.targetId)) focus.add(relation.sourceId);
+    }
+  }
+  const graphItems = focus.size ? items.filter(item => focus.has(item.id)) : items;
+  const projection=prd44GraphProjection(graphItems);
   const graphKey = `${layoutKey()}:${projection.nodes.map((item) => item.id).join("|")}`;
-  const schedule = scheduleAnalysis(items);
+  const schedule = scheduleAnalysis(graphItems);
   const forecasts = new Map(schedule.rows.map((row) => [row.item.id,inclusiveFinishDate(shiftedDate(schedule.startDate,row.startOffset),row.duration)]));
   graphInstance = FluxosGraph.mount(document.querySelector("#graphCanvas"), {
-    items:projection.nodes, relations:projection.relations, grouping: ui.grouping,
-    savedPositions: ui.positions[layoutKey()] || {}, selectedId: ui.selectedItemId,
+    items:projection.nodes.map(item=>({ ...item, trendStartAt: state.trend?.itemTrendById?.[item.id]?.trendStartAt || "" })), relations:projection.relations, grouping: ui.grouping,
+    savedPositions: {}, selectedId: ui.selectedItemId,
     initialTransform: ui.graphKey === graphKey ? ui.graphTransform : null,
     escape: escapeHtml,
     labels: {
@@ -1091,11 +1349,12 @@ function mountGraph(items) {
       type: (item) => itemTypeConfig(item.type,item.organizationId).label, typeColor: (item) => itemTypeConfig(item.type,item.organizationId).color, status: (item) => signalLabel(item),
       signal: signalOf, statusColor: (item) => prd43Colors[signalOf(item)], duration: elapsedLabel, ownerTimer: ownerElapsedLabel, planned: plannedLabel, idealStart: (item) => item.plannedStartAt ? formatDate(item.plannedStartAt) : "—", idealEnd: (item) => item.dueAt ? formatDate(item.dueAt) : "—", baseline: (item) => item.baselineDueAt ? formatDate(item.baselineDueAt) : "—", project: rootOf,
       progress: (item) => Math.round(Number(item.progressPercent || 0)),
-      expected: (item) => forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
+      expected: (item) => state.trend?.itemTrendById?.[item.id]?.trendDueAt ? formatDate(state.trend.itemTrendById[item.id].trendDueAt) : forecasts.get(item.id) ? formatDate(forecasts.get(item.id)) : item.dueAt ? formatDate(item.dueAt) : "Sem previsão",
       deviation: (item) => {
-        const forecast = forecasts.get(item.id);
-        if (!forecast || !item.dueAt) return "Sem dados suficientes";
-        const days = Math.round((new Date(forecast + "T12:00:00") - new Date(item.dueAt + "T12:00:00")) / 86400000);
+        const forecast = state.trend?.itemTrendById?.[item.id]?.trendDueAt || forecasts.get(item.id);
+        const commitmentDue = activeDueById.get(item.id) || item.dueAt;
+        if (!forecast || !commitmentDue) return "Sem dados suficientes";
+        const days = Math.round((new Date(forecast + "T12:00:00") - new Date(commitmentDue + "T12:00:00")) / 86400000);
         return days > 0 ? days + "d depois do término ideal" : days < 0 ? Math.abs(days) + "d de folga" : "No término ideal";
       },
       blockers: (item) => (item.inheritedBlockedFrom || []).map(id=>getItem(id)?.title||id).join(", ") || (item.status==="blocked" ? "Bloqueio próprio" : "Nenhum"),
@@ -1122,7 +1381,10 @@ function mountGraph(items) {
       try {const rel=state.relations.find(r=>r.id===id);if(!rel||rel.relationType!=="TI")throw new Error("Selecione uma TI para remover.");ui.lastDeletedRelation={sourceId:rel.sourceId,targetId:rel.targetId};ui.prd43Undo={type:"delete-ti",relation:{sourceId:rel.sourceId,targetId:rel.targetId,lagDays:rel.lagDays,description:rel.description}};removeRelation(id);saveState();notify("Relação TI removida.");render();}
       catch(error){notify(error.message,"error");}
     },
-    onPositions: (positions) => { ui.positions[layoutKey()] = positions; state.graphPositions = ui.positions; saveState(); },
+    lockNodePositions: true,
+    // O mapa executivo é determinístico em todos os modos. Não gravar posições
+    // livres evita que uma preferência local contradiga o agrupamento oficial.
+    onPositions: () => {},
     onZoom: (value) => { const label = document.querySelector("#zoomLabel"); if (label) label.textContent = `${value}%`; },
   });
   if (ui.graphHighlight || ui.graphOwnerHighlight) document.querySelectorAll("#graphCanvas [data-node]").forEach((element) => { const item=getItem(element.dataset.node); const signalMatches=!ui.graphHighlight || signalOf(item)===ui.graphHighlight; const ownerMatches=!ui.graphOwnerHighlight || item.ownerId===ui.graphOwnerHighlight; element.classList.toggle("dimmed",!signalMatches || !ownerMatches); });
@@ -1136,7 +1398,7 @@ function openItem(id, keepTab = false) {
   graphInstance?.select(id);
   document.querySelectorAll("[data-row]").forEach((row) => row.classList.toggle("selected", row.dataset.row === id));
   document.querySelectorAll("[data-gantt-row]").forEach((row) => row.classList.toggle("selected", row.dataset.ganttRow === id));
-  renderPanel();
+  render();
 }
 
 function closePanel() {
@@ -1149,6 +1411,7 @@ function closePanel() {
 function renderViewSettingsPanel() {
   const hidden = new Set(state.hiddenTableColumns || []);
   const canConfigureStatuses = canManageGpo(currentUser());
+  const graphPreferenceSection = '<section class="panel-section"><h3>Mapa executivo</h3><p class="muted">O mapa usa agrupamento por projeto, responsável, empresa ou itens conectados. A disposição é calculada automaticamente.</p></section>';
   return `${panelHeader("Preferências locais","Configurações de visualização")}
     <div class="drawer-body">
       <section class="panel-section" hidden>
@@ -1164,11 +1427,7 @@ function renderViewSettingsPanel() {
         <div class="column-settings">${projectOptions().map((project)=>`<label>${escapeHtml(project.title)}<input type="color" data-row-fill-project="${escapeHtml(project.id)}" value="${escapeHtml(state.rowFillSettings?.projects?.[project.id] || state.rowFillSettings?.levels?.["0"] || "#ffffff")}"/></label>`).join("")}</div>
         <button type="button" class="button quiet" data-action="settings-reset-row-colors">Restaurar cores padrão</button>
       </section>
-      <section class="panel-section">
-        <h3>Preferências do grafo</h3>
-        <p class="muted">A posição dos nós é preservada localmente. Use “Redefinir layout” na visão Analítica para descartar as posições salvas.</p>
-        <button type="button" class="button quiet" data-action="settings-reset-graph">Restaurar layout do grafo</button>
-      </section>
+      ${graphPreferenceSection}
       ${canConfigureStatuses ? '<section class="panel-section"><h3>Estados e aparência</h3><p class="muted">As cores e os ícones dos estados são administrados na área Cadastros, aba Status.</p><button type="button" class="button quiet" data-action="settings-open-statuses">Abrir configurações de status</button></section>' : ""}
       <p class="muted">As configurações são locais e não sincronizam entre dispositivos. Não há backend neste escopo.</p>
     </div>`;
@@ -1247,40 +1506,22 @@ function itemFormFields(item, create = false) {
   const organizationId = item.organizationId || user.organizationId;
   const canChangeOwner = create || gpoDecision(user,"change_owner",item) === true;
   const canChangeDates = create || gpoDecision(user,"change_duration",item) === true;
-  const targetStart = item.targetStartAt || item.baselineStartAt || item.plannedStartAt || today();
-  const targetEnd = item.targetDueAt || item.baselineDueAt || item.dueAt || targetStart;
-  const targetDuration = inclusiveDurationDays(targetStart,targetEnd);
   return `<label>Nome<input name="title" value="${escapeHtml(item.title||"")}" required maxlength="240" placeholder="Nome da atividade"/></label>
     <div class="form-row">
       <label>Tipo<select name="type">${itemTypes.map(type=>option(type.id,itemTypeConfig(type.id,organizationId).label,(item.type||"task")===type.id)).join("")}</select></label>
       ${create?"":`<label>Status${summaryGroup?" · calculado":""}<select name="status" ${item.type==="approval" || summaryGroup?"disabled":""}>${statusChoices(item.status||"backlog").map(status=>statusOption(status,(item.status||"backlog")===status.id)).join("")}</select></label>`}
     </div>
-    <label>Responsável<select name="ownerId" required ${canChangeOwner?"":"disabled"}>${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select>${canChangeOwner?"":'<small class="secondary">Seu perfil não permite alterar o responsável deste item.</small>'}</label>
+    <label>${summaryGroup?"Responsável pela coordenação":"Responsável"}<select name="ownerId" required ${canChangeOwner?"":"disabled"}>${ownerOptions(create ? item.ownerId ?? user.id : item.ownerId)}</select>${canChangeOwner?"":'<small class="secondary">Seu perfil não permite alterar o responsável deste item.</small>'}</label>
     ${create ? `<label>Início esperado<input type="date" name="plannedStartAt" value="${escapeHtml(item.plannedStartAt||today())}" required/></label>` : `<div class="schedule-summary prd42-projection-summary">
-      <label class="manual-start-date">Data de execução<input type="date" name="plannedStartAt" value="${escapeHtml((item.plannedStartAt||today()).slice(0,10))}" required/></label>
+      ${summaryGroup?`<span>Início calculado<strong>${dateCell(item.plannedStartAt)}</strong></span>`:`<label class="manual-start-date">Data de execução<input type="date" name="plannedStartAt" value="${escapeHtml((item.plannedStartAt||today()).slice(0,10))}" required/></label>`}
       <span data-projected-due>Término projetado<strong>${dateCell(item.dueAt)}</strong></span>
       <span>Baseline original<strong>${dateCell(item.baselineDueAt||item.dueAt)}</strong></span>
       <span>Progresso<strong>${Math.round(Number(item.progressPercent||0))}%</strong></span>
     </div>`}
-    ${summaryGroup ? `<fieldset class="prd42-target-meta">
-      <legend>Meta do item pai</legend>
-      <p class="secondary">A meta é editável e independe da duração projetada dos filhos. A baseline original fica preservada no histórico.</p>
-      <div class="form-row">
-        <label>Início-meta vigente<input type="date" name="targetStartAt" value="${escapeHtml(targetStart)}" ${canChangeDates?"":"disabled"} required/></label>
-        <label>Duração-meta (dias corridos)<input type="number" name="targetDurationDays" min="1" step="1" value="${Math.max(1,targetDuration)}" ${canChangeDates?"":"disabled"} required/></label>
-      </div>
-      <label>Término-meta vigente<input type="date" name="targetDueAt" value="${escapeHtml(targetEnd)}" ${canChangeDates?"":"disabled"} required/></label>
-      ${canChangeDates?"":'<small class="secondary">Seu perfil não permite alterar metas neste escopo.</small>'}
-    </fieldset>
-    <div class="prd42-derived-note">Duração projetada pelos filhos: <strong>${item.plannedDurationDays||0} dias</strong>. Alterar a meta não modifica o cronograma dos descendentes.</div>
-    <details class="form-details prd42-replan-details">
-      <summary>Reprogramar a projeção dos filhos (avançado)</summary>
-      <label>Nova data projetada de conclusão do grupo<input type="date" name="replannedDueAt" value="${escapeHtml(item.replannedDueAt||"")}" ${canChangeDates?"":"disabled"}/></label>
-      <small>Operação diferente de editar a meta: esta repactuação desloca automaticamente as previsões dos filhos.</small>
-    </details>` : `<label>Duração planejada (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="1" value="${escapeHtml(item.plannedDurationDays??"")}" ${completed||!canChangeDates?"disabled":""} placeholder="A definir"/></label>`}
+    ${summaryGroup ? `<div class="prd42-derived-note"><strong>Cronograma calculado pelos subitens.</strong> Duração do maior caminho: ${item.plannedDurationDays||0} dias. Use “Propor novo compromisso” para formalizar uma nova data; a baseline original permanece no histórico.</div>` : `<label>Duração planejada (dias corridos)<input type="number" name="plannedDurationDays" min="0" step="any" inputmode="decimal" value="${escapeHtml(item.plannedDurationDays??"")}" ${completed||!canChangeDates?"disabled":""} placeholder="A definir"/></label>`}
     ${!create&&!summaryGroup ? `<div class="form-row">
       <label>Peso da atividade<input type="number" name="weight" min="0.1" step="0.1" value="${escapeHtml(item.weight??1)}" ${gpoDecision(user,"change_weight",item)===true?"":"disabled"} required/></label>
-      <label>Avanço (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent??0)}"/></label>
+      ${window.FluxosBackend?.enabled ? `<span class="form-readonly-note"><strong>Avanço real: ${Math.round(Number(item.progressPercent||0))}%</strong><small>Atualize pelo fluxo “Atualizar execução”, com data/hora e ocorrência factual.</small></span>` : `<label>Avanço (%)<input type="number" name="progressPercent" min="0" max="100" step="1" value="${escapeHtml(item.progressPercent??0)}"/></label>`}
     </div>` : ""}
     ${!create&&!summaryGroup ? `<label>Motivo do bloqueio (opcional)<input name="blockedReason" maxlength="240" value="${escapeHtml(item.blockedReason||"")}" placeholder="Informe o impedimento, se necessário"/></label>` : ""}
     <details class="form-details"><summary>Descrição e contexto</summary><label>Descrição<textarea name="description" rows="3">${escapeHtml(item.description||"")}</textarea></label></details>
@@ -1288,7 +1529,9 @@ function itemFormFields(item, create = false) {
 }
 
 function prd5ParseIndentedItems(text) {
-  const lines = String(text || "").replace(/\r/g,"").split("\n");
+  const source = String(text || "").replace(/\r/g,"");
+  const normalized = !source.includes("\n") && source.includes("\\n") ? source.replace(/\\n/g,"\n") : source;
+  const lines = normalized.split("\n");
   const nodes = [], ancestors = [];
   for (let lineIndex=0;lineIndex<lines.length;lineIndex++) {
     const raw = lines[lineIndex];
@@ -1370,7 +1613,7 @@ function renderQuickStepRows(text) {
       <label class="prd5-step-name"><span class="sr-only">Nome do subitem ${index+1}</span><input name="stepTitle_${index}" data-step-title value="${escapeHtml(entry.title)}" maxlength="240" required aria-label="Nome do subitem ${index+1}, nível ${entry.depth+1}"/></label>
       <label><span class="sr-only">Tipo</span><select name="stepType_${index}" data-step-type aria-label="Tipo do subitem ${index+1}">${itemTypes.map(type=>option(type.id,type.label,(saved?.type||"task")===type.id)).join("")}</select></label>
       <label><span class="sr-only">Responsável</span><select name="stepOwner_${index}" data-step-owner aria-label="Responsável do item ${index+1}">${ownerOptions(saved?.owner||defaultOwner)}</select></label>
-      <label><span class="sr-only">Duração em dias corridos</span><input type="number" min="0" step="1" inputmode="numeric" name="stepDuration_${index}" data-step-duration value="${escapeHtml(saved?.duration ?? 1)}" aria-label="Duração em dias corridos do item ${index+1}"/></label>
+    <label><span class="sr-only">Duração em dias corridos</span><input type="number" min="0" step="any" inputmode="decimal" name="stepDuration_${index}" data-step-duration value="${escapeHtml(saved?.duration ?? 1)}" aria-label="Duração em dias corridos do item ${index+1}"/></label>
     </div>`;
   }).join("");
   const form=root.closest("form");
@@ -1422,15 +1665,34 @@ function renderItemPanel(item) {
   if(ui.panelTab==="relations")ui.panelTab="details";
   if (item.type === "approval") tabs.push({id:"approval",label:"Aprovação"});
   const canAddChild = editable && canCreateItem(currentUser(),{...item,createdBy:currentUser().id}) && gpoDecision(currentUser(),"create_relation",item)===true;
+  const commitmentHistory = renderCommitmentHistory(item);
+  const breakdownHistory = renderBreakdownHistory(item);
+  const canProposeCommitment = window.FluxosBackend?.enabled && editable && gpoDecision(currentUser(), "change_duration", item) === true;
   let html = panelHeader(shortId(item) + " · " + labelOf(itemTypes,item.type), item.title,
     ""
     + (editable ? '<button class="button quiet" data-action="archive-item">' + icon("archive") + 'Arquivar</button>' : "")
     + (canRemoveItem(currentUser(),item) ? deleteButton("item",item.id,item.title) : ""));
   html += '<div class="item-summary">' + statusBadge(item) + '<span>' + plannedLabel(item) + '</span>' + (prd43ProgressBasis(item)?'<small class="prd43-progress-basis">'+escapeHtml(prd43ProgressBasis(item))+' · '+Math.round(Number(item.progressPercent||0))+'% consolidado</small>':"") + '</div>';
+  html += commitmentHistory;
+  html += breakdownHistory;
+  const draft = ganttTrendDrafts.get(ganttDraftKey(item.id));
+  const currentTrend = state.trend?.itemTrendById?.[item.id];
+  if (canProposeCommitment) html += `<form id="commitmentProposalForm" class="commitment-proposal form-stack"><h3>Propor novo compromisso</h3>${draft ? '<p>Tendência ajustada no Gantt. Revise as datas antes de enviar.</p>' : ""}<div class="form-row"><label>Início<input type="date" name="startAt" value="${escapeHtml(draft?.startAt || currentTrend?.trendStartAt || item.targetStartAt || item.plannedStartAt || today())}" required/></label><label>Término<input type="date" name="dueAt" value="${escapeHtml(draft?.dueAt || currentTrend?.trendDueAt || item.targetDueAt || item.dueAt || today())}" required/></label></div><label>Escopo e condições<textarea name="scopeNote" rows="2" placeholder="Fato, condição ou escopo acordado"></textarea></label><label class="inline-check"><input type="checkbox" name="scopeChange"/> Esta proposta altera o escopo</label><div class="drawer-actions">${draft ? '<button type="button" class="button quiet" data-action="discard-trend-draft">Descartar ajuste</button>' : ""}<button class="button primary" type="submit">Propor compromisso</button></div></form>`;
   html += '<div class="panel-tabs" role="tablist" aria-label="Detalhes do item">' + tabs.map((tab) => '<button role="tab" aria-selected="' + (ui.panelTab === tab.id) + '" class="' + (ui.panelTab === tab.id ? "active" : "") + '" data-panel-tab="' + tab.id + '">' + tab.label + '</button>').join("") + '</div><div class="drawer-body">';
-  if (ui.panelTab === "details") html += editable
+  const trend = state.trend?.itemTrendById?.[item.id];
+  const operationalMeasurement = window.FluxosBackend?.enabled && !childrenOf(item.id).length && gpoDecision(currentUser(),"record_measurement",item) === true;
+  const measurementNow=toLocalInput();
+  const measurementForm = `${renderLatestMeasurement(item)}<form id="measurementForm" class="form-stack"><h3>Atualizar execução</h3><p class="muted">Previsto na data selecionada: <strong data-measurement-expected>${trend?.expectedProgressPercent ?? 0}%</strong> · Último avanço real: <strong>${trend?.lastMeasurementPercent ?? "—"}%</strong></p><p class="measurement-counters" data-measurement-counters>${escapeHtml(trendCounterLabel(item)||"Tempo operacional ainda não medido")}</p><label>Data e hora efetiva<input type="datetime-local" name="effectiveAt" value="${measurementNow}" max="${measurementNow}" required/><small>O registro factual não pode ser lançado no futuro.</small></label><label>Avanço real (%)<input name="percent" type="number" min="0" max="100" step="0.01" required value="${trend?.lastMeasurementPercent ?? 0}"/></label><label>Ocorrência<select name="occurrence"><option value="no_issue">Sem impedimento</option><option value="blocker">Impedimento</option><option value="divergence">Desvio</option><option value="correction">Correção</option></select></label><label>Justificativa factual <small>(obrigatória quando há ocorrência)</small><textarea name="description" rows="3"></textarea></label><div class="drawer-actions"><button class="button primary" type="submit">${icon("check")}Registrar medição</button></div></form>`;
+  const operationalControls = window.FluxosBackend?.enabled && !childrenOf(item.id).length ? `<section class="operational-controls" aria-label="Controles operacionais"><h3>Controles operacionais</h3>${gpoDecision(currentUser(),"adjust_remaining_duration",item) === true ? `<form id="remainingDurationForm" class="form-stack"><label>Duração remanescente (dias)<input name="duration" type="number" min="0" step="1" value="${escapeHtml(String(item.remainingDurationDays ?? ""))}" required/></label><button class="button quiet" type="submit">Ajustar duração</button></form>` : ""}${gpoDecision(currentUser(),"record_blocker",item) === true ? `<form id="activityBlockedForm" class="form-stack"><label>Fato que bloqueia<textarea name="description" rows="2" required></textarea></label><button class="button quiet" type="submit">Registrar bloqueio</button></form>` : ""}${gpoDecision(currentUser(),"adjust_remaining_duration",item) === true ? `<form id="measurementPolicyForm" class="form-stack"><label>Frequência de medição<select name="frequency"><option value="daily">Diária</option><option value="weekly">Semanal</option><option value="milestone">Por marco</option></select></label><button class="button quiet" type="submit">Salvar frequência</button></form>` : ""}</section>` : "";
+  const advancedControls = window.FluxosBackend?.enabled && gpoDecision(currentUser(),"record_measurement",item) === true ? `<details class="form-details operational-advanced"><summary>Correção e controles avançados</summary><form id="correctMeasurementForm" class="form-stack"><label>ID da medição original<input name="measurementId" placeholder="measurement_..." required/></label><label>Novo percentual<input name="percent" type="number" min="0" max="100" step="0.01" required/></label><label>Justificativa factual<textarea name="description" rows="2" required></textarea></label><button class="button quiet" type="submit">Corrigir medição</button></form>${item.status === "done" && gpoDecision(currentUser(),"edit_item",item) === true ? `<form id="correctiveActivityForm" class="form-stack"><label>Título da atividade corretiva<input name="title" required/></label><label>Duração (dias)<input name="plannedDurationDays" type="number" min="0" step="1" required/></label><label>Descrição<textarea name="description" rows="2"></textarea></label><button class="button quiet" type="submit">Criar atividade corretiva</button></form>` : ""}</details>` : "";
+  if (ui.panelTab === "details") html += (operationalMeasurement ? measurementForm : "")
+    + (editable ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualizaÃ§Ã£o · data e comentÃ¡rio</summary><div class="change-box"><label>Data e hora da mudanÃ§a<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>ComentÃ¡rio da atualizaÃ§Ã£o<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualizaÃ§Ã£o</button></div></form>' + '<details class="form-details prd5-panel-extras"><summary>Anexos</summary>' + renderAttachments(item,true) + '</details>' + '<details class="form-details prd5-panel-extras"><summary>Subitens</summary>' + renderChildren(item) + '</details>' : (!operationalMeasurement ? renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item) : '<details class="form-details prd5-panel-extras"><summary>Subitens</summary>' + renderChildren(item) + '</details>'))
+    + operationalControls + advancedControls
+    /* legacy branch retained above in the generated build for compatibility */
+    /*
+    : editable
     ? '<form id="updateItemForm" class="form-stack">' + itemFormFields(item) + '<details class="form-details prd42-update-log"><summary>Registro da atualização · data e comentário</summary><div class="change-box"><label>Data e hora da mudança<input type="datetime-local" name="effectiveAt" value="' + toLocalInput() + '" required/></label><label>Comentário da atualização<textarea name="comment" rows="2" placeholder="O que mudou? (opcional)"></textarea></label></div></details><div class="drawer-actions"><button class="button primary" type="submit">' + icon("check") + 'Salvar atualização</button></div></form>' + '<details class="form-details prd5-panel-extras"><summary>Anexos</summary>' + renderAttachments(item,true) + '</details><details class="form-details prd5-panel-extras"><summary>Subitens</summary>' + renderChildren(item) + '</details>'
-    : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item);
+    : renderReadOnly(item) + renderAttachments(item,false) + renderChildren(item); */
   if (ui.panelTab === "details" && editable && ["project","process"].includes(item.type)) html += '<form id="templateSaveForm" class="form-stack"><h3>Reutilizar este fluxo</h3><label>Nome do modelo<input name="name" value="' + escapeHtml(item.title) + '" required maxlength="120"/></label><button class="button quiet" type="submit">' + icon("workflow") + 'Salvar como modelo</button></form>';
 
   if (ui.panelTab === "history") html += prd5HistoryPanel(events,item.id);
@@ -1438,11 +1700,44 @@ function renderItemPanel(item) {
   return html + '</div>';
 }
 
+function renderCommitmentHistory(item) {
+  const commitments = ganttCommitmentsFor(item);
+  const trend = state.trend?.itemTrendById?.[item.id];
+  if (!commitments.length && !trend?.trendDueAt) return "";
+  const rows = commitments.map((entry) => `<li><strong>${ganttCommitmentLabel(entry,commitments)}</strong><span>${dateCell(entry.startAt)} → ${dateCell(entry.dueAt)}</span></li>`).join("");
+  const tendency = trend?.trendDueAt ? `<li class="trend-history"><strong>Tendência atual</strong><span>${dateCell(trend.trendStartAt)} → ${dateCell(trend.trendDueAt)}</span></li>` : "";
+  return `<details class="commitment-history"><summary>Compromissos e tendência (${commitments.length})</summary><ul>${rows}${tendency}</ul></details>`;
+}
+
+function renderBreakdownHistory(item) {
+  if (item.realizedBeforeBreakdown === undefined || item.realizedBeforeBreakdown === null) return "";
+  const children = childrenOf(item.id).length;
+  return `<details class="breakdown-history"><summary>Detalhamento progressivo</summary><p>Este agrupador tinha <strong>${escapeHtml(String(Math.round(Number(item.realizedBeforeBreakdown) || 0)))}%</strong> realizado antes da criação dos subitens.</p><small>${children} subitem(ns) atual(is) · o percentual anterior permanece como histórico.</small></details>`;
+}
+
+function renderLatestMeasurement(item) {
+  const measurement = state.trend?.itemTrendById?.[item.id]?.lastMeasurement;
+  if (!measurement) return "";
+  const occurrenceLabels = {
+    no_issue: "Sem impedimento",
+    blocker: "Impedimento",
+    divergence: "Desvio",
+    correction: "Correção",
+  };
+  return `<section class="latest-measurement" aria-label="Última medição registrada"><div><strong>Última medição confirmada</strong><span>${escapeHtml(String(measurement.percent))}% · ${escapeHtml(occurrenceLabels[measurement.occurrence] || measurement.occurrence)} · ${escapeHtml(formatDateTime(measurement.effectiveAt))}</span></div>${measurement.description ? `<p>${escapeHtml(measurement.description)}</p>` : ""}</section>`;
+}
+
+function trendCounterLabel(item){
+  const counters=state.trend?.itemTrendById?.[item.id]?.counters;
+  if(!counters)return "";
+  return `Ciclo ${counters.cycleDays ?? 0}d · espera ${counters.waitingDays ?? 0}d · execução ${counters.executionDays ?? 0}d · bloqueio ${counters.blockedDays ?? 0}d`;
+}
+
 function renderReadOnly(item) {
   const hasChildren=state.items.some(child=>child.parentId===item.id&&!child.archivedAt);
   const targetStart=item.targetStartAt||item.baselineStartAt||item.plannedStartAt;
   const targetDue=item.targetDueAt||item.baselineDueAt||item.dueAt;
-  return `<dl class="item-facts"><dt>Responsável</dt><dd>${escapeHtml(userName(item.ownerId))}</dd>${hasChildren?`<dt>Início-meta</dt><dd>${dateCell(targetStart)}</dd><dt>Término-meta</dt><dd>${dateCell(targetDue)}</dd><dt>Duração-meta</dt><dd>${inclusiveDurationDays(targetStart,targetDue)} dias corridos</dd>`:""}<dt>Início projetado</dt><dd>${dateCell(item.plannedStartAt)}</dd><dt>Início real</dt><dd>${dateCell(item.actualStartAt,true)}</dd><dt>Liberada em</dt><dd>${dateCell(activityStartAt(item),true)}</dd><dt>Término projetado</dt><dd>${dateCell(item.dueAt)}</dd><dt>Término real</dt><dd>${dateCell(item.completedAt,true)}</dd><dt>Duração total</dt><dd>${elapsedLabel(item)}</dd><dt>Duração da atividade</dt><dd>${activityDurationLabel(item)}</dd><dt>Empresa / setor</dt><dd>${escapeHtml(orgName(item.organizationId))} / ${escapeHtml(sectorName(item.sectorId))}</dd><dt>Última mudança</dt><dd>${dateCell(item.lastChangeAt,true)}</dd></dl>${item.description ? `<p class="item-description">${escapeHtml(item.description)}</p>` : ""}<p class="read-only-note">Sua visualização é determinada pelo GPO.</p>`;
+  return `<dl class="item-facts"><dt>Responsável</dt><dd>${escapeHtml(userName(item.ownerId))}</dd>${hasChildren?`<dt>Início-meta</dt><dd>${dateCell(targetStart)}</dd><dt>Término-meta</dt><dd>${dateCell(targetDue)}</dd><dt>Duração-meta</dt><dd>${inclusiveDurationDays(targetStart,targetDue)} dias corridos</dd>`:""}<dt>Início projetado</dt><dd>${dateCell(item.plannedStartAt)}</dd><dt>Início real</dt><dd>${dateCell(item.actualStartAt,true)}</dd><dt>Liberada em</dt><dd>${dateCell(activityStartAt(item),true)}</dd><dt>Término projetado</dt><dd>${dateCell(item.dueAt)}</dd><dt>Término real</dt><dd>${dateCell(item.completedAt,true)}</dd><dt>Duração total</dt><dd>${elapsedLabel(item)}</dd><dt>Duração da atividade</dt><dd>${activityDurationLabel(item)}</dd><dt>Tempo operacional</dt><dd>${escapeHtml(trendCounterLabel(item)||"Sem medição operacional")}</dd><dt>Empresa / setor</dt><dd>${escapeHtml(orgName(item.organizationId))} / ${escapeHtml(sectorName(item.sectorId))}</dd><dt>Última mudança</dt><dd>${dateCell(item.lastChangeAt,true)}</dd></dl>${item.description ? `<p class="item-description">${escapeHtml(item.description)}</p>` : ""}<p class="read-only-note">Sua visualização é determinada pelo GPO.</p>`;
 }
 
 function renderChildren(item) {
@@ -1459,10 +1754,10 @@ function renderRelations(item, relations, editable) {
     const deleteRule = gpoDecision(currentUser(),"delete_relation",other);
     const remove = deleteRule === true && canEditItem(currentUser(),other);
     const canEditRelation = gpoDecision(currentUser(),"edit_relation",other) === true && canEditItem(currentUser(),getItem(rel.sourceId)) && canEditItem(currentUser(),getItem(rel.targetId));
-    if (ui.relationEditId === rel.id && canEditRelation) return `<form id="relationUpdateForm" class="relation-edit-form"><strong>Editar relação</strong><label>Origem<select name="sourceId">${editableCandidates.map((candidate) => option(candidate.id,itemContextLabel(candidate),candidate.id === rel.sourceId)).join("")}</select></label><label>Destino<select name="targetId">${editableCandidates.map((candidate) => option(candidate.id,itemContextLabel(candidate),candidate.id === rel.targetId)).join("")}</select></label><div class="form-row"><label>Tipo<select name="relationType">${relationTypes.map((type) => option(type.id,type.label,type.id === rel.relationType)).join("")}</select></label><label>Defasagem<input name="lagDays" type="number" step="0.5" value="${escapeHtml(rel.lagDays || 0)}"/></label></div><label>Descrição<textarea name="description" rows="2">${escapeHtml(rel.description || "")}</textarea></label><div class="row-actions"><button class="button primary" type="submit">Salvar relação</button><button class="button quiet" type="button" data-action="cancel-relation-edit">Cancelar</button></div></form>`;
+    if (ui.relationEditId === rel.id && canEditRelation) return `<form id="relationUpdateForm" class="relation-edit-form"><strong>Editar relação TI</strong><label>Origem<select name="sourceId">${editableCandidates.map((candidate) => option(candidate.id,itemContextLabel(candidate),candidate.id === rel.sourceId)).join("")}</select></label><label>Destino<select name="targetId">${editableCandidates.map((candidate) => option(candidate.id,itemContextLabel(candidate),candidate.id === rel.targetId)).join("")}</select></label><input type="hidden" name="relationType" value="TI"/><label>Defasagem<input name="lagDays" type="number" step="0.5" value="${escapeHtml(rel.lagDays || 0)}"/></label><label>Descrição<textarea name="description" rows="2">${escapeHtml(rel.description || "")}</textarea></label><div class="row-actions"><button class="button primary" type="submit">Salvar relação</button><button class="button quiet" type="button" data-action="cancel-relation-edit">Cancelar</button></div></form>`;
     return `<div class="relation-entry"><span class="relation-tag">${escapeHtml(labelOf(relationTypes,rel.relationType))}${rel.lagDays ? ` · ${rel.lagDays > 0 ? "+" : ""}${rel.lagDays}d` : ""}</span><span class="relation-direction">${outgoing ? "Este item →" : "→ Este item"}</span><button class="relation-item" data-select="${escapeHtml(other.id)}">${escapeHtml(itemContextLabel(other))}</button>${canEditRelation ? `<button class="button quiet" data-edit-relation="${escapeHtml(rel.id)}" title="Editar tipo da relação">${icon("pencil")}Editar</button>` : ""}${remove ? `<button class="icon-button" data-remove-relation="${escapeHtml(rel.id)}" title="Remover relação" aria-label="Remover relação">${icon("trash-2")}</button>` : ""}</div>`;
   }).join("") : '<p class="secondary">Nenhuma relação visível.</p>'}</div>
-    ${editable && candidates.length && gpoDecision(currentUser(),"create_relation",item) === true ? `<section class="panel-section"><h3>Nova relação</h3><form id="relationForm" class="form-stack"><label>Direção<select name="direction">${option("out","Este item se relaciona com…")}${option("in","Outro item se relaciona com este…")}</select></label><label>Outro item<select name="otherId" required>${candidates.map((candidate) => option(candidate.id,itemContextLabel(candidate))).join("")}</select></label><div class="form-row"><label>Relação<select name="relationType">${relationTypes.map((type) => option(type.id,type.label,type.id === "TI")).join("")}</select></label><label>Defasagem (dias)<input name="lagDays" type="number" step="0.5" value="0"/></label></div><label>Descrição ou justificativa<textarea name="description" rows="2" placeholder="Opcional"></textarea></label><button class="button primary" type="submit">${icon("link-2")}Conectar itens</button></form><details class="form-details relation-help"><summary>O que significa cada dependência?</summary><p><strong>TI:</strong> o término do primeiro libera o início do segundo.</p><p><strong>II:</strong> o início do primeiro libera o início do segundo.</p><p><strong>TT:</strong> o término do primeiro libera o término do segundo.</p><p><strong>IF:</strong> o início do primeiro libera o término do segundo.</p><p>A defasagem acrescenta ou antecipa dias entre os eventos.</p></details></section>` : ""}`;
+    ${editable && candidates.length && gpoDecision(currentUser(),"create_relation",item) === true ? `<section class="panel-section"><h3>Nova relação TI</h3><form id="relationForm" class="form-stack"><label>Direção<select name="direction">${option("out","Este item se relaciona com…")}${option("in","Outro item se relaciona com este…")}</select></label><label>Outro item<select name="otherId" required>${candidates.map((candidate) => option(candidate.id,itemContextLabel(candidate))).join("")}</select></label><input type="hidden" name="relationType" value="TI"/><label>Defasagem (dias)<input name="lagDays" type="number" step="0.5" value="0"/></label><label>Descrição ou justificativa<textarea name="description" rows="2" placeholder="Opcional"></textarea></label><button class="button primary" type="submit">${icon("link-2")}Conectar itens</button><p class="muted">A única dependência temporal é TI: o término do primeiro libera o início do segundo.</p></form></section>` : ""}`;
 }
 
 const eventLabels = { blocker_sources_changed:"Fontes do bloqueio alteradas", blocked_reason_changed:"Motivo do bloqueio alterado", relation_retargeted:"Destino da relação alterado", order_changed:"Ordem alterada", created:"Criação", status_changed:"Status", owner_changed:"Responsável", title_changed:"Nome", due_changed:"Término ideal", start_changed:"Início ideal original", duration_changed:"Duração planejada", replanned_due_changed:"Repactuação de término", description_changed:"Descrição", context_changed:"Contexto", type_changed:"Tipo", weight_changed:"Peso", progress_changed:"Progresso", comment:"Comentário", relation_created:"Relação criada", relation_removed:"Relação removida", reopened:"Reabertura", completed:"Conclusão", item_removed:"Item removido", archived:"Arquivamento", restored:"Restauração", parent_changed:"Item pai", approval_submitted:"Enviado para aprovação", approval_decided:"Decisão de aprovação", approval_revision_started:"Correção iniciada", approval_reopened:"Aprovação reaberta", attachment_added:"Anexo adicionado", attachment_removed:"Anexo removido", order_changed:"Ordem visual", started:"Início real", relation_updated:"Tipo da relação", relation_lag_changed:"Defasagem da relação", relation_description_changed:"Descrição da relação", relation_retargeted:"Relação redirecionada", blocked_set:"Bloqueio sinalizado", blocked_cleared:"Bloqueio removido", blocked_reason_changed:"Motivo do bloqueio" };
@@ -1566,6 +1861,15 @@ function renderArchivedItems() {
   return `<section class="panel-section"><h3>Itens arquivados (${items.length})</h3><p class="muted">Arquivar preserva o histórico e a hierarquia. Restaurar um pai restaura também os descendentes arquivados.</p>${items.length ? `<div class="admin-list">${items.map((item)=>`<div class="admin-entry"><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(userName(item.archivedBy))} · ${formatDateTime(item.archivedAt)}</small></span><button class="button quiet" data-restore-item="${escapeHtml(item.id)}">${icon("rotate-ccw")}Restaurar</button></div>`).join("")}</div>` : `<p class="muted">Nenhum item arquivado.</p>`}</section>`;
 }
 
+function renderArchivedItemsGrouped() {
+  const items=state.items.filter((item)=>item.archivedAt && canEditItem(currentUser(),item));
+  const byId=new Map(state.items.map(item=>[item.id,item]));
+  const rootOf=item=>{let current=item,seen=new Set();while(current?.parentId&&!seen.has(current.parentId)){seen.add(current.parentId);const parent=byId.get(current.parentId);if(!parent)break;current=parent;}return current||item;};
+  const groups=new Map();items.forEach(item=>{const root=rootOf(item);if(!groups.has(root.id))groups.set(root.id,{root,items:[]});groups.get(root.id).items.push(item);});
+  const entry=item=>`<div class="admin-entry archived-entry"><span><strong>${escapeHtml(item.title)}</strong><small>${item.parentId?"Subitem · ":"Projeto/processo · "}${escapeHtml(userName(item.archivedBy))} · ${formatDateTime(item.archivedAt)}</small></span><button class="button quiet" data-restore-item="${escapeHtml(item.id)}">${icon("rotate-ccw")}Restaurar</button></div>`;
+  return `<section class="panel-section"><h3>Itens arquivados (${items.length})</h3><p class="muted">Projetos e processos aparecem agrupados com seus subitens. Restaurar o item principal restaura a estrutura arquivada.</p>${items.length?[...groups.values()].sort((a,b)=>new Date(b.root.archivedAt)-new Date(a.root.archivedAt)).map(group=>`<details class="archive-group" open><summary><strong>${escapeHtml(group.root.title)}</strong><span>${group.items.length} item(ns)</span></summary><div class="admin-list">${group.items.sort((a,b)=>a.id===group.root.id?-1:b.id===group.root.id?1:new Date(b.archivedAt)-new Date(a.archivedAt)).map(entry).join("")}</div></details>`).join(""):`<p class="muted">Nenhum item arquivado.</p>`}</section>`;
+}
+
 function renderStatusSettings() {
   state.statusSettings ||= {};
   return `<section class="panel-section"><h3>Status operacionais</h3><p class="muted">Personalize o ícone e a cor exibidos para cada status. A mudança afeta a apresentação, não as regras de transição.</p><div class="type-settings-list">${statusCatalog.filter((status)=>!["under_review","correction"].includes(status.id)).map((status)=>{ const config=statusConfig(status.id); return `<form class="type-setting form-row" data-status-setting="${escapeHtml(status.id)}"><strong>${icon(config.icon)}${escapeHtml(status.label)}</strong><label>Ícone<select name="icon">${availableItemIcons.map((name)=>option(name,name,name===config.icon)).join("")}</select></label><label>Cor<input name="color" type="color" value="${escapeHtml(config.color)}" required/></label><button class="button quiet" type="submit">Salvar</button></form>`; }).join("")}</div></section>`;
@@ -1635,7 +1939,7 @@ function renderAdmin() {
     ${ui.adminTab === "organizations" ? `${renderOrganizationRegistry()}${gpoDecision(currentUser(),"manage_organization",null) === true ? `<section class="panel-section"><h3>Nova empresa</h3><form id="organizationForm" class="form-stack"><label>Nome<input name="name" required/></label><label>Estado (UF)<input name="state" maxlength="2" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar empresa</button></form></section>` : ""}<section class="panel-section"><h3>Novo setor</h3><form id="sectorForm" class="form-stack"><label>Empresa<select name="organizationId">${state.organizations.filter((org) => canManageOrganization(currentUser(),org.id)).map((org) => option(org.id,org.name)).join("")}</select></label><label>Nome do setor<input name="name" required/></label><button class="button primary" type="submit">${icon("plus")}Cadastrar setor</button></form></section>` : ""}
     ${ui.adminTab === "gpo" && canManageGpo(currentUser()) ? renderGpo() : ""}
     ${ui.adminTab === "statuses" && canManageGpo(currentUser()) ? renderStatusSettings() : ""}
-    ${ui.adminTab === "archive" && (canManageGpo(currentUser()) || state.items.some((item)=>item.archivedAt && canEditItem(currentUser(),item))) ? renderArchivedItems() : ""}
+    ${ui.adminTab === "archive" && (canManageGpo(currentUser()) || state.items.some((item)=>item.archivedAt && canEditItem(currentUser(),item))) ? renderArchivedItemsGrouped() : ""}
     ${ui.adminTab === "types" ? renderTypeSettings() : ""}
     ${ui.adminTab === "preferences" ? renderViewSettingsPanel().replace(/^.*?<div class="drawer-body">/s,"").replace(/<\/div>$/,"") : ""}
     ${ui.adminTab === "history" ? renderRegistryTimeline() : ""}
@@ -1792,10 +2096,26 @@ function renderDeletionPanel() {
 }
 
 function bindWorkspace() {
+  if (!window.__operationsEscapeBound) {
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || !ui.operationsOpen) return;
+      ui.operationsOpen = false;
+      render();
+    });
+    window.__operationsEscapeBound = true;
+  }
   app.onclick = (event) => {
     const button = event.target.closest("button,[data-action]");
     if (!button || button.closest("#panelRoot")) return;
     if(prd43ConfirmInline(button))return;
+    if (button.dataset.ganttSort) {
+      const view=prd5SavedView(), key=button.dataset.ganttSort;
+      const dir=view.sortKey===key && view.sortDir==="asc" ? "desc" : "asc";
+      prd5SaveView({sortKey:key,sortDir:dir});
+      render();
+      return;
+    }
+    if (button.dataset.acceptCommitment) { window.FluxosBackend?.acceptCommitment(button.dataset.acceptCommitment).catch(panelFailure); return; }
     if(button.dataset.prd4Focus){openItem(button.dataset.prd4Focus);return;}
     if (button.dataset.paneFocus) {
       prd41FocusedPane = prd41FocusedPane === button.dataset.paneFocus ? "" : button.dataset.paneFocus;
@@ -1831,7 +2151,9 @@ function bindWorkspace() {
       if(!rel){notify("Selecione uma relação TI.","error");return;}
       try{
         const origin=document.querySelector("#prd43TiSource")?.value,destination=document.querySelector("#prd43TiTarget")?.value;
-        updateRelation(rel.id,{sourceId:origin,targetId:destination,relationType:"TI",lagDays:rel.lagDays,description:rel.description});
+        const lag=Number(document.querySelector("#prd43TiLag")?.value||0);
+        if(!Number.isFinite(lag)||lag<0)throw new Error("A defasagem deve ser um número igual ou maior que zero.");
+        updateRelation(rel.id,{sourceId:origin,targetId:destination,relationType:"TI",lagDays:lag,description:rel.description});
         saveState();ui.prd43Undo=null;notify("TI alterada: "+getItem(origin).title+" → "+getItem(destination).title+".");render();
       }catch(error){notify(error.message,"error");}return;
     }
@@ -1923,12 +2245,13 @@ function bindWorkspace() {
     else if (action === "settings-auto-fit") { state.tableColumnWidths = {}; saveState(); renderPanel(false); notify("Ajuste automático habilitado."); }
     else if (action === "settings-reset-columns") { state.hiddenTableColumns = []; state.tableColumnWidths = {}; saveState(); renderPanel(false); notify("Preferências de coluna restauradas."); }
     else if (action === "settings-reset-row-colors") { delete state.rowFillSettings; saveState(); render(); notify("Cores das linhas restauradas."); }
-    else if (action === "settings-reset-graph") { ui.positions = {}; state.graphPositions = {}; ui.graphTransform = null; saveState(); notify("Posições do grafo restauradas."); render(); }
+    else if (action === "settings-reset-graph") { ui.positions = {}; ui.graphTransform = null; notify("O mapa determinístico foi reenquadrado."); render(); }
     else if (action === "settings-open-statuses") { ui.adminTab = "statuses"; ui.panel = "admin"; renderPanel(); }
     else if (action === "admin") { returnFocus = button; ui.panel = "admin"; renderPanel(); }
     else if (action === "configure-workspace") { returnFocus = button; ui.adminTab = "organizations"; ui.panel = "admin"; renderPanel(); }
     else if (action === "templates") { returnFocus = button; ui.templateId = ""; ui.templateCreationMode = false; ui.panel = "templates"; renderPanel(); }
     else if (action === "create-from-template") { returnFocus = button; ui.templateId = ""; ui.templateCreationMode = true; ui.panel = "templates"; renderPanel(); }
+    else if (action === "toggle-operations") { ui.operationsOpen = !ui.operationsOpen; render(); }
     else if (action === "columns") { ui.columnsOpen = !ui.columnsOpen; render(); }
     else if (action === "auto-fit-columns") { state.tableColumnWidths = {}; saveState(); render(); notify("Larguras manuais removidas; tabela ajustada automaticamente ao conteúdo."); }
     else if (action === "filters") { ui.filtersOpen = !ui.filtersOpen; render(); }
@@ -1951,7 +2274,7 @@ function bindWorkspace() {
     else if(action==="pause-animation")graphInstance?.pause();
     else if(action==="restart-animation"){const panel=document.querySelector("#prd5AnimationBlocker");if(panel)panel.hidden=true;graphInstance?.restart();}
     else if (action === "fit-graph") graphInstance?.fit();
-    else if (action === "reset-layout") { delete ui.positions[layoutKey()]; state.graphPositions = ui.positions; ui.graphTransform = null; saveState(); render(); }
+    else if (action === "reset-layout") { ui.positions = {}; ui.graphTransform = null; render(); }
   };
   let dragSourceId = "";
   app.ondragstart = (event) => {
@@ -1999,6 +2322,47 @@ function bindWorkspace() {
     dragSourceId = "";
     app.querySelectorAll(".drag-source,.drop-target").forEach((entry) => entry.classList.remove("drag-source","drop-target"));
   };
+  app.querySelectorAll("[data-gantt-row-drag]").forEach(handle=>{
+    handle.addEventListener("pointerdown",event=>{
+      if(event.button!==0)return;
+      event.preventDefault();event.stopPropagation();
+      const sourceId=handle.dataset.ganttRowDrag,sourceRow=handle.closest("[data-row]"),start={x:event.clientX,y:event.clientY};
+      let targetRow=null,zone="",moved=false;
+      handle.setPointerCapture(event.pointerId);
+      const clear=()=>app.querySelectorAll(".drop-target").forEach(row=>{row.classList.remove("drop-target","drop-before","drop-after","drop-inside");delete row.dataset.dropLabel;});
+      const move=e=>{
+        if(e.pointerId!==event.pointerId)return;
+        if(Math.hypot(e.clientX-start.x,e.clientY-start.y)<5&&!moved)return;
+        moved=true;sourceRow.classList.add("drag-source");clear();
+        targetRow=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-gantt-row]");
+        if(!targetRow||targetRow.dataset.row===sourceId){targetRow=null;return;}
+        zone=dropZone(e,targetRow);targetRow.classList.add("drop-target","drop-"+zone);targetRow.dataset.dropLabel=zone==="inside"?"Criar subitem":zone==="before"?"Mover antes":"Mover depois";
+        const pane=targetRow.closest(".prd41-pane-body"),bounds=pane?.getBoundingClientRect();
+        if(bounds&&pane){if(e.clientY>bounds.bottom-28)pane.scrollTop+=18;else if(e.clientY<bounds.top+28)pane.scrollTop-=18;}
+      };
+      const end=e=>{
+        if(e.pointerId!==event.pointerId)return;
+        handle.removeEventListener("pointermove",move);handle.removeEventListener("pointerup",end);handle.removeEventListener("pointercancel",end);clear();sourceRow.classList.remove("drag-source");
+        if(!moved||!targetRow||e.type==="pointercancel")return;
+        const backup=JSON.stringify(state);
+        try{
+          const targetId=targetRow.dataset.row,source=getItem(sourceId),target=getItem(targetId);
+          if(zone==="inside")moveItemHierarchy(sourceId,targetId);
+          else{if(source.parentId!==target.parentId)moveItemHierarchy(sourceId,target.parentId||"");reorderItem(sourceId,targetId,zone==="after");}
+          saveState();ui.prd43Undo={type:"hierarchy",snapshot:backup};notify(zone==="inside"?"Item movido para dentro do destino.":"Ordem atualizada.");render();
+        }catch(error){const old=JSON.parse(backup);Object.keys(state).forEach(key=>delete state[key]);Object.assign(state,old);notify(error.message,"error");render();}
+      };
+      handle.addEventListener("pointermove",move);handle.addEventListener("pointerup",end);handle.addEventListener("pointercancel",end);
+    });
+    handle.addEventListener("keydown",event=>{
+      if(!["ArrowUp","ArrowDown"].includes(event.key)||!event.altKey)return;
+      event.preventDefault();
+      const item=getItem(handle.dataset.ganttRowDrag),siblings=state.items.filter(candidate=>(candidate.parentId||"")===(item.parentId||"")&&!candidate.archivedAt).sort((a,b)=>Number(a.sortOrder??state.items.indexOf(a))-Number(b.sortOrder??state.items.indexOf(b)));
+      const index=siblings.findIndex(candidate=>candidate.id===item.id),target=siblings[index+(event.key==="ArrowUp"?-1:1)];
+      if(!target)return;
+      try{reorderItem(item.id,target.id,event.key==="ArrowDown");saveState();render();notify("Ordem atualizada.");}catch(error){notify(error.message,"error");}
+    });
+  });
   const search = document.querySelector("#searchInput");
   search.addEventListener("input", () => {
     state.filters.query = search.value; saveState();
@@ -2013,12 +2377,20 @@ function bindWorkspace() {
     input.checked?cols.add(input.dataset.prd5Column):cols.delete(input.dataset.prd5Column);
     cols.add("name");prd5SaveView({visible:prd5GanttColumns.map(([key])=>key).filter(key=>cols.has(key))});render();const menu=document.querySelector(".prd41-pane--gantt .prd44-pane-options");if(menu)menu.open=true;
   }));
+  document.querySelectorAll("[data-gantt-filter]").forEach(input=>input.addEventListener("change",()=>{
+    const filters={...(prd5SavedView().filters||{})},key=input.dataset.ganttFilter,value=String(input.value||"").trim();
+    if(value)filters[key]=value;else delete filters[key];
+    prd5SaveView({filters});
+    render();
+    const next=document.querySelector(`[data-gantt-filter="${CSS.escape(key)}"]`);
+    next?.focus();
+  }));
   document.querySelector("#riskThresholdDays")?.addEventListener("change", (event) => {
     const value = Number(event.target.value);
     if (!Number.isInteger(value) || value < 1 || value > 60) { notify("Defina o limite de risco entre 1 e 60 dias.","error"); render(); return; }
     state.riskThresholdDays = value; saveState(); render();
   });
-  document.querySelector("#groupingSelect")?.addEventListener("change", (event) => { ui.grouping = event.target.value; ui.graphTransform = null; render(); });
+  document.querySelector("#groupingSelect")?.addEventListener("change", (event) => { ui.grouping = event.target.value; state.graphGrouping = ui.grouping; ui.graphTransform = null; saveState(); render(); });
   document.querySelector("#selectAllRows")?.addEventListener("change", (event) => {
     const visibleIds = tableRows(scopedItems()).map(({item}) => item.id);
     visibleIds.forEach((id) => event.target.checked ? ui.bulkSelected.add(id) : ui.bulkSelected.delete(id));
@@ -2054,7 +2426,11 @@ function panelFailure(error) {
 function submitHandler(id, handler) {
   document.querySelector(`#${id}`)?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    try { await handler(new FormData(event.currentTarget)); } catch (error) { if (document.querySelector("#panelError")) panelFailure(error); else notify(error.message, "error"); }
+    const form = event.currentTarget;
+    const buttons = [...form.querySelectorAll('button[type="submit"]')];
+    buttons.forEach((button) => { button.disabled = true; });
+    try { await handler(new FormData(form)); } catch (error) { if (document.querySelector("#panelError")) panelFailure(error); else notify(error.message, "error"); }
+    finally { buttons.forEach((button) => { if (button.isConnected) button.disabled = false; }); }
   });
 }
 
@@ -2066,7 +2442,7 @@ function applyBulkEdit(form) {
   const ownerId = String(form.get("ownerId") || "");
   const durationRaw = String(form.get("durationDays") || "").trim();
   const weightRaw = String(form.get("weight") || "").trim();
-  const progressRaw = String(form.get("progressPercent") || "").trim();
+  const progressRaw = window.FluxosBackend?.enabled ? "" : String(form.get("progressPercent") || "").trim();
   const organizationId=String(form.get("organizationId")||""),sectorId=String(form.get("sectorId")||""),archive=form.get("archive")==="1";
   const report=[];
   try {
@@ -2138,6 +2514,8 @@ function bindPanel() {
       const profile=state.permissionProfiles.find(p=>p.id===button.dataset.prd5ToggleProfile);
       if(profile){profile.inactive=!profile.inactive;saveState();renderPanel(false);}return;
     }
+    if (button.dataset.acceptCommitment) { window.FluxosBackend?.acceptCommitment(button.dataset.acceptCommitment).catch(panelFailure); return; }
+    if (action === "discard-trend-draft") { ganttTrendDrafts.delete(ganttDraftKey(ui.selectedItemId)); render(); return; }
     if (action === "close-panel") { closePanel(); return; }
     if (action === "prd5-parent-root") { ui.createParentId="";renderPanel(false);return; }
     if (action === "archive-item") { try { const count=archiveItem(ui.selectedItemId); ui.selectedItemId=""; ui.panel=""; ui.scopeId="all"; saveState(); notify(count + " item(ns) arquivado(s)."); render(); } catch(error) { panelFailure(error); } return; }
@@ -2225,12 +2603,12 @@ function bindPanel() {
       if(dueInput.value>=startInput.value)daysInput.value=String(inclusiveDurationDays(startInput.value,dueInput.value));
     }else{
       const days=Number(daysInput.value);
-      if(Number.isInteger(days)&&days>=1)dueInput.value=inclusiveFinishDate(startInput.value,days);
+      if(Number.isFinite(days)&&days>=0)dueInput.value=inclusiveFinishDate(startInput.value,days);
     }
   }));
   document.querySelector("#editUserOrganization")?.addEventListener("change",(event)=>{ const sector=document.querySelector("#editUserSector"); if(!sector)return; sector.innerHTML=state.sectors.filter((entry)=>entry.organizationId===event.target.value).map((entry)=>option(entry.id,entry.name)).join(""); });
   root.querySelectorAll('#createItemForm [name="plannedStartAt"],#createItemForm [name="plannedDurationDays"],#createItemForm [name="sequence"]').forEach((input)=>input.addEventListener("input",updateSchedulePreview));
-  root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) { const field=event.target; const n=field.value.trim();field.setCustomValidity(n!==""&&(!Number.isInteger(Number(n))||Number(n)<0)?"Informe uma duração inteira igual ou maior que zero.":""); } });
+  root.addEventListener("input",(event)=>{ if(event.target.matches('[name^="stepDuration_"]')) { const field=event.target; const n=field.value.trim();field.setCustomValidity(n!==""&&(!Number.isFinite(Number(n))||Number(n)<0)?"Informe uma duração igual ou maior que zero.":""); } });
   root.addEventListener("change",(event)=>{ const input=event.target; if(input.matches("[data-row-fill-level]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.levels[input.dataset.rowFillLevel]=input.value; saveState(); render(); } else if(input.matches("[data-row-fill-project]")) { state.rowFillSettings ||= {levels:{},projects:{}}; state.rowFillSettings.projects[input.dataset.rowFillProject]=input.value; saveState(); render(); } });
   document.querySelector("#deleteCascade")?.addEventListener("change", (event) => { ui.deletion.cascade = event.target.checked; renderPanel(false); });
   submitHandler("deleteForm", (form) => {
@@ -2260,7 +2638,7 @@ function bindPanel() {
       const parentIndices=new Set(steps.map(step=>step.parentIndex).filter(index=>index>=0));
       for(let index=0;index<steps.length;index++)if(!parentIndices.has(index)){
         const duration=Number(form.get("stepDuration_"+index));
-        if(!Number.isInteger(duration)||duration<1)throw new Error("A linha "+(steps[index].lineIndex+1)+" precisa de duração de pelo menos 1 dia para criar a sequência TI.");
+        if(!Number.isFinite(duration)||duration<0)throw new Error("A linha "+(steps[index].lineIndex+1)+" precisa de uma duração igual ou maior que zero para criar a sequência TI.");
       }
     }
     const start=String(form.get("plannedStartAt")||"")||today();
@@ -2276,7 +2654,7 @@ function bindPanel() {
         if(entry.parentIndex>=0&&!parentId)throw new Error("Hierarquia incompleta na linha "+(entry.lineIndex+1));
         const durationRaw=String(form.get("stepDuration_"+i)||"").trim();
         const duration=durationRaw===""?null:Number(durationRaw);
-        if(duration!==null && (!Number.isInteger(duration)||duration<0))throw new Error("Duração inválida na linha "+(entry.lineIndex+1)+". Informe um número inteiro igual ou maior que zero.");
+        if(duration!==null && (!Number.isFinite(duration)||duration<0))throw new Error("Duração inválida na linha "+(entry.lineIndex+1)+". Informe um número inteiro igual ou maior que zero.");
         created.push(createItem({title:entry.title,type,status:"backlog",ownerId,
           organizationId:owner.organizationId,sectorId:owner.sectorId,state:owner.state,
           parentId,weight:1,plannedStartAt:start,plannedDurationDays:duration,dueAt:duration===null?"":inclusiveFinishDate(start,duration)}));
@@ -2284,7 +2662,7 @@ function bindPanel() {
       if(form.get("autoSequence")==="1"){
         const parents=new Set(steps.map(e=>e.parentIndex).filter(n=>n>=0));
         const leaves=created.filter((_,i)=>!parents.has(i));
-        for(let i=0;i<leaves.length;i++)if(!Number.isInteger(leaves[i].plannedDurationDays)||leaves[i].plannedDurationDays<0)throw new Error("A atividade final "+leaves[i].title+" (linha "+(steps[created.indexOf(leaves[i])].lineIndex+1)+") precisa de uma duração igual ou maior que zero para criar TI.");
+        for(let i=0;i<leaves.length;i++)if(!Number.isFinite(leaves[i].plannedDurationDays)||leaves[i].plannedDurationDays<0)throw new Error("A atividade final "+leaves[i].title+" (linha "+(steps[created.indexOf(leaves[i])].lineIndex+1)+") precisa de uma duração igual ou maior que zero para criar TI.");
         for(let i=1;i<leaves.length;i++)createRelation(leaves[i-1].id,leaves[i].id,"TI");
       }
       for(const item of [...created].reverse())if(state.items.some(child=>child.parentId===item.id))syncParentSummary(item.id);
@@ -2312,13 +2690,62 @@ function bindPanel() {
     }
     if(changed){saveState();notify("Atualização registrada.");render();}else{const error=document.querySelector("#panelError");if(error){error.textContent="Nenhuma informação foi modificada.";error.hidden=false;}}
   });
+  submitHandler("measurementForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("A medição operacional exige conexão com o servidor.");
+    await window.FluxosBackend.recordMeasurement(form, ui.selectedItemId);
+  });
+  const measurementDate = root.querySelector('#measurementForm [name="effectiveAt"]');
+  measurementDate?.addEventListener("focus", () => {
+    const currentMaximum = toLocalInput();
+    measurementDate.max = currentMaximum;
+    if (!measurementDate.value || measurementDate.value > currentMaximum) measurementDate.value = currentMaximum;
+  });
+  measurementDate?.addEventListener("change", async () => {
+    const expected = root.querySelector("[data-measurement-expected]");
+    if (!expected || !window.FluxosBackend?.previewTrend || !measurementDate.value) return;
+    expected.textContent = "calculando…";
+    try {
+      const preview = await window.FluxosBackend.previewTrend(ui.selectedItemId, measurementDate.value);
+      expected.textContent = `${preview?.expectedProgressPercent ?? 0}%`;
+    } catch {
+      expected.textContent = "indisponível";
+    }
+  });
+  submitHandler("correctMeasurementForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("A correção exige conexão com o servidor.");
+    await window.FluxosBackend.correctMeasurement(form, ui.selectedItemId);
+  });
+  submitHandler("remainingDurationForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("Este ajuste exige conexão com o servidor.");
+    await window.FluxosBackend.adjustRemainingDuration(form, ui.selectedItemId);
+  });
+  submitHandler("activityBlockedForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("Este registro exige conexão com o servidor.");
+    await window.FluxosBackend.setActivityBlocked(form, ui.selectedItemId);
+  });
+  submitHandler("measurementPolicyForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("A configuração exige conexão com o servidor.");
+    await window.FluxosBackend.setMeasurementPolicy(form, ui.selectedItemId);
+  });
+  submitHandler("calendarForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("A configuração exige conexão com o servidor.");
+    await window.FluxosBackend.manageCalendar(form);
+  });
+  submitHandler("correctiveActivityForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("A atividade corretiva exige conexão com o servidor.");
+    await window.FluxosBackend.createCorrectiveActivity(form, ui.selectedItemId);
+  });
+  submitHandler("commitmentProposalForm", async (form) => {
+    if (!window.FluxosBackend?.enabled) throw new Error("A proposta exige conexão com o servidor.");
+    await window.FluxosBackend.proposeCommitment(form, ui.selectedItemId);
+  });
   submitHandler("relationForm", (form) => {
     const otherId = String(form.get("otherId")); const incoming = form.get("direction") === "in";
-    createRelation(incoming ? otherId : ui.selectedItemId,incoming ? ui.selectedItemId : otherId,String(form.get("relationType")),Number(form.get("lagDays")),String(form.get("description") || ""));
+    createRelation(incoming ? otherId : ui.selectedItemId,incoming ? ui.selectedItemId : otherId,"TI",Number(form.get("lagDays")),String(form.get("description") || ""));
     saveState(); notify("Relação criada."); render();
   });
   submitHandler("relationUpdateForm", (form) => {
-    updateRelation(ui.relationEditId,{sourceId:String(form.get("sourceId")),targetId:String(form.get("targetId")),relationType:String(form.get("relationType")),lagDays:Number(form.get("lagDays")),description:String(form.get("description") || "")});
+    updateRelation(ui.relationEditId,{sourceId:String(form.get("sourceId")),targetId:String(form.get("targetId")),relationType:"TI",lagDays:Number(form.get("lagDays")),description:String(form.get("description") || "")});
     ui.relationEditId = ""; saveState(); notify("Relação atualizada; histórico e identidade preservados."); render();
   });
   submitHandler("userForm", (form) => {

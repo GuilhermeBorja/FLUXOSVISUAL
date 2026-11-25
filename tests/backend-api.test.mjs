@@ -38,6 +38,22 @@ test('backend REST: árvore em três níveis e TI entre folhas em único commit'
   assert.equal(result.data.state.relations.some(r => r.relationType === 'contains'), false);
 });
 
+test('backend REST: atividades finais aceitam durações zero e fracionadas ao criar relações TI', async t => {
+  const { admin } = await fixture(t);
+  const before = await admin.projection();
+  const result = await admin.request('/api/workspaces/w_a/item-trees', { method: 'POST', body: {
+    expectedRevision: before.revision, createTI: true, startDate: '2026-11-02', items: [
+      { ...itemInput('Marco zero', { plannedDurationDays: 0 }), key: 'zero' },
+      { ...itemInput('Atividade fracionada', { plannedDurationDays: 0.5 }), key: 'fraction' },
+    ],
+  } });
+  assert.equal(result.status, 201, JSON.stringify(result.data));
+  assert.deepEqual(result.data.state.items.map(item => item.plannedDurationDays), [0, 0.5]);
+  assert.equal(result.data.state.items[0].dueAt, '2026-11-02');
+  assert.equal(result.data.state.items[1].dueAt, '2026-11-02');
+  assert.equal(result.data.state.relations.length, 1);
+});
+
 test('backend REST: lote informa rollback por item e PATCH exige versão otimista', async t => {
   const { admin } = await fixture(t);
   const a = await createItem(admin, 'Lote A'); const b = await createItem(admin, 'Lote B'); const c = await createItem(admin, 'Lote C');
@@ -67,7 +83,7 @@ test('backend REST: lote informa rollback por item e PATCH exige versão otimist
 
 test('backend REST: preferência acompanha usuário em outra sessão e não altera o colega', async t => {
   const f = await fixture(t); const { admin, baseUrl } = f; const { client } = await addWorkspaceUser(f);
-  const preferences = { graphPositions: { project: { sample: { x: 120, y: 80 } } }, prd5GanttColumnViews: { columns: ['name', 'status', 'progress', 'weight'] }, riskThresholdDays: 7 };
+  const preferences = { graphGrouping: 'owner', prd5GanttColumnViews: { columns: ['name', 'status', 'progress', 'weight'] }, riskThresholdDays: 7 };
   const saved = await admin.request('/api/users/me/workspace-preferences', { method: 'PUT', body: { workspaceId: 'w_a', preferences } });
   assert.equal(saved.status, 200);
   for (const [key, value] of Object.entries(preferences)) assert.deepEqual(saved.data.preferences[key], value);
@@ -76,7 +92,17 @@ test('backend REST: preferência acompanha usuário em outra sessão e não alte
   assert.equal(loaded.status, 200); assert.deepEqual(loaded.data.preferences, saved.data.preferences);
   const separate = await client.request('/api/users/me/workspace-preferences?workspaceId=w_a');
   assert.equal(separate.status, 200); assert.deepEqual(separate.data.preferences, {});
-  const projection = await second.projection(); assert.deepEqual(projection.state.graphPositions, preferences.graphPositions);
+  const projection = await second.projection(); assert.equal(projection.state.graphGrouping, preferences.graphGrouping);
+});
+
+test('backend projection exposes one authoritative status timestamp for trend and horizon', async t => {
+  const { admin } = await fixture(t);
+  const projection = await admin.projection();
+  assert.match(projection.asOf, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(typeof projection.trend.itemTrendById, 'object');
+  const preview = await admin.request('/api/workspaces/w_a/projection?asOf=2026-11-03T12:00:00.000Z');
+  assert.equal(preview.status, 200);
+  assert.equal(preview.data.asOf, '2026-11-03T12:00:00.000Z');
 });
 
 test('backend REST: auditoria filtra autor, empresa, setor, item e evento com paginação', async t => {

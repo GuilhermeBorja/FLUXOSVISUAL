@@ -7,7 +7,7 @@
   const runtime = window.FLUXOS_BACKEND;
   if (!runtime) return;
   const apiBase = String(runtime.apiBase || "/api").replace(/\/$/, "");
-  const preferenceKeys = ["filters", "graphPositions", "graphTransforms", "hiddenTableColumns", "tableColumnWidths", "tableColumnPinned", "prd5GanttColumnViews", "riskThresholdDays", "rowFillSettings", "drawerWidth", "paneWidths", "ganttWidth", "viewGrouping", "viewScopeId", "viewShowSubitems"];
+  const preferenceKeys = ["filters", "graphTransforms", "graphGrouping", "hiddenTableColumns", "tableColumnWidths", "tableColumnPinned", "prd5GanttColumnViews", "riskThresholdDays", "rowFillSettings", "drawerWidth", "paneWidths", "ganttWidth", "viewGrouping", "viewScopeId", "viewShowSubitems"];
   const domainKeys = ["workspaceName", "organizations", "sectors", "users", "items", "relations", "archivedItems", "archivedRelations", "archivedUsers", "archivedOrganizations", "archivedSectors", "permissionRules", "permissionProfiles", "typeSettings", "statusSettings", "templates"];
   const itemEditableFields = ["title", "type", "status", "ownerId", "organizationId", "sectorId", "state", "description", "plannedStartAt", "dueAt", "plannedDurationDays", "replannedDueAt", "targetStartAt", "targetDueAt", "weight", "progressPercent", "blockedReason"];
   let identity = null, workspaces = [], workspaceId = "", csrfToken = "";
@@ -29,7 +29,7 @@
   const preferenceData = source => ({ ...Object.fromEntries(preferenceKeys.filter(key => source[key] !== undefined).map(key => [key, clone(source[key])])), rowFillSettings: clone(source.rowFillSettings || { levels: {}, projects: {} }) });
   const domainData = source => Object.fromEntries(domainKeys.filter(key => source[key] !== undefined).map(key => [key, source[key]]));
   const hasDomainChanges = () => !!confirmed && !equal(domainData(approvalBase || state), domainData(confirmed));
-  const endpoint = suffix => `${apiBase}/workspaces/${encodeURIComponent(workspaceId)}${suffix}`;
+  const endpoint = suffix => `${apiBase}/workspaces/${encodeURIComponent(workspaceId || workspaces[0]?.id || "")}${suffix}`;
   const isPending = () => saving || scheduled || switching;
 
   function safeDraft(source) {
@@ -172,6 +172,11 @@
     if (!projection?.state || !Number.isInteger(Number(projection.revision))) throw new Error("O servidor retornou uma projeção inválida.");
     const preferences = preservePreferences ? preferenceData(state) : null;
     state = Object.assign(emptyState(), projection.state);
+    state.asOf = projection.asOf || state.asOf || new Date().toISOString();
+    state.trend = projection.trend || { itemTrendById: {} };
+    state.commitments = projection.commitments || [];
+    state.actions = projection.actions || [];
+    state.horizon = projection.horizon || {};
     if (projection.preferences) Object.assign(state, projection.preferences);
     if (preferences) Object.assign(state, preferences);
     state.setupComplete = true; state.currentUserId = identity.id;
@@ -185,8 +190,8 @@
     if (projection.limits) Object.assign(limits, projection.limits);
     confirmed = clone(state);
     if (!preservePreferences) savedPreferences = JSON.stringify(preferenceData(state));
-    ui.positions = state.graphPositions || {};
-    ui.grouping = state.viewGrouping || ui.grouping || "project";
+    ui.positions = {};
+    ui.grouping = state.graphGrouping || state.viewGrouping || ui.grouping || "project";
     ui.scopeId = state.viewScopeId || ui.scopeId || "all";
     if (state.viewShowSubitems !== undefined) ui.showSubitems = !!state.viewShowSubitems;
     if (state.graphTransforms?.[layoutKey()]) ui.graphTransform = state.graphTransforms[layoutKey()];
@@ -306,8 +311,12 @@
       resetPending();
       queuePreferences();
       if (message) originals.notify(message.message, message.kind);
-      originals.render(); decorate();
       resolve?.(state);
+      // Resolve the persistence promise before rebuilding the application DOM.
+      // Browser callers may be awaiting flush() from an evaluation context;
+      // replacing the full shell before that promise settles can invalidate
+      // the context even though the server write already succeeded.
+      originals.render(); decorate();
     } catch (error) {
       if (confirmedPartial) { error.partial = true; error.message = "Parte da operação já foi confirmada no servidor. " + error.message; }
       failedDraft = { state: draft, form: beforeForm, ui: beforeUi, revision, workspaceId, savedAt: new Date().toISOString() };
@@ -396,6 +405,7 @@
     if (!workspaces.length) { ready = false; renderServerLogin("Seu usuário ainda não tem acesso a um workspace. Solicite o acesso ao administrador."); return; }
     const initialId = workspaces.some(workspace => workspace.id === workspaceId) ? workspaceId : session.workspaceId || workspaces[0].id;
     await openWorkspace(initialId);
+    if (!workspaceId) workspaceId = initialId;
     if (failedDraft) originals.notify("Há um rascunho não gravado desta sessão. Revise a operação antes de repeti-la.", "neutral");
   }
 
@@ -521,6 +531,94 @@
       const field = document.getElementById("panelError");
       if (field) { field.hidden = false; field.textContent = "Nenhuma informação foi modificada."; }
     }
+  }
+
+  async function recordMeasurement(form, itemId) {
+    const effective = new Date(form.get("effectiveAt"));
+    if (!Number.isFinite(effective.getTime())) throw new Error("Informe a data e hora da medição.");
+    const percent = Number(form.get("percent"));
+    const occurrence = String(form.get("occurrence") || "no_issue");
+    const description = String(form.get("description") || "").trim();
+    if (occurrence !== "no_issue" && !description) throw new Error("Impedimento, divergência ou correção exigem uma descrição factual.");
+    const projection = await request(endpoint("/commands"), { method: "POST", body: { expectedRevision: revision, commands: [{ type: "recordMeasurement", args: [itemId, { percent, occurrence, description, effectiveAt: effective.toISOString() }] }] } });
+    applyProjection(projection, { preservePreferences: true });
+    const confirmedMeasurement = state.trend?.itemTrendById?.[itemId]?.lastMeasurement;
+    if (!confirmedMeasurement || Number(confirmedMeasurement.percent) !== percent || confirmedMeasurement.effectiveAt !== effective.toISOString()) {
+      originals.render(); decorate();
+      throw new Error("O servidor não confirmou a medição enviada. Atualize a tela antes de tentar novamente.");
+    }
+    originals.render(); decorate();
+    originals.notify("Medição registrada; a tendência foi recalculada.");
+  }
+
+  async function acceptCommitment(commitmentId) {
+    const projection = await request(endpoint("/commands"), { method: "POST", body: { expectedRevision: revision, commands: [{ type: "acceptCommitment", args: [commitmentId] }] } });
+    applyProjection(projection, { preservePreferences: true });
+    originals.render(); decorate();
+    originals.notify("Aceite registrado.");
+  }
+
+  async function proposeCommitment(form, itemId) {
+    const startAt = String(form.get("startAt") || "");
+    const dueAt = String(form.get("dueAt") || "");
+    if (!startAt || !dueAt || startAt > dueAt) throw new Error("Informe um intervalo válido para o compromisso.");
+    const projection = await request(endpoint("/commands"), { method: "POST", body: { expectedRevision: revision, commands: [{ type: "proposeCommitment", args: [itemId, { startAt, dueAt, scopeNote: String(form.get("scopeNote") || "").trim(), scopeChange: form.get("scopeChange") === "on" }] }] } });
+    applyProjection(projection, { preservePreferences: true });
+    ganttTrendDrafts.delete(ganttDraftKey(itemId));
+    originals.render(); decorate();
+    originals.notify("Proposta de compromisso registrada.");
+  }
+
+  async function operationalCommand(type, args, message) {
+    const projection = await request(endpoint("/commands"), { method: "POST", body: { expectedRevision: revision, commands: [{ type, args }] } });
+    applyProjection(projection, { preservePreferences: true });
+    originals.render(); decorate();
+    originals.notify(message || "Comando operacional registrado.");
+  }
+
+  async function previewTrend(itemId, effectiveAt) {
+    const value = String(effectiveAt || "").trim();
+    if (!value) return null;
+    const projection = await request(endpoint(`/projection?asOf=${encodeURIComponent(value)}`));
+    return projection.trend?.itemTrendById?.[itemId] || null;
+  }
+
+  async function correctMeasurement(form, itemId) {
+    const measurementId = String(form.get("measurementId") || "").trim();
+    const percent = Number(form.get("percent"));
+    const description = String(form.get("description") || "").trim();
+    if (!measurementId || !Number.isFinite(percent) || !description) throw new Error("Informe o ID da medição, o percentual e a justificativa factual.");
+    return operationalCommand("correctMeasurement", [measurementId, { percent, description, effectiveAt: new Date(form.get("effectiveAt") || Date.now()).toISOString() }], "Correção de medição registrada.");
+  }
+
+  async function adjustRemainingDuration(form, itemId) {
+    const duration = Number(form.get("duration"));
+    if (!Number.isInteger(duration) || duration < 0) throw new Error("Informe a duração remanescente em dias inteiros.");
+    return operationalCommand("adjustRemainingDuration", [itemId, duration], "Duração remanescente ajustada.");
+  }
+
+  async function setActivityBlocked(form, itemId) {
+    const description = String(form.get("description") || "").trim();
+    if (!description) throw new Error("Descreva o fato que bloqueia a atividade.");
+    return operationalCommand("setActivityBlocked", [itemId, { description, at: new Date(form.get("effectiveAt") || Date.now()).toISOString() }], "Bloqueio factual registrado.");
+  }
+
+  async function setMeasurementPolicy(form, itemId) {
+    const frequency = String(form.get("frequency") || "daily");
+    return operationalCommand("setMeasurementPolicy", [itemId, { frequency }], "Frequência de medição configurada.");
+  }
+
+  async function manageCalendar(form) {
+    const workingWeekdays = form.getAll("workingWeekdays").map(Number);
+    const holidays = String(form.get("holidays") || "").split(",").map(value => value.trim()).filter(Boolean);
+    return operationalCommand("manageCalendar", [{ id: "project-calendar", kind: String(form.get("kind") || "working_time"), timezone: "America/Sao_Paulo", workingWeekdays, holidays }], "Calendário atualizado.");
+  }
+
+  async function createCorrectiveActivity(form, itemId) {
+    const title = String(form.get("title") || "").trim();
+    const plannedDurationDays = Number(form.get("plannedDurationDays"));
+    if (!title || !Number.isFinite(plannedDurationDays) || plannedDurationDays < 0) throw new Error("Informe o título e uma duração válida.");
+    return operationalCommand("createCorrectiveActivity", [itemId, { title, plannedDurationDays, description: String(form.get("description") || "").trim() }], "Atividade corretiva criada.");
   }
 
   function serverGpo(user, operation, item = null) {
@@ -686,5 +784,5 @@
     pollTimer = setInterval(refreshWhenIdle, 12000);
   }
 
-  window.FluxosBackend = Object.freeze({ enabled: true, start, updateItemForm, refresh: refreshWhenIdle, flush: () => savePromise || queueSave(), flushPreferences, downloadDraft, get status() { return { ready, saving: isPending(), revision, workspaceId, lastContact }; } });
+  window.FluxosBackend = Object.freeze({ enabled: true, start, updateItemForm, recordMeasurement, acceptCommitment, proposeCommitment, correctMeasurement, adjustRemainingDuration, setActivityBlocked, setMeasurementPolicy, manageCalendar, createCorrectiveActivity, previewTrend, refresh: refreshWhenIdle, flush: () => savePromise || queueSave(), flushPreferences, downloadDraft, get status() { return { ready, saving: isPending(), revision, workspaceId, lastContact }; } });
 })();

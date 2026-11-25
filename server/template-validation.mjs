@@ -148,7 +148,7 @@ export function normalizeTemplate(template, state) {
         : source.dueOffset - startOffset + 1;
     assert(
       duration === null ||
-        (Number.isInteger(duration) && duration >= 0 && duration <= 36500),
+        (Number.isFinite(duration) && duration >= 0 && duration <= 36500),
       422,
       "INVALID_TEMPLATE_DURATION",
       "A duração do modelo deve ser null ou um inteiro entre 0 e 36.500 dias.",
@@ -410,7 +410,7 @@ export function validateTemplateApplication(template, input, state) {
         new Date(`${input.startDate}T12:00:00Z`).getTime() +
         node.startOffset * 86400000;
       const finish =
-        start + Math.max(0, (node.plannedDurationDays ?? 1) - 1) * 86400000;
+      start + Math.max(0, Math.ceil(node.plannedDurationDays ?? 1) - 1) * 86400000;
       assert(
         dateValid(new Date(start).toISOString().slice(0, 10)) &&
           dateValid(new Date(finish).toISOString().slice(0, 10)),

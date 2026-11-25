@@ -117,6 +117,27 @@ export function createApp(options = {}) {
       secureCookies: options.secureCookies,
       rateLimit: options.rateLimit,
     });
+  const measurementSchedulerIntervalMs =
+    options.measurementSchedulerIntervalMs ??
+    (process.env.MEASUREMENT_SCHEDULER_INTERVAL_MS
+      ? numberEnv("MEASUREMENT_SCHEDULER_INTERVAL_MS", 60000)
+      : 60000);
+  let measurementScheduler = null;
+  if (measurementSchedulerIntervalMs > 0) {
+    measurementScheduler = setInterval(() => {
+      try {
+        service.processAllMeasurementDue();
+      } catch (error) {
+        logger.error?.(
+          JSON.stringify({
+            event: "measurement_scheduler_failed",
+            message: error?.message || String(error),
+          }),
+        );
+      }
+    }, measurementSchedulerIntervalMs);
+    measurementScheduler.unref?.();
+  }
   const downloadKey = randomBytes(32),
     scanCommand = options.scanCommand || process.env.ATTACHMENT_SCAN_COMMAND,
     requireScan =
@@ -594,11 +615,11 @@ export function createApp(options = {}) {
               .filter((i) => !parents.has(i.id));
             for (const leaf of leaves)
               assert(
-                Number.isInteger(leaf.plannedDurationDays) &&
-                  leaf.plannedDurationDays >= 1,
+                Number.isFinite(leaf.plannedDurationDays) &&
+                  leaf.plannedDurationDays >= 0,
                 422,
                 "DURATION_REQUIRED",
-                "Informe duração de pelo menos 1 dia para cada atividade final.",
+                "Informe uma duração não negativa para cada atividade final.",
                 {
                   itemId: leaf.id,
                   line: commands.findIndex((c) => c.args[0].id === leaf.id) + 1,
@@ -1172,6 +1193,7 @@ export function createApp(options = {}) {
     async close() {
       if (closed) return;
       closed = true;
+      if (measurementScheduler) clearInterval(measurementScheduler);
       if (server.listening)
         await new Promise((resolve, reject) => {
           server.close((error) => (error ? reject(error) : resolve()));

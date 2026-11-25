@@ -39,9 +39,33 @@ const FluxosGraph = (() => {
     return component;
   }
 
-  function layout(items, relations, grouping, saved, labels) {
+  function tiLevels(items, relations) {
+    const ids = new Set(items.map((item) => item.id));
+    const outgoing = new Map(items.map((item) => [item.id, []]));
+    const indegree = new Map(items.map((item) => [item.id, 0]));
+    for (const relation of relations) {
+      if (relation.relationType !== "TI" || !ids.has(relation.sourceId) || !ids.has(relation.targetId)) continue;
+      outgoing.get(relation.sourceId).push(relation.targetId);
+      indegree.set(relation.targetId, indegree.get(relation.targetId) + 1);
+    }
+    const compare = (left, right) => String(left.trendStartAt || "9999-12-31").localeCompare(String(right.trendStartAt || "9999-12-31")) || left.id.localeCompare(right.id);
+    const queue = items.filter((item) => !indegree.get(item.id)).sort(compare);
+    const level = new Map(items.map((item) => [item.id, 0]));
+    for (let index = 0; index < queue.length; index += 1) {
+      const item = queue[index];
+      for (const targetId of outgoing.get(item.id)) {
+        level.set(targetId, Math.max(level.get(targetId), level.get(item.id) + 1));
+        indegree.set(targetId, indegree.get(targetId) - 1);
+        if (!indegree.get(targetId)) { queue.push(items.find((candidate) => candidate.id === targetId)); queue.sort(compare); }
+      }
+    }
+    return level;
+  }
+
+  function layout(items, relations, grouping, saved, labels, lockNodePositions = false) {
     const byId = new Map(items.map((item) => [item.id, item]));
     const connected = connectedGroups(items, relations);
+    const levels = tiLevels(items, relations);
     const groups = new Map();
     const nodes = items.map((item) => {
       const root = labels.project ? labels.project(item) : projectRoot(item, byId);
@@ -51,10 +75,10 @@ const FluxosGraph = (() => {
       if (!groups.has(groupId)) {
         const name = grouping === "owner" ? labels.owner(item.ownerId)
           : grouping === "organization" ? (item.organizationId ? labels.organization(item.organizationId) : "Sem empresa")
-          : grouping === "connections" ? projectRoot(byId.get(groupId), byId).title : root.title;
+          : grouping === "connections" ? projectRoot(byId.get(groupId) || item, byId).title : root.title;
         groups.set(groupId, { id: groupId, name, nodes: [] });
       }
-      const node = { id: item.id, item, groupId, isRoot: !byId.has(item.parentId), radius: byId.has(item.parentId) ? 32 : 40 };
+      const node = { id: item.id, item, groupId, level: levels.get(item.id) || 0, isRoot: !byId.has(item.parentId), radius: byId.has(item.parentId) ? 32 : 40 };
       groups.get(groupId).nodes.push(node);
       return node;
     });
@@ -72,10 +96,11 @@ const FluxosGraph = (() => {
       columnX += size + 190;
       rowHeight = Math.max(rowHeight, size);
       group.nodes.forEach((node, nodeIndex) => {
-        const angle = nodeIndex * Math.PI * 2 / Math.max(group.nodes.length, 1) - Math.PI / 2;
-        const radius = node.isRoot ? 0 : 165 + Math.min(group.nodes.length * 15, 185);
-        node.x = group.center.x + Math.cos(angle) * radius;
-        node.y = group.center.y + Math.sin(angle) * radius;
+        // O mapa executivo é determinístico em qualquer modo: agrupamento
+        // define a faixa, e o nível topológico define o eixo temporal lógico.
+        // Isso evita que a força altere a leitura a cada renderização.
+        node.x = group.center.x + node.level * 270;
+        node.y = group.center.y + (nodeIndex - (group.nodes.length - 1) / 2) * 150;
         const stored = saved?.[node.id];
         if (stored && Number.isFinite(stored.x) && Number.isFinite(stored.y)) {
           node.x = node.fx = stored.x;
@@ -84,21 +109,12 @@ const FluxosGraph = (() => {
       });
     });
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    // The renderer and all interaction handlers consume node objects. The old
+    // force layout mutated string endpoints as a side effect; the deterministic
+    // layout must resolve them explicitly so the map can render without the
+    // simulation.
     const links = relations.filter((relation) => nodeById.has(relation.sourceId) && nodeById.has(relation.targetId))
-      .map((relation) => ({ source: relation.sourceId, target: relation.targetId, relation }));
-    if (nodes.length) {
-      const d3 = FluxosVendor;
-      // Simulate once: a stable workspace preserves the user's manual arrangement.
-      const simulation = d3.forceSimulation(nodes).stop()
-        .force("link", d3.forceLink(links).id((node) => node.id)
-           .distance((link) => link.relation.relationType === "contains" ? 275 : 250)
-          .strength((link) => link.source.groupId !== link.target.groupId ? 0.005 : link.relation.relationType === "contains" ? 0.13 : 0.35))
-         .force("charge", d3.forceManyBody().strength(-720))
-         .force("collision", d3.forceCollide().radius(145).iterations(4))
-        .force("x", d3.forceX((node) => groups.get(node.groupId).center.x).strength(0.07))
-        .force("y", d3.forceY((node) => groups.get(node.groupId).center.y).strength(0.07));
-      simulation.tick(220);
-    }
+      .map((relation) => ({ source: nodeById.get(relation.sourceId), target: nodeById.get(relation.targetId), relation }));
     return { nodes, links, groups: [...groups.values()], nodeById, connected };
   }
 
@@ -124,7 +140,7 @@ const FluxosGraph = (() => {
   }
 
   function mount(container, options) {
-    const model = layout(options.items, options.relations, options.grouping, options.savedPositions, options.labels);
+    const model = layout(options.items, options.relations, options.grouping, options.savedPositions, options.labels, options.lockNodePositions);
     const esc = options.escape;
     const edgeLanes = new Map();
     model.links.forEach((link) => {
@@ -505,6 +521,8 @@ const FluxosGraph = (() => {
       if (target?.querySelector && event.target.closest(".graph-connector")) {
         gesture={kind:"link",id:target.dataset.node,start:point,moved:false};
         connectionPreview.setAttribute("visibility","visible");
+      } else if (target && options.lockNodePositions) {
+        gesture = { kind: "locked-node", id: target.dataset.node, start: point, moved: false };
       } else if (target) {
         const id = target.dataset.node;
         // Controlled PRD3 magnetism attempt: the selected node follows the pointer;
@@ -530,6 +548,8 @@ const FluxosGraph = (() => {
           }),
           moved: false,
         };
+      } else if (group && options.lockNodePositions) {
+        gesture = { kind: "locked-group", id: group.dataset.group, start: point, moved: false };
       } else if (group) {
         const groupNodes = model.groups.find((entry) => entry.id === group.dataset.group)?.nodes || [];
         gesture = { kind: "group", id: group.dataset.group, start: point, nodes: groupNodes.map((node) => ({ id: node.id, x: node.x, y: node.y })), moved: false };
@@ -555,7 +575,9 @@ const FluxosGraph = (() => {
         const dx = point.x - gesture.start.x;
         const dy = point.y - gesture.start.y;
         if (Math.hypot(dx, dy) > 4) gesture.moved = true;
-        if (gesture.kind === "nodes" || gesture.kind === "group") {
+        if (gesture.kind === "locked-node" || gesture.kind === "locked-group") {
+          // Executive flow map keeps positions deterministic; pointer movement does not reposition nodes.
+        } else if (gesture.kind === "nodes" || gesture.kind === "group") {
           for (const origin of gesture.nodes) {
             const node = model.nodeById.get(origin.id);
             const influence = gesture.kind === "nodes" ? origin.influence ?? 1 : 1;
@@ -582,6 +604,8 @@ const FluxosGraph = (() => {
           const destination=[...model.nodeById.values()].find(node=>node.id!==completed.id && Math.hypot(node.x-x,node.y-y)<=node.radius+15);
           if(destination) options.onCreateRelation?.(completed.id,destination.id);
         }
+      } else if (completed?.kind === "locked-node" || completed?.kind === "locked-group") {
+        if (!cancelled && !completed.moved) { select(completed.id); options.onSelect(completed.id); }
       } else if (completed?.kind === "nodes" || completed?.kind === "group") {
         if (completed.moved) savePositions();
         else if (!cancelled && completed.kind === "nodes") { select(completed.id); options.onSelect(completed.id); }
@@ -613,7 +637,7 @@ const FluxosGraph = (() => {
         event.preventDefault();
         if (nodeElement) { select(nodeElement.dataset.node); options.onSelect(nodeElement.dataset.node); }
         else if (edge) {selectedRelationId=edge.dataset.edge;edgeElements.forEach((element,id)=>element.classList.toggle("prd4-edge-selected",id===selectedRelationId));options.onRelation(model.links.find((link) => link.relation.id === edge.dataset.edge).relation);}
-      } else if (nodeElement && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+      } else if (nodeElement && !options.lockNodePositions && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault();
         const node = model.nodeById.get(nodeElement.dataset.node);
         node.x += event.key === "ArrowLeft" ? -20 : event.key === "ArrowRight" ? 20 : 0;

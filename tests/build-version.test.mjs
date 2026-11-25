@@ -5,15 +5,16 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const workspace = readFileSync(join(root, "dist/workspace.js"), "utf8");
 
 function buildInto(env = {}) {
   const dist = mkdtempSync(join(tmpdir(), "fluxo-dist-"));
   cpSync(join(root, "dist"), dist, { recursive: true });
-  execFileSync("node", [join(root, "scripts/build-version.mjs"), "--dist", dist], { env: { ...process.env, ...env }, stdio: "pipe" });
+  execFileSync(process.execPath, [join(root, "scripts/build-version.mjs"), "--dist", dist], { env: { ...process.env, ...env }, stdio: "pipe" });
   return dist;
 }
 
@@ -36,7 +37,7 @@ test("build grava versão, commit e data em version.js e renova o sufixo de cach
   assert.doesNotMatch(html, /\?v=(dev|prd3-20261018a)/);
   // version.js carrega antes dos demais scripts, e uma segunda execução não duplica a tag.
   assert.ok(html.indexOf("./version.js") < html.indexOf("./vendor.js"));
-  execFileSync("node", [join(root, "scripts/build-version.mjs"), "--dist", dist], { env: { ...process.env, GITHUB_SHA: "1234567abcdef" }, stdio: "pipe" });
+  execFileSync(process.execPath, [join(root, "scripts/build-version.mjs"), "--dist", dist], { env: { ...process.env, GITHUB_SHA: "1234567abcdef" }, stdio: "pipe" });
   const again = readFileSync(join(dist, "index.html"), "utf8");
   assert.equal((again.match(/version\.js/g) || []).length, 1);
   assert.match(again, /\?v=1234567-\d{12}/);

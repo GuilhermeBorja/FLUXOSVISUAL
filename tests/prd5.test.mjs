@@ -15,6 +15,11 @@ test("PRD5: aceita quatro espacos e rejeita saltos",()=>{
  assert.throws(()=>run("A\n\t\tB"),/pulou um nível/);
  assert.throws(()=>run("\tA"),/primeiro subitem/);
 });
+test("PRD5: colagem com quebra escapada produz a mesma hierarquia da quebra real",()=>{
+ const literal=run(String.raw`RAIZ\n    FILHO\n        NETO`);
+ const real=run("RAIZ\n    FILHO\n        NETO");
+ assert.deepEqual(Array.from(literal,n=>[n.title,n.depth,n.parentIndex]),Array.from(real,n=>[n.title,n.depth,n.parentIndex]));
+});
 test("PRD5: criacao sem nome pai separado e com duracao por linha",()=>{
  assert.doesNotMatch(workspace,/Mais nomes, um por linha|Outros itens independentes no mesmo nível/);
  assert.doesNotMatch(workspace.slice(workspace.indexOf("function renderCreatePanel()"),workspace.indexOf("function historyEventsFor(")),/name="parentId"|name="title"|name="plannedDurationDays"/);
@@ -38,6 +43,12 @@ test("PRD5: core conserva somente contains e TI",()=>{
  const ctx=vm.createContext({console,document:{querySelector:()=>({})},localStorage:{getItem:()=>null,setItem:()=>{}}});
  vm.runInContext(app,ctx);
  assert.equal(vm.runInContext("relationTypes.map(x=>x.id).join(',')",ctx),"contains,TI");
+});
+test("PRD5: agrupador mostra cronograma derivado sem duração-meta editável",()=>{
+ const fields=workspace.slice(workspace.indexOf("function itemFormFields("),workspace.indexOf("function prd5ParseIndentedItems("));
+ assert.match(fields,/Cronograma calculado pelos subitens/);
+ assert.doesNotMatch(fields,/name="targetDurationDays"/);
+ assert.match(workspace,/Última medição confirmada/);
 });
 test("PRD5: vinculo Contem é derivado do parentId",()=>{
  assert.match(workspace,/id:"contains-"/);

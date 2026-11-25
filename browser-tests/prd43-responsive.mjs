@@ -69,7 +69,6 @@ try {
 
   await page.setViewportSize({width:1366,height:768});
   await page.locator('[data-action="create"]').click();
-  await page.locator("#createItemForm [name=title]").fill("Projeto compacto completo");
   await page.locator("#prd43PasteActivities").fill("Etapa 1\nEtapa 2\nEtapa 3\nEtapa 4\nEtapa 5");
   assert.equal(await page.locator(".prd43-step-row").count(),5);
   const layout=await page.evaluate(()=>{
@@ -87,7 +86,7 @@ try {
       formScroll:form.scrollHeight-form.clientHeight,groups:[...form.querySelectorAll(".prd42-create-extras")].filter(el=>getComputedStyle(el).display!=="none").length};
   });
   assert.ok(mobile.saveBottom<=768,"mobile Save stays visible: "+JSON.stringify(mobile));
-  assert.equal(mobile.groups,3,"advanced options remain accessible on mobile");
+  assert.equal(mobile.groups,0,"legacy advanced groups are not reintroduced into the compact creation flow");
   assert.ok(mobile.drawerScroll<=3 && mobile.formScroll<=3,"no mobile form scrolling: "+JSON.stringify(mobile));
   await page.setViewportSize({width:1366,height:768});
   await page.locator('#panelRoot .drawer-header button[data-action="close-panel"]').click();

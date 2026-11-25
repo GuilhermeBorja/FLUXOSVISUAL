@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { HttpError, assert } from "./http.mjs";
 import {
   clone,
@@ -12,6 +12,8 @@ import {
 } from "./domain.mjs";
 import { executeCommand, synchronize } from "./commands.mjs";
 import { prepareCredentialHashes } from "./credential-policy.mjs";
+import { runCommitmentsTrendMigration } from "./migrations/003_commitments_trends.mjs";
+import { calculateTrend } from "./trend.mjs";
 
 const recordKeys = [
   "organizations",
@@ -28,7 +30,6 @@ const recordKeys = [
 ];
 export const preferenceKeys = [
   "filters",
-  "graphPositions",
   "graphTransform",
   "graphTransforms",
   "graphLayouts",
@@ -52,6 +53,29 @@ export const preferenceKeys = [
   "viewShowSubitems",
 ];
 const stamp = () => new Date().toISOString();
+
+function trendHorizon(items, trend, asOf = stamp()) {
+  const result = { availableNow: [], today: [], thisWeek: [], nextWeek: [], thisMonth: [], nextMonth: [] };
+  const today = String(asOf).slice(0, 10);
+  const todayMs = Date.parse(`${today}T00:00:00.000Z`);
+  for (const item of items) {
+    const data = trend?.itemTrendById?.[item.id];
+    if (!data || data.derivedState === "completed") continue;
+    const startAt = String(data.trendStartAt || data.releaseAt || "").slice(0, 10);
+    if (!startAt) continue;
+    const startMs = Date.parse(`${startAt}T00:00:00.000Z`);
+    const offset = Math.floor((startMs - todayMs) / 86400000);
+    const row = { itemId: item.id, title: item.title, ownerId: item.ownerId, startAt, dueAt: data.trendDueAt, state: data.derivedState, counters: data.counters };
+    if (offset < 0) result.availableNow.push(row);
+    else if (offset === 0) result.today.push(row);
+    else if (offset <= 7) result.thisWeek.push(row);
+    else if (offset <= 14) result.nextWeek.push(row);
+    else if (new Date(startMs).getUTCMonth() === new Date(todayMs).getUTCMonth()) result.thisMonth.push(row);
+    else result.nextMonth.push(row);
+  }
+  for (const rows of Object.values(result)) rows.sort((a, b) => a.startAt.localeCompare(b.startAt) || a.itemId.localeCompare(b.itemId));
+  return result;
+}
 
 // History is subject to the same visibility boundary as current items. Derived
 // events can refer to a predecessor whose access was subsequently removed.
@@ -134,6 +158,7 @@ export function initializeSchema(storage) {
       "INSERT OR IGNORE INTO schema_migrations(id,applied_at) VALUES(?,?)",
     )
     .run("002_workspace_domain", stamp());
+  runCommitmentsTrendMigration(storage);
 }
 
 function empty() {
@@ -200,6 +225,10 @@ export function bootstrapWorkspace(
     { id: "profile_admin", name: "Administrador", version: 1 },
     { id: "profile_editor", name: "Editor", version: 1 },
     { id: "profile_reader", name: "Leitura", version: 1 },
+    { id: "profile_planning", name: "Planejamento", version: 1 },
+    { id: "profile_execution", name: "Execução", version: 1 },
+    { id: "profile_approver", name: "Aprovador", version: 1 },
+    { id: "profile_consultation", name: "Consulta", version: 1 },
   ];
   for (const operation of operations)
     state.permissionRules.push({
@@ -244,6 +273,45 @@ export function bootstrapWorkspace(
     createdAt: now,
     createdBy: user.id,
   });
+  const operationalProfiles = {
+    profile_planning: [
+      "view_item",
+      "create_item",
+      "edit_item",
+      "create_relation",
+      "edit_relation",
+      "delete_relation",
+      "change_owner",
+      "change_weight",
+      "change_duration",
+      "change_hierarchy",
+      "adjust_remaining_duration",
+      "manage_calendar",
+    ],
+    profile_execution: ["view_item", "record_measurement", "record_blocker"],
+    profile_approver: [
+      "view_item",
+      "create_approval",
+      "decide_approval",
+      "manage_commitment",
+    ],
+    profile_consultation: ["view_item"],
+  };
+  for (const [profileId, profileOperations] of Object.entries(
+    operationalProfiles,
+  ))
+    for (const operation of profileOperations)
+      state.permissionRules.push({
+        id: id("gpo"),
+        subjectType: "profile",
+        subjectId: profileId,
+        operation,
+        scopeType: "organization",
+        scopeId: "@user",
+        effect: "allow",
+        createdAt: now,
+        createdBy: user.id,
+      });
   storage.transaction(() => {
     storage.db
       .prepare(
@@ -833,22 +901,542 @@ export function createService(
     Object.assign(s, preferences(d.state.workspaceId || "", userId));
     return s;
   };
+  const recordMeasurement = (d, command, metadata, workspaceId, userId, correlationId) => {
+    const [itemId, input = {}] = command.args || [];
+    const item = d.item(itemId);
+    d.authorize("record_measurement", item);
+    assert(!d.state.items.some((candidate) => candidate.parentId === item.id && !candidate.archivedAt), 422, "MEASUREMENT_REQUIRES_LEAF", "Medição só pode ser registrada em atividade final.");
+    const percent = Number(input.percent);
+    const occurrence = String(input.occurrence || "no_issue");
+    const effectiveAt = input.effectiveAt || metadata.effectiveAt || stamp();
+    assert(
+      Number.isFinite(percent) && percent >= 0 && percent <= 100,
+      422,
+      "INVALID_PROGRESS",
+      "Avanço fora do intervalo de 0 a 100%.",
+    );
+    assert(
+      ["no_issue", "blocker", "divergence", "correction"].includes(occurrence),
+      422,
+      "INVALID_OCCURRENCE",
+      "Ocorrência de medição inválida.",
+    );
+    assert(
+      Number.isFinite(Date.parse(effectiveAt)) &&
+        Date.parse(effectiveAt) <= Date.now() + 5 * 60 * 1000,
+      422,
+      "INVALID_EFFECTIVE_DATE",
+      "A data efetiva é inválida ou está no futuro.",
+    );
+    const description = String(input.description || "").trim();
+    assert(
+      occurrence === "no_issue" || description,
+      422,
+      "MEASUREMENT_DESCRIPTION_REQUIRED",
+      "Impedimento, divergência ou correção exigem descrição.",
+    );
+    const measurementId = id("measurement");
+    db.prepare(
+      "INSERT INTO measurements(id,workspace_id,item_id,percent,occurrence,effective_at,recorded_at,actor_id,description,evidence_json,correction_of_id,origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(
+      measurementId,
+      workspaceId,
+      item.id,
+      percent,
+      occurrence,
+      effectiveAt,
+      stamp(),
+      userId,
+      description || null,
+      JSON.stringify(input.evidenceIds || []),
+      null,
+      "manual",
+    );
+    audit(storage, workspaceId, {
+      eventType: "measurement_recorded",
+      aggregateId: item.id,
+      actorId: userId,
+      correlationId,
+      organizationId: item.organizationId,
+      effectiveAt,
+      payload: { measurementId, percent, occurrence },
+    });
+    return { id: measurementId, itemId: item.id, percent, occurrence, effectiveAt };
+  };
+  const correctMeasurement = (d, command, metadata, workspaceId, userId, correlationId) => {
+    const [measurementId, input = {}] = command.args || [];
+    const original = db
+      .prepare("SELECT id,item_id AS itemId FROM measurements WHERE workspace_id=? AND id=?")
+      .get(workspaceId, measurementId);
+    assert(original, 404, "MEASUREMENT_NOT_FOUND", "Medição a corrigir não encontrada.");
+    const item = d.item(original.itemId);
+    d.authorize("record_measurement", item);
+    assert(!d.state.items.some((candidate) => candidate.parentId === item.id && !candidate.archivedAt), 422, "MEASUREMENT_REQUIRES_LEAF", "Medição só pode ser corrigida em atividade final.");
+    const percent = Number(input.percent);
+    const effectiveAt = input.effectiveAt || metadata.effectiveAt || stamp();
+    const description = String(input.description || "").trim();
+    assert(Number.isFinite(percent) && percent >= 0 && percent <= 100, 422, "INVALID_PROGRESS", "Avanço fora do intervalo de 0 a 100%.");
+    assert(description, 422, "MEASUREMENT_DESCRIPTION_REQUIRED", "A correção exige uma descrição factual.");
+    assert(Number.isFinite(Date.parse(effectiveAt)) && Date.parse(effectiveAt) <= Date.now() + 5 * 60 * 1000, 422, "INVALID_EFFECTIVE_DATE", "A data efetiva é inválida ou está no futuro.");
+    const correctionId = id("measurement");
+    db.prepare(
+      "INSERT INTO measurements(id,workspace_id,item_id,percent,occurrence,effective_at,recorded_at,actor_id,description,evidence_json,correction_of_id,origin) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(correctionId, workspaceId, item.id, percent, "correction", effectiveAt, stamp(), userId, description, JSON.stringify(input.evidenceIds || []), original.id, "manual_correction");
+    audit(storage, workspaceId, {
+      eventType: "measurement_corrected",
+      aggregateId: item.id,
+      actorId: userId,
+      correlationId,
+      organizationId: item.organizationId,
+      effectiveAt,
+      payload: { correctionId, correctionOfId: original.id, percent },
+    });
+    return { id: correctionId, itemId: item.id, percent, correctionOfId: original.id };
+  };
+  const setMeasurementPolicy = (d, command, workspaceId, userId, correlationId) => {
+    const [itemId, policyInput] = command.args || [];
+    const item = d.item(itemId);
+    d.authorize("adjust_remaining_duration", item);
+    const frequency = typeof policyInput === "string" ? policyInput : policyInput?.frequency;
+    const milestones = typeof policyInput === "object" && Array.isArray(policyInput?.milestones) ? policyInput.milestones : [];
+    assert(["daily", "weekly", "milestone"].includes(frequency), 422, "INVALID_MEASUREMENT_FREQUENCY", "Frequência de medição inválida.");
+    const normalizedMilestones = milestones.map((entry) => ({ offsetDays: Number(entry.offsetDays), percent: Number(entry.percent) })).sort((a, b) => a.offsetDays - b.offsetDays);
+    assert(normalizedMilestones.every((entry) => Number.isInteger(entry.offsetDays) && entry.offsetDays >= 0 && Number.isFinite(entry.percent) && entry.percent >= 0 && entry.percent <= 100), 422, "INVALID_MEASUREMENT_MILESTONES", "Marcos físicos inválidos.");
+    db.prepare(
+      "INSERT INTO measurement_policies(workspace_id,item_id,frequency,milestones_json) VALUES(?,?,?,?) ON CONFLICT(workspace_id,item_id) DO UPDATE SET frequency=excluded.frequency,milestones_json=excluded.milestones_json",
+    ).run(workspaceId, item.id, frequency, JSON.stringify(normalizedMilestones));
+    audit(storage, workspaceId, {
+      eventType: "measurement_policy_set",
+      aggregateId: item.id,
+      actorId: userId,
+      correlationId,
+      organizationId: item.organizationId,
+      payload: { frequency, milestones: normalizedMilestones },
+    });
+    return { itemId: item.id, frequency, milestones: normalizedMilestones };
+  };
+  const manageCalendar = (d, command, workspaceId, userId, correlationId) => {
+    d.authorize("manage_calendar");
+    const input = command.args?.[0] || {};
+    const calendarId = String(input.id || input.calendarId || "project-calendar").trim();
+    const boundItem = input.itemId ? d.item(String(input.itemId), "edit_item") : null;
+    const kind = String(input.kind || "working_time");
+    const timezone = String(input.timezone || "America/Sao_Paulo");
+    assert(/^[A-Za-z0-9._:-]{1,80}$/.test(calendarId), 422, "INVALID_CALENDAR_ID", "Identificador de calendário inválido.");
+    assert(["elapsed_days", "working_time"].includes(kind), 422, "INVALID_CALENDAR_KIND", "Tipo de calendário inválido.");
+    assert(timezone.length >= 3 && timezone.length <= 80, 422, "INVALID_CALENDAR_TIMEZONE", "Fuso horário inválido.");
+    const workingWeekdays = Array.isArray(input.workingWeekdays)
+      ? [...new Set(input.workingWeekdays.map(Number))].sort((a, b) => a - b)
+      : [1, 2, 3, 4, 5];
+    const holidays = Array.isArray(input.holidays)
+      ? [...new Set(input.holidays.map(String))].sort()
+      : [];
+    assert(workingWeekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6), 422, "INVALID_WORKING_WEEKDAYS", "Dias úteis inválidos.");
+    assert(holidays.every((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)), 422, "INVALID_CALENDAR_HOLIDAYS", "Feriados devem usar AAAA-MM-DD.");
+    const definition = JSON.stringify({ kind, workingWeekdays, holidays });
+    const now = stamp();
+    db.prepare(
+      "INSERT INTO project_calendars(id,workspace_id,kind,timezone,definition_json,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,id) DO UPDATE SET kind=excluded.kind,timezone=excluded.timezone,definition_json=excluded.definition_json",
+    ).run(calendarId, workspaceId, kind, timezone, definition, now);
+    if (boundItem) boundItem.calendarId = calendarId;
+    audit(storage, workspaceId, {
+      eventType: "calendar_managed",
+      aggregateId: calendarId,
+      actorId: userId,
+      correlationId,
+      effectiveAt: now,
+      payload: { calendarId, kind, timezone, workingWeekdays, holidays, itemId: boundItem?.id || null },
+    });
+    return { calendarId, kind, timezone, workingWeekdays, holidays, itemId: boundItem?.id || null };
+  };
+  const preserveBreakdownHistory = (d, command, workspaceId, userId, correlationId) => {
+    const input = command.args?.[0] || {};
+    const parent = d.state.items.find((item) => item.id === input.parentId && !item.archivedAt);
+    if (!parent || Number(parent.progressPercent || 0) <= 0 || parent.realizedBeforeBreakdown !== undefined) return;
+    const previousType = parent.type;
+    parent.type = "process";
+    parent.realizedBeforeBreakdown = Number(parent.progressPercent);
+    parent.breakdownStartedAt = stamp();
+    audit(storage, workspaceId, {
+      eventType: "item_breakdown_started",
+      aggregateId: parent.id,
+      actorId: userId,
+      correlationId,
+      organizationId: parent.organizationId,
+      payload: { realizedBeforeBreakdown: parent.realizedBeforeBreakdown, previousType, type: parent.type, childId: input.id || null },
+    });
+  };
+  const adjustRemainingDuration = (
+    d,
+    command,
+    metadata,
+    workspaceId,
+    userId,
+    correlationId,
+  ) => {
+    const [itemId, duration] = command.args || [];
+    const item = d.item(itemId);
+    d.authorize("adjust_remaining_duration", item);
+    assert(
+      Number.isInteger(duration) && duration >= 0,
+      422,
+      "INVALID_REMAINING_DURATION",
+      "A duração remanescente deve ser um número inteiro não negativo.",
+    );
+    const previous = item.remainingDurationDays ?? null;
+    item.remainingDurationDays = duration;
+    audit(storage, workspaceId, {
+      eventType: "remaining_duration_adjusted",
+      aggregateId: item.id,
+      actorId: userId,
+      correlationId,
+      organizationId: item.organizationId,
+      effectiveAt: metadata.effectiveAt || stamp(),
+      payload: { previous, duration },
+    });
+    return { itemId: item.id, remainingDurationDays: duration };
+  };
+  const setActivityBlocked = (
+    d,
+    command,
+    metadata,
+    workspaceId,
+    userId,
+    correlationId,
+  ) => {
+    const [itemId, input = {}] = command.args || [];
+    const item = d.item(itemId);
+    d.authorize("record_blocker", item);
+    const blockedAt = input.at || metadata.effectiveAt || stamp();
+    const description = String(input.description || "").trim();
+    assert(
+      Number.isFinite(Date.parse(blockedAt)) &&
+        Date.parse(blockedAt) <= Date.now() + 5 * 60 * 1000,
+      422,
+      "INVALID_EFFECTIVE_DATE",
+      "A data efetiva é inválida ou está no futuro.",
+    );
+    assert(
+      description,
+      422,
+      "BLOCK_REASON_REQUIRED",
+      "Bloqueio exige uma descrição factual.",
+    );
+    item.blockedAt = blockedAt;
+    item.blockedReason = description;
+    audit(storage, workspaceId, {
+      eventType: "activity_blocked",
+      aggregateId: item.id,
+      actorId: userId,
+      correlationId,
+      organizationId: item.organizationId,
+      effectiveAt: blockedAt,
+      payload: { description },
+    });
+    return { itemId: item.id, blockedAt };
+  };
+  const proposeCommitment = (d, command, workspaceId, userId, correlationId) => {
+    const [itemId, input = {}] = command.args || [];
+    const item = d.item(itemId);
+    d.authorize("change_duration", item);
+    const startAt = String(input.startAt || "");
+    const dueAt = String(input.dueAt || "");
+    const requesterId = userId;
+    const ownerId = String(input.ownerId || item.ownerId || "");
+    assert(
+      Number.isFinite(Date.parse(startAt)) &&
+        Number.isFinite(Date.parse(dueAt)) &&
+        startAt <= dueAt,
+      422,
+      "INVALID_COMMITMENT_DATES",
+      "Informe datas vÃ¡lidas e uma conclusÃ£o igual ou posterior ao inÃ­cio.",
+    );
+    assert(
+      d.state.users.some((user) => user.id === requesterId) &&
+        d.state.users.some((user) => user.id === ownerId),
+      422,
+      "COMMITMENT_PARTIES_REQUIRED",
+      "O compromisso exige demandante e responsÃ¡vel vÃ¡lidos.",
+    );
+    assert(
+      !db.prepare("SELECT 1 FROM commitments WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status='proposed' LIMIT 1").get(workspaceId, item.id),
+      409,
+      "COMMITMENT_PROPOSAL_PENDING",
+      "JÃ¡ existe uma proposta de compromisso pendente para esta atividade.",
+    );
+    const version =
+      Number(
+        db
+          .prepare(
+            "SELECT MAX(version) AS version FROM commitments WHERE workspace_id=? AND item_id=? AND kind='agreement'",
+          )
+          .get(workspaceId, item.id).version || 0,
+      ) + 1;
+    const commitmentId = id("commitment");
+    const scopeNote = String(input.scopeNote || "").trim();
+    const scopeChange = input.scopeChange === true;
+    assert(!scopeChange || scopeNote, 422, "SCOPE_CHANGE_NOTE_REQUIRED", "Mudança de escopo exige uma descrição factual antes da proposta.");
+    db.prepare(
+      "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(
+      commitmentId,
+      workspaceId,
+      item.id,
+      "agreement",
+      version,
+      "proposed",
+      startAt,
+      dueAt,
+      scopeNote || null,
+      userId,
+      requesterId,
+      ownerId,
+      null,
+      stamp(),
+    );
+    audit(storage, workspaceId, {
+      eventType: "commitment_proposed",
+      aggregateId: item.id,
+      actorId: userId,
+      correlationId,
+      organizationId: item.organizationId,
+      payload: { commitmentId, version, requesterId, ownerId, scopeChange },
+    });
+    return { id: commitmentId, itemId: item.id, version, status: "proposed" };
+  };
+  const createCorrectiveActivity = (d, command, metadata, workspaceId, userId, correlationId) => {
+    const [itemId, input = {}] = command.args || [];
+    const original = d.item(itemId, "edit_item");
+    const latestMeasurement = db.prepare("SELECT percent FROM measurements WHERE workspace_id=? AND item_id=? ORDER BY effective_at DESC,recorded_at DESC,id DESC LIMIT 1").get(workspaceId, original.id);
+    assert(Number(original.progressPercent || 0) >= 100 || Number(latestMeasurement?.percent || 0) >= 100 || original.status === "done", 422, "CORRECTION_REQUIRES_COMPLETION", "A atividade corretiva só pode ser criada após a conclusão da original.");
+    const title = String(input.title || `Correção: ${original.title}`).trim();
+    assert(title, 422, "CORRECTION_TITLE_REQUIRED", "Informe o título da atividade corretiva.");
+    const child = executeCommand(d, { type: "createItem", args: [{
+      title,
+      type: "task",
+      status: "backlog",
+      ownerId: input.ownerId || original.ownerId,
+      plannedStartAt: input.plannedStartAt || String(original.completedAt || metadata.effectiveAt || stamp()).slice(0, 10),
+      plannedDurationDays: Number.isFinite(input.plannedDurationDays) ? input.plannedDurationDays : null,
+      description: input.description || "Atividade corretiva vinculada à conclusão da atividade original.",
+      progressPercent: 0,
+    }] }, metadata);
+    executeCommand(d, { type: "createRelation", args: [original.id, child.id, "TI", Number(input.lagDays || 0), input.relationDescription || "Correção após retrabalho"] }, metadata);
+    audit(storage, workspaceId, {
+      eventType: "corrective_activity_created",
+      aggregateId: child.id,
+      actorId: userId,
+      correlationId,
+      organizationId: original.organizationId,
+      effectiveAt: metadata.effectiveAt || stamp(),
+      payload: { originalItemId: original.id, correctiveItemId: child.id },
+    });
+    return { itemId: child.id, originalItemId: original.id };
+  };
+  const acceptCommitment = (d, command, workspaceId, userId, correlationId) => {
+    const [commitmentId] = command.args || [];
+    const commitment = db
+      .prepare(
+        "SELECT id,item_id AS itemId,version,status,proposed_by AS proposedBy FROM commitments WHERE workspace_id=? AND id=?",
+      )
+      .get(workspaceId, commitmentId);
+    assert(commitment, 404, "COMMITMENT_NOT_FOUND", "Compromisso nÃ£o encontrado.");
+    const item = d.item(commitment.itemId);
+    d.authorize("manage_commitment", item);
+    assert(
+      commitment.status === "proposed",
+      422,
+      "COMMITMENT_NOT_PROPOSED",
+      "Somente propostas pendentes podem receber aceite.",
+    );
+    const latestPending = db.prepare(
+      "SELECT id FROM commitments WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status='proposed' ORDER BY version DESC LIMIT 1",
+    ).get(workspaceId, item.id);
+    assert(
+      latestPending?.id === commitment.id,
+      409,
+      "COMMITMENT_PROPOSAL_SUPERSEDED",
+      "Existe uma proposta mais recente para esta atividade.",
+    );
+    assert(
+      userId !== commitment.proposedBy,
+      403,
+      "COMMITMENT_ACCEPTANCE_FORBIDDEN",
+      "Quem propôs o compromisso não pode aprovar a própria proposta.",
+    );
+    db.prepare(
+      "INSERT OR IGNORE INTO commitment_acceptances(commitment_id,actor_id,role,accepted_at) VALUES(?,?,?,?)",
+    ).run(commitment.id, userId, "approver", stamp());
+    db.prepare(
+      "UPDATE commitments SET status='superseded' WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status='proposed' AND id<>?",
+    ).run(workspaceId, item.id, commitment.id);
+    db.prepare(
+      "UPDATE commitments SET status='superseded' WHERE workspace_id=? AND item_id=? AND kind='agreement' AND status='active'",
+    ).run(workspaceId, item.id);
+    db.prepare("UPDATE commitments SET status='active',accepted_at=? WHERE id=?").run(stamp(), commitment.id);
+    const status = "active";
+    audit(storage, workspaceId, {
+      eventType: status === "active" ? "commitment_activated" : "commitment_accepted",
+      aggregateId: item.id,
+      actorId: userId,
+      correlationId,
+      organizationId: item.organizationId,
+      payload: { commitmentId: commitment.id, role: "approver", status },
+    });
+    return { id: commitment.id, itemId: item.id, status };
+  };
+  const processMeasurementDue = (
+    workspaceId,
+    { asOf = stamp(), correlationId = randomUUID() } = {},
+  ) =>
+    storage.transaction(() => {
+      const { state } = load(storage, workspaceId);
+      const commitments = db
+        .prepare(
+          "SELECT item_id AS itemId,kind,version,status,start_at AS startAt,due_at AS dueAt FROM commitments WHERE workspace_id=?",
+        )
+        .all(workspaceId);
+      const measurements = db
+        .prepare(
+          "SELECT rowid AS recordOrder,id,item_id AS itemId,percent,occurrence,description,effective_at AS effectiveAt,recorded_at AS recordedAt FROM measurements WHERE workspace_id=?",
+        )
+        .all(workspaceId);
+      const measurementPolicies = db
+        .prepare(
+          "SELECT item_id AS itemId,frequency,milestones_json AS milestonesJson FROM measurement_policies WHERE workspace_id=?",
+        )
+        .all(workspaceId)
+        .map((policy) => ({ ...policy, milestones: JSON.parse(policy.milestonesJson || "[]") }));
+      const calendars = db
+        .prepare(
+          "SELECT id,kind,timezone,definition_json FROM project_calendars WHERE workspace_id=?",
+        )
+        .all(workspaceId)
+        .map((calendar) => ({ ...calendar, ...JSON.parse(calendar.definition_json) }));
+      const trend = calculateTrend({
+        items: state.items.filter((item) => !item.archivedAt),
+        relations: state.relations,
+        commitments,
+        measurements,
+        measurementPolicies,
+        calendars,
+        asOf,
+      });
+      const pendingItemIds = [];
+      for (const [itemId, itemTrend] of Object.entries(trend.itemTrendById)) {
+        const item = state.items.find((candidate) => candidate.id === itemId);
+        const trendData = JSON.stringify({
+          actualStartAt: itemTrend.actualStartAt,
+          actualFinishAt: itemTrend.actualFinishAt,
+          releaseAt: itemTrend.releaseAt,
+          trendStartAt: itemTrend.trendStartAt,
+          trendDueAt: itemTrend.trendDueAt,
+          derivedState: itemTrend.derivedState,
+          lastMeasurementPercent: itemTrend.lastMeasurementPercent,
+          lastMeasurementAt: itemTrend.lastMeasurementAt,
+          expectedProgressPercent: itemTrend.expectedProgressPercent,
+        });
+        const trendFingerprint = createHash("sha256").update(trendData).digest("hex");
+        const causedByTrend = `trend:${itemId}:${trendFingerprint}`;
+        const trendSnapshotExists = db
+          .prepare(
+            "SELECT id FROM trend_snapshots WHERE workspace_id=? AND item_id=? AND caused_by_event_id=?",
+          )
+          .get(workspaceId, itemId, causedByTrend);
+        if (!trendSnapshotExists) {
+          db.prepare(
+            "INSERT INTO trend_snapshots(id,workspace_id,item_id,caused_by_event_id,calculated_at,start_at,due_at,state,data_json) VALUES(?,?,?,?,?,?,?,?,?)",
+          ).run(
+            id("trend_snapshot"),
+            workspaceId,
+            itemId,
+            causedByTrend,
+            asOf,
+            itemTrend.trendStartAt || null,
+            itemTrend.trendDueAt || null,
+            itemTrend.derivedState,
+            trendData,
+          );
+        }
+        if (itemTrend.derivedState !== "measurement_pending") continue;
+        const causedByEventId = `measurement_pending:${itemId}:${itemTrend.lastMeasurementAt}`;
+        const existing = db
+          .prepare(
+            "SELECT id FROM trend_snapshots WHERE workspace_id=? AND item_id=? AND caused_by_event_id=?",
+          )
+          .get(workspaceId, itemId, causedByEventId);
+        if (existing) continue;
+        db.prepare(
+          "INSERT INTO trend_snapshots(id,workspace_id,item_id,caused_by_event_id,calculated_at,start_at,due_at,state,data_json) VALUES(?,?,?,?,?,?,?,?,?)",
+        ).run(
+          id("trend_snapshot"),
+          workspaceId,
+          itemId,
+          causedByEventId,
+          asOf,
+          itemTrend.trendStartAt || null,
+          itemTrend.trendDueAt || null,
+          itemTrend.derivedState,
+          JSON.stringify(itemTrend),
+        );
+        audit(storage, workspaceId, {
+          kind: "system",
+          eventType: "measurement_pending",
+          aggregateId: itemId,
+          actorId: "system",
+          organizationId: item?.organizationId,
+          correlationId,
+          effectiveAt: asOf,
+          payload: { causedByEventId, lastMeasurementAt: itemTrend.lastMeasurementAt },
+        });
+        pendingItemIds.push(itemId);
+      }
+      return { pendingItemIds };
+    });
+  const processAllMeasurementDue = ({ asOf = stamp(), correlationId = randomUUID() } = {}) => {
+    const workspaces = db.prepare("SELECT id FROM workspaces ORDER BY id").all();
+    const processed = [];
+    for (const workspace of workspaces) {
+      try {
+        processed.push({
+          workspaceId: workspace.id,
+          ...processMeasurementDue(workspace.id, { asOf, correlationId }),
+        });
+      } catch (error) {
+        logger.warn?.(JSON.stringify({
+          event: "measurement_scheduler_workspace_failed",
+          workspaceId: workspace.id,
+          message: error?.message || String(error),
+        }));
+      }
+    }
+    return { processedAt: asOf, workspaces: processed };
+  };
   const projection = (
     workspaceId,
     userId,
     { query = {}, correlationId = randomUUID() } = {},
   ) => {
+    const queryAsOf = typeof query.asOf === "string" && /^\d{4}-\d{2}-\d{2}(T.*)?$/.test(query.asOf) && Number.isFinite(Date.parse(query.asOf))
+      ? query.asOf
+      : "";
+    const asOf = queryAsOf || stamp();
+    // Historical preview is read-only: do not create scheduler snapshots for
+    // a date selected in the measurement form.
+    if (!queryAsOf) processMeasurementDue(workspaceId, { asOf, correlationId });
     const { domain, revision, decisions } = withDomain(workspaceId, userId);
     const state = filtered(domain, userId);
     Object.assign(state, preferences(workspaceId, userId));
     const previousFilters = domain.state.filters;
-    domain.state.filters = { ...previousFilters, ...query };
+    const filterQuery = { ...query };
+    delete filterQuery.asOf;
+    domain.state.filters = { ...previousFilters, ...filterQuery };
     const safeItems = new Map(state.items.map((i) => [i.id, i]));
     let selected = domain
       .call("visibleItems")
       .filter((i) => safeItems.has(i.id))
       .map((i) => safeItems.get(i.id));
-    if (query.project && query.project !== "all") {
+    if (filterQuery.project && filterQuery.project !== "all") {
       const roots = new Map(state.items.map((i) => [i.id, i]));
       selected = selected.filter((i) => {
         let c = i,
@@ -857,7 +1445,7 @@ export function createService(
           seen.add(c.id);
           c = roots.get(c.parentId) || c;
         }
-        return c.id === query.project;
+        return c.id === filterQuery.project;
       });
     }
     const selectedIds = new Set(selected.map((i) => i.id));
@@ -903,12 +1491,82 @@ export function createService(
         message: "Cronograma incompleto.",
       };
     }
+    let trend;
+    let commitmentRecords = [];
+    let actions = [];
+    let horizon = { availableNow: [], today: [], thisWeek: [], nextWeek: [], thisMonth: [], nextMonth: [] };
+    try {
+      const commitments = db
+        .prepare(
+          "SELECT id,item_id AS itemId,kind,version,status,start_at AS startAt,due_at AS dueAt,scope_note AS scopeNote,proposed_by AS proposedBy,requester_id AS requesterId,owner_id AS ownerId,accepted_at AS acceptedAt,created_at AS createdAt FROM commitments WHERE workspace_id=?",
+        )
+        .all(workspaceId);
+      const measurements = db
+        .prepare(
+          "SELECT rowid AS recordOrder,id,item_id AS itemId,percent,occurrence,description,effective_at AS effectiveAt,recorded_at AS recordedAt FROM measurements WHERE workspace_id=?",
+        )
+        .all(workspaceId);
+      const measurementPolicies = db
+        .prepare(
+          "SELECT item_id AS itemId,frequency,milestones_json AS milestonesJson FROM measurement_policies WHERE workspace_id=?",
+        )
+        .all(workspaceId)
+        .map((policy) => ({ ...policy, milestones: JSON.parse(policy.milestonesJson || "[]") }));
+      const calendars = db
+        .prepare(
+          "SELECT id,kind,timezone,definition_json FROM project_calendars WHERE workspace_id=?",
+        )
+        .all(workspaceId)
+        .map((calendar) => ({
+          ...calendar,
+          ...JSON.parse(calendar.definition_json),
+        }));
+      trend = calculateTrend({
+        items: selected,
+        relations,
+        commitments,
+        measurements,
+        measurementPolicies,
+        calendars,
+        asOf,
+      });
+      const selectedIds = new Set(selected.map((item) => item.id));
+      commitmentRecords = commitments.filter((commitment) => selectedIds.has(commitment.itemId));
+      const acceptances = db.prepare(
+        "SELECT commitment_id AS commitmentId,role FROM commitment_acceptances WHERE actor_id=?",
+      ).all(userId);
+      const accepted = new Set(acceptances.map((acceptance) => acceptance.commitmentId));
+      const actor = domain.state.users.find((candidate) => candidate.id === userId);
+      const latestPendingByItem = new Map();
+      for (const commitment of commitmentRecords) {
+        if (commitment.kind !== "agreement" || commitment.status !== "proposed") continue;
+        const latest = latestPendingByItem.get(commitment.itemId);
+        if (!latest || commitment.version > latest.version) latestPendingByItem.set(commitment.itemId, commitment);
+      }
+      actions = [...latestPendingByItem.values()]
+        .filter((commitment) => commitment.proposedBy !== userId && !accepted.has(commitment.id))
+        .filter((commitment) => evaluatePermission(domain.state, actor, "manage_commitment", safeItems.get(commitment.itemId)).allowed)
+        .map((commitment) => ({
+          type: "accept_commitment",
+          commitmentId: commitment.id,
+          itemId: commitment.itemId,
+          itemTitle: safeItems.get(commitment.itemId)?.title || "",
+          role: "approver",
+          startAt: commitment.startAt,
+          dueAt: commitment.dueAt,
+          scopeNote: commitment.scopeNote || "",
+        }));
+      horizon = trendHorizon(selected, trend, asOf);
+    } catch {
+      trend = { itemTrendById: {} };
+    }
     recordDecisions(workspaceId, userId, decisions, correlationId);
     const workspace = db
       .prepare("SELECT id,name FROM workspaces WHERE id=?")
       .get(workspaceId);
     return {
       state,
+      asOf,
       revision,
       workspace,
       limits: { attachmentMaxBytes, attachmentQuotaBytes },
@@ -925,6 +1583,10 @@ export function createService(
         },
       },
       schedule,
+      commitments: commitmentRecords,
+      actions,
+      horizon,
+      trend,
     };
   };
   async function mutate(
@@ -1063,9 +1725,56 @@ export function createService(
               ),
           );
           result = {
-            results: commands.map((c) =>
-              executeCommand(d, c, { comment, effectiveAt }),
-            ),
+            results: commands.map((c) => {
+              if (c.type === "createItem") preserveBreakdownHistory(d, c, workspaceId, userId, correlationId);
+              return c.type === "recordMeasurement"
+                ? recordMeasurement(
+                    d,
+                    c,
+                    { comment, effectiveAt },
+                    workspaceId,
+                    userId,
+                    correlationId,
+                  )
+                : c.type === "correctMeasurement"
+                  ? correctMeasurement(
+                      d,
+                      c,
+                      { comment, effectiveAt },
+                      workspaceId,
+                      userId,
+                      correlationId,
+                    )
+                : c.type === "adjustRemainingDuration"
+                  ? adjustRemainingDuration(
+                      d,
+                      c,
+                      { comment, effectiveAt },
+                      workspaceId,
+                      userId,
+                      correlationId,
+                    )
+                  : c.type === "setMeasurementPolicy"
+                    ? setMeasurementPolicy(d, c, workspaceId, userId, correlationId)
+                  : c.type === "createCorrectiveActivity"
+                    ? createCorrectiveActivity(d, c, { comment, effectiveAt }, workspaceId, userId, correlationId)
+                  : c.type === "manageCalendar"
+                    ? manageCalendar(d, c, workspaceId, userId, correlationId)
+                  : c.type === "setActivityBlocked"
+                    ? setActivityBlocked(
+                        d,
+                        c,
+                        { comment, effectiveAt },
+                        workspaceId,
+                        userId,
+                        correlationId,
+                      )
+                    : c.type === "proposeCommitment"
+                      ? proposeCommitment(d, c, workspaceId, userId, correlationId)
+                      : c.type === "acceptCommitment"
+                        ? acceptCommitment(d, c, workspaceId, userId, correlationId)
+                : executeCommand(d, c, { comment, effectiveAt });
+            }),
           };
         }
         d.deferSchedule(false);
@@ -1191,6 +1900,23 @@ export function createService(
           { actorId: userId, correlationId, comment, effectiveAt },
           snapshot.revision + 1,
         );
+        // New items created after migration also receive an immutable baseline
+        // commitment. Without this bridge, the legacy date fields exist but
+        // the Gantt cannot render the baseline layer until a later agreement.
+        const baselineInsert = db.prepare(
+          "INSERT INTO commitments(id,workspace_id,item_id,kind,version,status,start_at,due_at,scope_note,proposed_by,requester_id,owner_id,accepted_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        );
+        for (const item of d.state.items.filter((entry) => !entry.archivedAt)) {
+          if (!item.plannedStartAt || !item.dueAt) continue;
+          if (db.prepare("SELECT 1 FROM commitments WHERE workspace_id=? AND item_id=? AND kind='baseline' LIMIT 1").get(workspaceId, item.id)) continue;
+          baselineInsert.run(
+            id("commitment"), workspaceId, item.id, "baseline", 1, "active",
+            item.baselineStartAt || item.plannedStartAt,
+            item.baselineDueAt || item.dueAt,
+            "Compromisso inicial", userId, userId, item.ownerId || userId,
+            stamp(), stamp(),
+          );
+        }
         if (desiredState) {
           const desiredPrefs = pick(desiredState, preferenceKeys);
           if (Object.keys(desiredPrefs).length)
@@ -1357,6 +2083,8 @@ export function createService(
   }
   return {
     projection,
+    processMeasurementDue,
+    processAllMeasurementDue,
     mutate,
     load: (workspaceId) => load(storage, workspaceId),
     membership,

@@ -66,6 +66,11 @@ export const operations = [
   "manage_users",
   "manage_gpo",
   "manage_organization",
+  "record_measurement",
+  "record_blocker",
+  "adjust_remaining_duration",
+  "manage_commitment",
+  "manage_calendar",
 ];
 export const editableFields = [
   "title",
@@ -389,7 +394,7 @@ export function validateState(state) {
       );
     assert(
       item.plannedDurationDays === null ||
-        (Number.isInteger(item.plannedDurationDays) &&
+        (Number.isFinite(item.plannedDurationDays) &&
           item.plannedDurationDays >= 0 &&
           item.plannedDurationDays <= 36500),
       422,

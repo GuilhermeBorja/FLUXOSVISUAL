@@ -18,6 +18,11 @@ test("agrupamento analítico mantém todas as empresas distintas",() => {
   assert.equal(run('model.groups.map((group)=>group.id).sort().join(",")'),"org_a,org_b");
 });
 
+test("layout analítico é determinístico e não depende de simulação de forças",() => {
+  assert.doesNotMatch(source,/forceSimulation|forceManyBody|forceCollide/);
+  assert.match(source,/nível topológico define o eixo temporal lógico/);
+});
+
 test("conexões formam componentes que podem ser arrastados juntos",() => {
   const run = graphContext();
   run('items=[{id:"a"},{id:"b"},{id:"c"}];relations=[{sourceId:"a",targetId:"b"},{sourceId:"c",targetId:"b"}];groups=FluxosGraph.connectedGroups(items,relations);');

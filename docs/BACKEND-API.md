@@ -53,6 +53,32 @@ A hierarquia persistida está em `item.parentId`. Arestas `relationType: "contai
 
 `state.events` é uma janela dos eventos recentes, limitada a 2.000 registros de domínio/cadastro na origem. Para histórico completo, use a consulta paginada descrita adiante. Rede incompleta retorna `schedule.reliable: false`, com criticidade desativada e folga nula.
 
+## Persistência de compromissos e medições
+
+A migração `003_commitments_trends` cria, sem remover os campos legados, `project_calendars`, `commitments`, `measurements`, `trend_snapshots`, `measurement_policies` e `commitment_acceptances`. Ela é executada na inicialização do esquema e é idempotente por workspace.
+
+Workspaces existentes recebem `legacy-calendar-days` com `kind: "elapsed_days"`. Para cada item legado, baseline vira um `commitment` imutável, `target*`/`replannedDueAt` vira o primeiro acordo ativo e `progressPercent > 0` vira uma medição de origem `migration`. A Task 1 não expõe novas rotas: esses registros são a base persistida para as rotas de medição, acordo e tendência.
+
+### Comandos de medição e compromisso
+
+Use `POST /api/workspaces/{w}/commands` com `expectedRevision` e uma lista de comandos. O servidor aplica GPO, auditoria e transação única; o executor não recebe comando para prazo ou duração.
+
+| Tipo | Argumentos | Permissão |
+| --- | --- | --- |
+| `recordMeasurement` | `[itemId, { percent, occurrence, effectiveAt, description?, evidenceIds? }]` | `record_measurement` |
+| `correctMeasurement` | `[measurementId, { percent, effectiveAt, description, evidenceIds? }]` | `record_measurement` |
+| `setActivityBlocked` | `[itemId, { at, description }]` | `record_blocker` |
+| `adjustRemainingDuration` | `[itemId, durationDays]` | `adjust_remaining_duration` |
+| `setMeasurementPolicy` | `[itemId, "daily"|"weekly"|"milestone"]` ou `[itemId, { frequency: "milestone", milestones: [{ offsetDays, percent }] }]` | `adjust_remaining_duration` |
+| `manageCalendar` | `[{ id?, itemId?, kind, timezone?, workingWeekdays?, holidays? }]` | `manage_calendar` (e `edit_item` quando vincula `itemId`) |
+| `proposeCommitment` | `[itemId, { startAt, dueAt, scopeNote?, scopeChange?, requesterId?, ownerId? }]`; `scopeChange: true` exige `scopeNote` | `manage_commitment` |
+| `acceptCommitment` | `[commitmentId]` | `manage_commitment` e ser demandante ou responsável |
+| `createCorrectiveActivity` | `[itemId, { title?, ownerId?, plannedStartAt?, plannedDurationDays?, description?, lagDays? }]` | `edit_item` + `create_item` + `create_relation` |
+
+Ocorrência diferente de `no_issue` exige descrição. Datas efetivas futuras são recusadas. A correção cria uma nova medição, sem alterar o fato anterior. O acordo proposto só se torna vigente depois dos aceites de demandante e responsável; o acordo ativo anterior é preservado como `superseded`.
+
+`GET /api/workspaces/{w}/projection` retorna adicionalmente `trend`, `commitments` autorizados e `horizon`. Ao consultar a projeção, o servidor processa frequências vencidas de forma idempotente e registra snapshots append-only para cada estado de tendência novo, identificados por uma impressão do estado e pelo evento causador; também cria snapshot/auditoria para `measurement_pending`, sem inventar percentual real. Além disso, o servidor executa o mesmo processamento em intervalo configurável por `MEASUREMENT_SCHEDULER_INTERVAL_MS` (padrão: 60.000 ms), sem manter o processo aberto apenas pelo timer.
+
 ## Escritas de itens e relações
 
 Nos caminhos da tabela, `{w}` é o ID do workspace.
