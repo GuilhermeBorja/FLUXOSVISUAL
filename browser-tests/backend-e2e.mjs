@@ -77,6 +77,11 @@ try {
   assert.equal(successor.plannedStartAt, '2026-11-02');
   await closePanel(owner);
 
+  await owner.locator(`.prd5-gantt-edit[data-select="${root.id}"]`).click();
+  assert.equal(await owner.locator('#measurementForm').count(), 0, 'project groups do not accept their own measurement');
+  assert.match(await owner.locator('#panelRoot').innerText(), /O avanço deste item é consolidado pelos subitens/);
+  await closePanel(owner);
+
   await login(executor, executorUser.email);
   await expand(executor, root.id);
   await executor.locator(`.prd5-gantt-edit[data-select="${activity.id}"]`).click();
@@ -89,6 +94,7 @@ try {
   await measurement.locator('button[type="submit"]').click();
   assert.equal((await measurementResponse).status(), 200);
   assert.equal(setup.app.storage.db.prepare('SELECT percent FROM measurements WHERE workspace_id=? AND item_id=? ORDER BY effective_at DESC').get('w_a', activity.id).percent, 25);
+  assert.match(await executor.locator('.latest-measurement').innerText(), /25%/, 'the saved measurement is shown immediately');
 
   for (const width of [1366, 1920]) {
     await owner.setViewportSize({ width, height: width === 1366 ? 768 : 1080 });
@@ -99,19 +105,27 @@ try {
   await login(operator, user.email);
   await expand(operator, root.id);
   await operator.locator(`.prd5-gantt-edit[data-select="${activity.id}"]`).click();
+  assert.equal(await operator.locator('#measurementForm').count(), 0, 'users without measurement permission do not get an editable field');
+  assert.match(await operator.locator('#panelRoot').innerText(), /Você não tem permissão para registrar avanço real/);
   const editor = operator.locator('#updateItemForm');
-  await editor.locator('[name="status"]').selectOption('in_progress');
-  await editor.locator('[name="progressPercent"]').fill('35');
+  await editor.locator('[name="title"]').fill('Atividade compartilhada editada');
   await editor.locator('button[type="submit"]').click();
   await operator.evaluate(() => FluxosBackend.flush());
   projection = await setup.admin.projection();
-  assert.equal(projection.state.items.find(item => item.id === activity.id).progressPercent, 35);
+  assert.equal(projection.state.items.find(item => item.id === activity.id).title, 'Atividade compartilhada editada');
   await owner.reload({ waitUntil: 'networkidle' });
-  await owner.waitForFunction(id => state.items.find(item => item.id === id)?.progressPercent === 35, activity.id);
+  await owner.waitForFunction(id => state.items.find(item => item.id === id)?.title === 'Atividade compartilhada editada', activity.id);
   assert.equal(await owner.evaluate(() => localStorage.getItem('fluxosVisualState.prd4')), null, 'workspace state is not persisted in browser storage');
 
-  // Two concurrent forms keep separate revisions; an old save must preserve its draft.
+  // Reopening the activity keeps the latest factual measurement in the form.
   await expand(owner, root.id);
+  await owner.locator(`.prd5-gantt-edit[data-select="${activity.id}"]`).click();
+  await owner.locator('#measurementForm [name="percent"]').waitFor();
+  assert.equal(await owner.locator('#measurementForm [name="percent"]').inputValue(), '25', 'the last saved measurement is loaded when reopening the activity');
+  await closePanel(owner);
+  await expand(owner, root.id);
+
+  // Two concurrent forms keep separate revisions; an old save must preserve its draft.
   await owner.locator(`.prd5-gantt-edit[data-select="${activity.id}"]`).click();
   await owner.locator('#updateItemForm [name="title"]').fill('Rascunho preservado');
   await operator.locator('#updateItemForm [name="title"]').fill('Nome confirmado pelo operador');
